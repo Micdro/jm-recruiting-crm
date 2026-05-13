@@ -1,3 +1,12 @@
+# Java
+backend/target/
+
+# Environment config
+backend/src/main/resources/application.properties
+
+# Node
+frontend/node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -5,22 +14,3 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-
-# Environment
-.env
-.env.*
-!.env.example
-
-# Java
-backend/target/
-*.class
-
-# Node
-frontend/node_modules/
-frontend/dist/
-
-# Rust
-importer/target/
-
-# Logs
-*.log
