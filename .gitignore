@@ -14,3 +14,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Postman
+.postman/
+postman/

@@ -4,6 +4,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 @Entity
 public class Company {
@@ -12,12 +14,26 @@ public class Company {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "Company name is required")
+    @Size(max = 255, message = "Company name must be 255 characters or fewer")
     private String name;
+
+    @Size(max = 500, message = "Website must be 500 characters or fewer")
     private String website;
+
+    @Size(max = 255, message = "Location must be 255 characters or fewer")
     private String location;
+
+    @Size(max = 100, message = "Company size must be 100 characters or fewer")
     private String companySize;
+
+    @Size(max = 100, message = "Status must be 100 characters or fewer")
     private String status;
+
+    @Size(max = 500, message = "Linkedin Profile must be 500 characters or fewer")
     private String linkedinProfile;
+
+    @Size(max = 2000, message = "Notes must be 2000 characters or fewer")
     private String notes;
 
     public Company() {
