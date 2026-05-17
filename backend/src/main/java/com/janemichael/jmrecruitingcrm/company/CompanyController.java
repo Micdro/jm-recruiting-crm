@@ -10,25 +10,25 @@ import java.util.List;
 @RequestMapping("/api/companies")
 public class CompanyController {
 
-    private final CompanyRepository companyRepository;
+    private final CompanyService companyService;
 
-    public CompanyController(CompanyRepository companyRepository) {
-        this.companyRepository = companyRepository;
+    public CompanyController(CompanyService companyService) {
+        this.companyService = companyService;
     }
 
     @GetMapping
     public List<Company> getAllCompanies() {
-        return companyRepository.findAll();
+        return companyService.getAllCompanies();
     }
 
     @PostMapping
     public Company createCompany(@Valid @RequestBody Company company) {
-        return companyRepository.save(company);
+        return companyService.createCompany(company);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Company> getCompanyById(@PathVariable Long id) {
-        return companyRepository.findById(id)
+        return companyService.getCompanyById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -37,22 +37,20 @@ public class CompanyController {
     public ResponseEntity<Company> updateCompany(
             @PathVariable Long id,
             @Valid @RequestBody Company updatedCompany
-    )
-    {
-        return companyRepository.findById(id)
-                .map(company -> {
-                    company.setName(updatedCompany.getName());
-                    company.setWebsite(updatedCompany.getWebsite());
-                    company.setLocation(updatedCompany.getLocation());
-                    company.setCompanySize(updatedCompany.getCompanySize());
-                    company.setStatus(updatedCompany.getStatus());
-                    company.setLinkedinProfile(updatedCompany.getLinkedinProfile());
-                    company.setNotes(updatedCompany.getNotes());
-
-                    Company savedCompany = companyRepository.save(company);
-                    return ResponseEntity.ok(savedCompany);
-                })
+    ) {
+        return companyService.updateCompany(id, updatedCompany)
+                .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
-    
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCompany(@PathVariable Long id) {
+        boolean deleted = companyService.deleteCompany(id);
+
+        if (!deleted) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.noContent().build();
+    }
 }
