@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Size;
 
 public class CompanyRequest {
 
-    @NotBlank(message = "Company is required")
+    @NotBlank(message = "Company name is required")
     @Size(max = 255, message = "Company name must be 255 characters or fewer")
     private String name;
 
@@ -21,7 +21,7 @@ public class CompanyRequest {
     @Size(max = 100, message = "Status must be 100 characters or fewer")
     private String status;
 
-    @Size(max = 500, message = "Linkedin profile must be 500 chracyers or fewer")
+    @Size(max = 500, message = "LinkedIn profile must be 500 chracters or fewer")
     private String linkedinProfile;
 
     @Size(max = 2000, message = "Notes must be 2000 characters or fewer")

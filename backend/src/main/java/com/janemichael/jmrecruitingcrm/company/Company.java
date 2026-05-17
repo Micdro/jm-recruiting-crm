@@ -30,7 +30,7 @@ public class Company {
     @Size(max = 100, message = "Status must be 100 characters or fewer")
     private String status;
 
-    @Size(max = 500, message = "Linkedin Profile must be 500 characters or fewer")
+    @Size(max = 500, message = "LinkedIn profile must be 500 characters or fewer")
     private String linkedinProfile;
 
     @Size(max = 2000, message = "Notes must be 2000 characters or fewer")
