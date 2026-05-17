@@ -15,31 +15,49 @@ public class CompanyService {
         this.companyRepository = companyRepository;
     }
 
-    public List<Company> getAllCompanies() {
-        return companyRepository.findAll();
+    public List<CompanyResponse> getAllCompanies() {
+        return companyRepository.findAll()
+                .stream()
+                .map(CompanyResponse::fromEntity)
+                .toList();
     }
 
-    public Optional<Company> getCompanyById(Long id) {
-        return companyRepository.findById(id);
+    public Optional<CompanyResponse> getCompanyById(Long id) {
+        return companyRepository.findById(id)
+                .map(CompanyResponse::fromEntity);
     }
 
-    public Company createCompany(Company company) {
-        return companyRepository.save(company);
+    public CompanyResponse createCompany(CompanyRequest request) {
+        Company company = new Company();
+
+        company.setName(request.getName());
+        company.setWebsite(request.getWebsite());
+        company.setLocation(request.getLocation());
+        company.setCompanySize(request.getCompanySize());
+        company.setStatus(request.getStatus());
+        company.setLinkedinProfile(request.getLinkedinProfile());
+        company.setNotes(request.getNotes());
+
+        Company savedCompany = companyRepository.save(company);
+
+        return CompanyResponse.fromEntity(savedCompany);
     }
 
     @Transactional
-    public Optional<Company> updateCompany(Long id, Company updatedCompany) {
+    public Optional<CompanyResponse> updateCompany(Long id, CompanyRequest request) {
         return companyRepository.findById(id)
                 .map(company -> {
-                    company.setName(updatedCompany.getName());
-                    company.setWebsite(updatedCompany.getWebsite());
-                    company.setLocation(updatedCompany.getLocation());
-                    company.setCompanySize(updatedCompany.getCompanySize());
-                    company.setStatus(updatedCompany.getStatus());
-                    company.setLinkedinProfile(updatedCompany.getLinkedinProfile());
-                    company.setNotes(updatedCompany.getNotes());
+                    company.setName(request.getName());
+                    company.setWebsite(request.getWebsite());
+                    company.setLocation(request.getLocation());
+                    company.setCompanySize(request.getCompanySize());
+                    company.setStatus(request.getStatus());
+                    company.setLinkedinProfile(request.getLinkedinProfile());
+                    company.setNotes(request.getNotes());
 
-                    return companyRepository.save(company);
+                    Company savedCompany = companyRepository.save(company);
+
+                    return CompanyResponse.fromEntity(savedCompany);
                 });
     }
 

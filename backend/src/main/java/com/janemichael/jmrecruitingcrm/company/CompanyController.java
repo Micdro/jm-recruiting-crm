@@ -17,28 +17,28 @@ public class CompanyController {
     }
 
     @GetMapping
-    public List<Company> getAllCompanies() {
+    public List<CompanyResponse> getAllCompanies() {
         return companyService.getAllCompanies();
     }
 
     @PostMapping
-    public Company createCompany(@Valid @RequestBody Company company) {
-        return companyService.createCompany(company);
+    public CompanyResponse createCompany(@Valid @RequestBody CompanyRequest request) {
+        return companyService.createCompany(request);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Company> getCompanyById(@PathVariable Long id) {
+    public ResponseEntity<CompanyResponse> getCompanyById(@PathVariable Long id) {
         return companyService.getCompanyById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Company> updateCompany(
+    public ResponseEntity<CompanyResponse> updateCompany(
             @PathVariable Long id,
-            @Valid @RequestBody Company updatedCompany
+            @Valid @RequestBody CompanyRequest request
     ) {
-        return companyService.updateCompany(id, updatedCompany)
+        return companyService.updateCompany(id, request)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
