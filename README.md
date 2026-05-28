@@ -19,8 +19,7 @@ Rust importer validates and imports recruiting data.
 
 ## Goals
 
-- Demonstrate full-stack engineering skills
-- Practice backend API development
+- Create full CRM solution for Jane Michael LLC
 - Implement automated testing
 - Configure CI/CD pipelines
 - Build deployable production-style software
