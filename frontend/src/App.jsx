@@ -1,6 +1,27 @@
+import { useEffect, useState } from 'react';
 import './App.css';
+import { getCompanies } from './api';
 
 function App() {
+  const [companies, setCompanies] = useState([]);
+  const [isLoadingCompanies, setIsLoadingCompanies] = useState(true);
+  const [companyError, setCompanyError] = useState('');
+
+  useEffect(() => {
+    async function loadCompanies() {
+      try {
+        const data = await getCompanies();
+        setCompanies(data);
+      } catch (error) {
+        setCompanyError('Unable to load companies. Make sure the backend is running.');
+      } finally {
+        setIsLoadingCompanies(false);
+      }
+    }
+
+    loadCompanies();
+  }, []);
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -31,11 +52,27 @@ function App() {
           <article id="companies" className="card">
             <div className="card-header">
               <h3>Companies</h3>
-              <span className="badge">Backend ready</span>
+              <span className="badge">Live API</span>
             </div>
-            <p>
-              Track target accounts, client prospects, company status, and notes.
-            </p>
+
+            {isLoadingCompanies && <p>Loading companies...</p>}
+
+            {companyError && <p className="error-message">{companyError}</p>}
+
+            {!isLoadingCompanies && !companyError && companies.length === 0 && (
+              <p>No companies found yet.</p>
+            )}
+
+            {!isLoadingCompanies && !companyError && companies.length > 0 && (
+              <ul className="company-list">
+                {companies.map((company) => (
+                  <li key={company.id} className="company-list-item">
+                    <strong>{company.name}</strong>
+                    <span>{company.status || 'No status set'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </article>
 
           <article id="contacts" className="card">
