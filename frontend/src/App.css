@@ -181,6 +181,44 @@ a {
   font-size: 0.9rem;
 }
 
+.company-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 20px;
+  margin-bottom: 24px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.company-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #334155;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.company-form input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  color: #0f172a;
+  font-size: 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.company-form input:focus {
+  outline: 2px solid #93c5fd;
+  border-color: #2563eb;
+}
+
 @media (max-width: 800px) {
   .app {
     flex-direction: column;
@@ -201,5 +239,50 @@ a {
 
   .content-grid {
     grid-template-columns: 1fr;
+  }
+
+
+  .secondary-button {
+    width: fit-content;
+    padding: 11px 14px;
+    color: #ffffff;
+    border: 0;
+    border-radius: 10px;
+    background: #0f172a;
+    cursor: pointer;
+  }
+
+  .secondary-button:hover {
+    background: #1e293b;
+  }
+
+  .secondary-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .primary-button {
+    text-decoration: none;
+  }
+  .secondary-button {
+    padding: 11px 14px;
+    color: #ffffff;
+    border: 0;
+    border-radius: 10px;
+    background: #0f172a;
+    cursor: pointer;
+  }
+
+  .secondary-button:hover {
+    background: #1e293b;
+  }
+
+  .secondary-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .primary-button {
+    text-decoration: none;
   }
 }
