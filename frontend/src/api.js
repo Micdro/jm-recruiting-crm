@@ -13,3 +13,8 @@ export async function createCompany(company) {
   const response = await api.post('/api/companies', company);
   return response.data;
 }
+
+export async function getContacts() {
+  const response = await api.get('/api/contacts');
+  return response.data;
+}

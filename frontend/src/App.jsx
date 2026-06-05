@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import './App.css';
-import { createCompany, getCompanies } from './api';
+import { createCompany, getCompanies, getContacts } from './api';
 
 const emptyCompanyForm = {
   name: '',
@@ -18,6 +18,9 @@ function App() {
   const [companyError, setCompanyError] = useState('');
   const [companyForm, setCompanyForm] = useState(emptyCompanyForm);
   const [isSavingCompany, setIsSavingCompany] = useState(false);
+  const [contacts, setContacts] = useState([]);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
+  const [contactError, setContactError] = useState('');
 
   useEffect(() => {
     async function loadCompanies() {
@@ -31,7 +34,19 @@ function App() {
       }
     }
 
+    async function loadContacts() {
+      try {
+        const data = await getContacts();
+        setContacts(data);
+      } catch {
+        setContactError('Unable to load contacts. Make sure the backend is running.');
+      } finally {
+        setIsLoadingContacts(false);
+      }
+    }
+
     loadCompanies();
+    loadContacts();
   }, []);
 
   function handleCompanyFormChange(event) {
@@ -208,11 +223,30 @@ function App() {
           <article id="contacts" className="card">
             <div className="card-header">
               <h3>Contacts</h3>
-              <span className="badge">Backend ready</span>
+              <span className="badge">Live API</span>
             </div>
-            <p>
-              Manage hiring leaders, recruiters, stakeholders, follow-ups, and relationship status.
-            </p>
+
+            {isLoadingContacts && <p>Loading contacts...</p>}
+
+            {contactError && <p className="error-message">{contactError}</p>}
+
+            {!isLoadingContacts && !contactError && contacts.length === 0 && (
+                <p>No contacts found yet.</p>
+            )}
+
+            {!isLoadingContacts && contacts.length > 0 && (
+                <ul className="contact-list">
+                  {contacts.map((contact) => (
+                      <li key={contact.id} className="contact-list-item">
+                        <strong>{contact.name}</strong>
+                        <span>{contact.title || 'No title set'}</span>
+                        <span>{contact.companyName || 'No company set'}</span>
+                        {contact.relationshipStatus && <span>Status: {contact.relationshipStatus}</span>}
+                        {contact.nextFollowUpDate && <span>Next follow-up: {contact.nextFollowUpDate}</span>}
+                      </li>
+                  ))}
+                </ul>
+            )}
           </article>
         </section>
       </main>
