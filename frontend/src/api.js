@@ -18,3 +18,8 @@ export async function getContacts() {
   const response = await api.get('/api/contacts');
   return response.data;
 }
+
+export async function createContact(contact) {
+  const response = await api.post('/api/contacts', contact);
+  return response.data;
+}
