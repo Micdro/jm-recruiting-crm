@@ -24,7 +24,7 @@ function App() {
       try {
         const data = await getCompanies();
         setCompanies(data);
-      } catch (error) {
+      } catch {
         setCompanyError('Unable to load companies. Make sure the backend is running.');
       } finally {
         setIsLoadingCompanies(false);
@@ -58,7 +58,7 @@ function App() {
       ]);
 
       setCompanyForm(emptyCompanyForm);
-    } catch (error) {
+    } catch {
       setCompanyError('Unable to create company. Check the form and make sure the backend is running.');
     } finally {
       setIsSavingCompany(false);
@@ -66,123 +66,157 @@ function App() {
   }
 
   return (
-      <div className="app">
-        <aside className="sidebar">
-          <div className="brand">
-            <h1>JM Recruiting CRM</h1>
-            <p>AI talent search operating system</p>
+    <div className="app">
+      <aside className="sidebar">
+        <div className="brand">
+          <h1>JM Recruiting CRM</h1>
+          <p>AI talent search operating system</p>
+        </div>
+
+        <nav className="nav">
+          <a href="#companies">Companies</a>
+          <a href="#contacts">Contacts</a>
+        </nav>
+      </aside>
+
+      <main className="main-content">
+        <section className="page-header">
+          <div>
+            <p className="eyebrow">Dashboard</p>
+            <h2>Recruiting pipeline workspace</h2>
           </div>
 
-          <nav className="nav">
-            <a href="#companies">Companies</a>
-            <a href="#contacts">Contacts</a>
-          </nav>
-        </aside>
+          <a href="#company-form" className="primary-button">
+            Add Company
+          </a>
+        </section>
 
-        <main className="main-content">
-          <section className="page-header">
-            <div>
-              <p className="eyebrow">Dashboard</p>
-              <h2>Recruiting pipeline workspace</h2>
+        <section className="content-grid">
+          <article id="companies" className="card">
+            <div className="card-header">
+              <h3>Companies</h3>
+              <span className="badge">Live API</span>
             </div>
 
-            <a href="#company-form" className="primary-button">
-              Add Company
-            </a>
-          </section>
+            <form id="company-form" className="company-form" onSubmit={handleCreateCompany}>
+              <label>
+                Company name
+                <input
+                  type="text"
+                  name="name"
+                  value={companyForm.name}
+                  onChange={handleCompanyFormChange}
+                  placeholder="Jane Michael LLC"
+                  required
+                />
+              </label>
 
-          <section className="content-grid">
-            <article id="companies" className="card">
-              <div className="card-header">
-                <h3>Companies</h3>
-                <span className="badge">Live API</span>
-              </div>
+              <label>
+                Website
+                <input
+                  type="url"
+                  name="website"
+                  value={companyForm.website}
+                  onChange={handleCompanyFormChange}
+                  placeholder="https://example.com"
+                />
+              </label>
 
-              <form id="company-form" className="company-form" onSubmit={handleCreateCompany}>
-                <label>
-                  Company name
-                  <input
-                      type="text"
-                      name="name"
-                      value={companyForm.name}
-                      onChange={handleCompanyFormChange}
-                      placeholder="Jane Michael LLC"
-                      required
-                  />
-                </label>
+              <label>
+                Location
+                <input
+                  type="text"
+                  name="location"
+                  value={companyForm.location}
+                  onChange={handleCompanyFormChange}
+                  placeholder="New York, NY"
+                />
+              </label>
 
-                <label>
-                  Website
-                  <input
-                      type="url"
-                      name="website"
-                      value={companyForm.website}
-                      onChange={handleCompanyFormChange}
-                      placeholder="https://example.com"
-                  />
-                </label>
+              <label>
+                Company size
+                <input
+                  type="text"
+                  name="companySize"
+                  value={companyForm.companySize}
+                  onChange={handleCompanyFormChange}
+                  placeholder="51-200"
+                />
+              </label>
 
-                <label>
-                  Location
-                  <input
-                      type="text"
-                      name="location"
-                      value={companyForm.location}
-                      onChange={handleCompanyFormChange}
-                      placeholder="New York, NY"
-                  />
-                </label>
+              <label>
+                Status
+                <input
+                  type="text"
+                  name="status"
+                  value={companyForm.status}
+                  onChange={handleCompanyFormChange}
+                  placeholder="Prospect"
+                />
+              </label>
 
-                <label>
-                  Status
-                  <input
-                      type="text"
-                      name="status"
-                      value={companyForm.status}
-                      onChange={handleCompanyFormChange}
-                      placeholder="Prospect"
-                  />
-                </label>
+              <label>
+                LinkedIn profile
+                <input
+                  type="url"
+                  name="linkedinProfile"
+                  value={companyForm.linkedinProfile}
+                  onChange={handleCompanyFormChange}
+                  placeholder="https://linkedin.com/company/example"
+                />
+              </label>
 
-                <button type="submit" className="secondary-button" disabled={isSavingCompany}>
-                  {isSavingCompany ? 'Saving...' : 'Save Company'}
-                </button>
-              </form>
+              <label>
+                Notes
+                <textarea
+                  name="notes"
+                  value={companyForm.notes}
+                  onChange={handleCompanyFormChange}
+                  placeholder="Target account notes"
+                  rows="4"
+                />
+              </label>
 
-              {isLoadingCompanies && <p>Loading companies...</p>}
+              <button type="submit" className="secondary-button" disabled={isSavingCompany}>
+                {isSavingCompany ? 'Saving...' : 'Save Company'}
+              </button>
+            </form>
 
-              {companyError && <p className="error-message">{companyError}</p>}
+            {isLoadingCompanies && <p>Loading companies...</p>}
 
-              {!isLoadingCompanies && !companyError && companies.length === 0 && (
-                  <p>No companies found yet.</p>
-              )}
+            {companyError && <p className="error-message">{companyError}</p>}
 
-              {!isLoadingCompanies && companies.length > 0 && (
-                  <ul className="company-list">
-                    {companies.map((company) => (
-                        <li key={company.id} className="company-list-item">
-                          <strong>{company.name}</strong>
-                          <span>{company.status || 'No status set'}</span>
-                          {company.location && <span>{company.location}</span>}
-                          {company.website && <span>{company.website}</span>}
-                        </li>
-                    ))}
-                  </ul>
-              )}
-            </article>
+            {!isLoadingCompanies && !companyError && companies.length === 0 && (
+              <p>No companies found yet.</p>
+            )}
 
-            <article id="contacts" className="card">
-              <div className="card-header">
-                <h3>Contacts</h3>
-                <span className="badge">Backend ready</span>
-              </div>
-              <p>
-                Manage hiring leaders, recruiters, stakeholders, follow-ups, and relationship status.
-              </p>
-            </article>
-          </section>
-        </main>
-      </div>
+            {!isLoadingCompanies && companies.length > 0 && (
+              <ul className="company-list">
+                {companies.map((company) => (
+                  <li key={company.id} className="company-list-item">
+                    <strong>{company.name}</strong>
+                    <span>{company.status || 'No status set'}</span>
+                    {company.location && <span>{company.location}</span>}
+                    {company.companySize && <span>{company.companySize}</span>}
+                    {company.website && <span>{company.website}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article id="contacts" className="card">
+            <div className="card-header">
+              <h3>Contacts</h3>
+              <span className="badge">Backend ready</span>
+            </div>
+            <p>
+              Manage hiring leaders, recruiters, stakeholders, follow-ups, and relationship status.
+            </p>
+          </article>
+        </section>
+      </main>
+    </div>
   );
 }
 
