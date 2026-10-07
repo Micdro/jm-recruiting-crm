@@ -71,6 +71,31 @@ test.describe('Companies API', () => {
     expect(body.messages).toContain('Company name must be 255 characters or fewer');
   });
 
+  test('refuses to delete a company that still has contacts', async ({ request, crm }) => {
+    const company = await crm.createCompany();
+    const contact = await crm.createContact(company.id);
+
+    await test.step('delete is blocked with 409', async () => {
+      const response = await request.delete(`/api/companies/${company.id}`);
+      expect(response.status()).toBe(409);
+      expect(await response.json()).toEqual({
+        status: 409,
+        error: 'Conflict',
+        messages: ['Company has contacts. Delete or reassign them before deleting the company.'],
+      });
+    });
+
+    await test.step('nothing was deleted', async () => {
+      expect((await request.get(`/api/companies/${company.id}`)).status()).toBe(200);
+      expect((await request.get(`/api/contacts/${contact.id}`)).status()).toBe(200);
+    });
+
+    await test.step('delete works once the contact is gone', async () => {
+      expect((await request.delete(`/api/contacts/${contact.id}`)).status()).toBe(204);
+      expect((await request.delete(`/api/companies/${company.id}`)).status()).toBe(204);
+    });
+  });
+
   test('returns 404 for a company that does not exist', async ({ request }) => {
     const get = await request.get(`/api/companies/${MISSING_ID}`);
     expect(get.status()).toBe(404);

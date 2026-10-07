@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.company;
 
+import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,9 +11,11 @@ import java.util.Optional;
 public class CompanyService {
 
     private final CompanyRepository companyRepository;
+    private final ContactRepository contactRepository;
 
-    public CompanyService(CompanyRepository companyRepository) {
+    public CompanyService(CompanyRepository companyRepository, ContactRepository contactRepository) {
         this.companyRepository = companyRepository;
+        this.contactRepository = contactRepository;
     }
 
     public List<CompanyResponse> getAllCompanies() {
@@ -63,6 +66,10 @@ public class CompanyService {
 
     @Transactional
     public boolean deleteCompany(Long id) {
+        if (contactRepository.existsByCompanyId(id)) {
+            throw new CompanyHasContactsException();
+        }
+
         int deletedRows = companyRepository.deleteCompanyById(id);
         return deletedRows > 0;
     }

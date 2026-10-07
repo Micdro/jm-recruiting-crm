@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm;
 
+import com.janemichael.jmrecruitingcrm.company.CompanyHasContactsException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,5 +27,15 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.badRequest().body(response);
 
+    }
+
+    @ExceptionHandler(CompanyHasContactsException.class)
+    public ResponseEntity<ApiErrorResponse> handleCompanyHasContacts(CompanyHasContactsException exception) {
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "Conflict",
+                List.of(exception.getMessage())
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 }
