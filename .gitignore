@@ -6,6 +6,13 @@ backend/src/main/resources/application.properties
 
 # Node
 frontend/node_modules/
+frontend/dist/
+
+# Playwright
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
 
 # OS
 .DS_Store
