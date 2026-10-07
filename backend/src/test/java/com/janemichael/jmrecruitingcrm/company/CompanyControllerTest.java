@@ -156,4 +156,18 @@ class CompanyControllerTest {
 
         verify(companyService).deleteCompany(99L);
     }
+
+    @Test
+    void deleteCompanyReturnsConflictWhenCompanyHasContacts() throws Exception {
+        when(companyService.deleteCompany(1L)).thenThrow(new CompanyHasContactsException());
+
+        mockMvc.perform(delete("/api/companies/1"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.messages[0]")
+                        .value("Company has contacts. Delete or reassign them before deleting the company."));
+
+        verify(companyService).deleteCompany(1L);
+    }
 }

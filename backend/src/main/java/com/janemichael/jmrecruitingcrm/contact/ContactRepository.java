@@ -7,6 +7,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface ContactRepository extends JpaRepository<Contact, Long> {
 
+    boolean existsByCompanyId(Long companyId);
+
     @Modifying
     @Query("DELETE FROM Contact c WHERE c.id = :id")
     int deleteContactById(@Param("id") Long id);

@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.company;
 
+import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -7,12 +8,14 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class CompanyServiceTest {
 
     private final CompanyRepository companyRepository = mock(CompanyRepository.class);
-    private final CompanyService companyService = new CompanyService(companyRepository);
+    private final ContactRepository contactRepository = mock(ContactRepository.class);
+    private final CompanyService companyService = new CompanyService(companyRepository, contactRepository);
 
     @Test
     void getAllCompaniesReturnsCompanyResponses() {
@@ -178,5 +181,17 @@ class CompanyServiceTest {
         assertThat(result).isFalse();
 
         verify(companyRepository).deleteCompanyById(99L);
+    }
+
+    @Test
+    void deleteCompanyThrowsAndDeletesNothingWhenCompanyHasContacts() {
+        when(contactRepository.existsByCompanyId(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> companyService.deleteCompany(1L))
+                .isInstanceOf(CompanyHasContactsException.class)
+                .hasMessage("Company has contacts. Delete or reassign them before deleting the company.");
+
+        verify(contactRepository).existsByCompanyId(1L);
+        verify(companyRepository, never()).deleteCompanyById(anyLong());
     }
 }
