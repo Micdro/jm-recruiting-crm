@@ -9,6 +9,9 @@ import com.janemichael.jmrecruitingcrm.candidate.Candidate;
 import com.janemichael.jmrecruitingcrm.candidate.CandidateRepository;
 import com.janemichael.jmrecruitingcrm.candidate.CandidateResponse;
 import com.janemichael.jmrecruitingcrm.candidate.CandidateService;
+import com.janemichael.jmrecruitingcrm.company.Company;
+import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
+import com.janemichael.jmrecruitingcrm.company.CompanyResponse;
 import com.janemichael.jmrecruitingcrm.contact.Contact;
 import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import com.janemichael.jmrecruitingcrm.contact.ContactResponse;
@@ -49,6 +52,7 @@ public class DashboardService {
     private final CurrentUserService currentUserService;
     private final AppUserRepository userRepository;
     private final ContactRepository contactRepository;
+    private final CompanyRepository companyRepository;
     private final CandidateRepository candidateRepository;
     private final PlacementRepository placementRepository;
     private final ActivityRepository activityRepository;
@@ -61,6 +65,7 @@ public class DashboardService {
             CurrentUserService currentUserService,
             AppUserRepository userRepository,
             ContactRepository contactRepository,
+            CompanyRepository companyRepository,
             CandidateRepository candidateRepository,
             PlacementRepository placementRepository,
             ActivityRepository activityRepository,
@@ -72,6 +77,7 @@ public class DashboardService {
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
         this.contactRepository = contactRepository;
+        this.companyRepository = companyRepository;
         this.candidateRepository = candidateRepository;
         this.placementRepository = placementRepository;
         this.activityRepository = activityRepository;
@@ -121,6 +127,14 @@ public class DashboardService {
                         .thenComparing(candidate -> candidate.getName().toLowerCase()))
                 .toList();
 
+        List<Company> dueCompanies = companyRepository.findAllWithOwner()
+                .stream()
+                .filter(company -> company.getFollowUpDate() != null && !company.getFollowUpDate().isAfter(today))
+                .filter(company -> team || ownedBy(company.getOwner(), me))
+                .sorted(Comparator.comparing(Company::getFollowUpDate)
+                        .thenComparing(company -> company.getName().toLowerCase()))
+                .toList();
+
         List<SearchResponse> openSearches = searchService.list(null, null, true);
 
         Map<String, Long> outreachByStatus = new LinkedHashMap<>();
@@ -144,10 +158,12 @@ public class DashboardService {
                 touchesToday.getOrDefault(me.getId(), 0L),
                 touchesThisWeek.getOrDefault(me.getId(), 0L),
                 teamTouches,
-                dueContacts.stream().limit(MAX_DUE_ITEMS).map(ContactResponse::from).toList(),
+                dueContacts.stream().limit(MAX_DUE_ITEMS).map(ContactResponse::summary).toList(),
                 dueContacts.size(),
-                dueCandidates.stream().limit(MAX_DUE_ITEMS).map(candidate -> CandidateResponse.from(candidate, 0L)).toList(),
+                dueCandidates.stream().limit(MAX_DUE_ITEMS).map(candidate -> CandidateResponse.summary(candidate, 0L)).toList(),
                 dueCandidates.size(),
+                dueCompanies.stream().limit(MAX_DUE_ITEMS).map(company -> CompanyResponse.summary(company, 0L, 0L)).toList(),
+                dueCompanies.size(),
                 contactRepository.countUnscheduled(OutreachStatus.NEW, me.getId()),
                 openSearches,
                 outreachByStatus,
@@ -235,6 +251,8 @@ public class DashboardService {
             long contactsDueTotal,
             List<CandidateResponse> candidatesDue,
             long candidatesDueTotal,
+            List<CompanyResponse> companiesDue,
+            long companiesDueTotal,
             long unscheduledNewContacts,
             List<SearchResponse> openSearches,
             Map<String, Long> outreachByStatus,

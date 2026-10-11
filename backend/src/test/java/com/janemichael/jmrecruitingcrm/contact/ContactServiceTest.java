@@ -9,6 +9,7 @@ import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.ActionType;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,7 +33,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** The outbound rules: four touches per sequence, next touch three business days out. */
+/**
+ * The outbound rules: four touches per sequence (LinkedIn, email, LinkedIn, email), next touch
+ * three business days out.
+ */
 class ContactServiceTest {
 
     /** Wednesday, October 14, 2026 in New York. */
@@ -41,9 +47,10 @@ class ContactServiceTest {
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final ActivityLogger activityLogger = mock(ActivityLogger.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-14T14:00:00Z"), ZoneId.of("America/New_York"));
+    private final FieldEncryptor encryptor = new FieldEncryptor("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
 
     private final ContactService contactService = new ContactService(
-            contactRepository, companyRepository, currentUserService, activityLogger, clock);
+            contactRepository, companyRepository, currentUserService, activityLogger, encryptor, clock);
 
     private final AppUser user = new AppUser();
 
@@ -178,7 +185,32 @@ class ContactServiceTest {
         assertThat(response.status()).isEqualTo(OutreachStatus.NEW);
         assertThat(response.touchCount()).isZero();
         assertThat(response.nextActionDate()).isEqualTo(TODAY);
-        assertThat(response.nextActionType()).isEqualTo(ActionType.EMAIL);
+        assertThat(response.nextActionType()).isEqualTo(ActionType.LINKEDIN);
+    }
+
+    @Test
+    void theSequenceAlternatesLinkedinAndEmail() {
+        assertThat(ContactService.channelForTouch(0)).isEqualTo(ActionType.LINKEDIN);
+        assertThat(ContactService.channelForTouch(1)).isEqualTo(ActionType.EMAIL);
+        assertThat(ContactService.channelForTouch(2)).isEqualTo(ActionType.LINKEDIN);
+        assertThat(ContactService.channelForTouch(3)).isEqualTo(ActionType.EMAIL);
+        assertThat(ContactService.channelForTouch(9)).isEqualTo(ActionType.EMAIL);
+    }
+
+    @Test
+    void theDailyQueueTakesOneContactPerCompanyInTurn() {
+        Company acme = company(10L, "Acme AI");
+        Company zest = company(11L, "Zest Risk");
+        Company lumen = company(12L, "Lumen");
+        List<Contact> oldestFirst = new ArrayList<>(List.of(
+                person(1L, acme), person(2L, acme), person(3L, acme),
+                person(4L, zest), person(5L, lumen)));
+
+        List<Long> picked = ContactService.rotateByCompany(oldestFirst, 4).stream()
+                .map(Contact::getId)
+                .toList();
+
+        assertThat(picked).containsExactly(1L, 4L, 5L, 2L);
     }
 
     @Test
@@ -197,21 +229,23 @@ class ContactServiceTest {
 
         ContactResponse response = contactService.create(new ContactRequest(
                 "Priya Shah", "Head of ML Platform", "priya@acme.ai", null, null, null,
-                null, null, null, null, 10L, null));
+                BuyingRole.BUYER, null, null, null, null, 10L, null));
 
         assertThat(response.status()).isEqualTo(OutreachStatus.NEW);
         assertThat(response.ownerId()).isEqualTo(7L);
         assertThat(response.companyName()).isEqualTo("Acme AI");
+        assertThat(response.buyingRole()).isEqualTo(BuyingRole.BUYER);
     }
 
     @Test
     void duplicateEmailsAreRejected() {
         when(companyRepository.findById(10L)).thenReturn(Optional.of(company()));
-        when(contactRepository.existsByEmailIgnoreCase("priya@acme.ai")).thenReturn(true);
+        // Emails are stored encrypted, so duplicates are found by their keyed hash.
+        when(contactRepository.existsByEmailHash(encryptor.blindIndex("Priya@Acme.ai"))).thenReturn(true);
 
         assertThatThrownBy(() -> contactService.create(new ContactRequest(
                 "Priya Shah", null, "priya@acme.ai", null, null, null,
-                null, null, null, null, 10L, null)))
+                null, null, null, null, null, 10L, null)))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -227,10 +261,22 @@ class ContactServiceTest {
     }
 
     private static Company company() {
+        return company(10L, "Acme AI");
+    }
+
+    private static Company company(Long id, String name) {
         Company company = new Company();
-        company.setId(10L);
-        company.setName("Acme AI");
+        company.setId(id);
+        company.setName(name);
         return company;
+    }
+
+    private static Contact person(Long id, Company company) {
+        Contact contact = new Contact();
+        contact.setId(id);
+        contact.setName("Person " + id);
+        contact.setCompany(company);
+        return contact;
     }
 
     private static LogActivityRequest request(ActivityType type) {

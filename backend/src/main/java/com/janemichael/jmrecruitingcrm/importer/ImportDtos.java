@@ -2,6 +2,9 @@ package com.janemichael.jmrecruitingcrm.importer;
 
 import com.janemichael.jmrecruitingcrm.candidate.CandidateEnums;
 import com.janemichael.jmrecruitingcrm.common.ActionType;
+import com.janemichael.jmrecruitingcrm.company.CompanyEnums;
+import com.janemichael.jmrecruitingcrm.company.CompanyStatus;
+import com.janemichael.jmrecruitingcrm.contact.BuyingRole;
 import com.janemichael.jmrecruitingcrm.contact.OutreachStatus;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import jakarta.validation.Valid;
@@ -12,8 +15,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * CSV imports. The browser parses the file and maps columns; the server validates each row,
- * creates missing companies and skips or updates duplicates.
+ * CSV imports, including ClickUp exports. The browser parses the file and maps columns; the
+ * server validates each row, creates missing companies and skips or updates duplicates.
+ * The owner column may hold a name, initials (MD, DD) or an email; anything unrecognised
+ * is assigned to the person importing.
  */
 public final class ImportDtos {
 
@@ -27,6 +32,38 @@ public final class ImportDtos {
         SKIP,
         /** Fill in existing records with the values in the file. */
         UPDATE
+    }
+
+    public record CompanyImportRequest(
+            @NotNull(message = "Rows are required")
+            @Size(max = MAX_ROWS, message = "Import at most 5000 rows at a time")
+            List<@Valid CompanyRow> rows,
+
+            DuplicateMode duplicateMode
+    ) {
+    }
+
+    public record CompanyRow(
+            String name,
+            String website,
+            String location,
+            String companySize,
+            CompanyStatus status,
+            String focus,
+            CompanyEnums.Industry industry,
+            List<CompanyEnums.Segment> segments,
+            CompanyEnums.Tier tier,
+            CompanyEnums.Priority priority,
+            CompanyEnums.HiringNeed hiringNeed,
+            SearchEnums.Timeline hiringTimeline,
+            Integer anticipatedHires,
+            CompanyEnums.LeadSource leadSource,
+            LocalDate lastContactedDate,
+            LocalDate followUpDate,
+            String linkedinProfile,
+            String notes,
+            String owner
+    ) {
     }
 
     public record ContactImportRequest(
@@ -50,11 +87,13 @@ public final class ImportDtos {
             String phone,
             String linkedinUrl,
             OutreachStatus status,
+            BuyingRole buyingRole,
             Integer touchCount,
             LocalDate lastContactedDate,
             LocalDate nextActionDate,
             ActionType nextActionType,
-            String notes
+            String notes,
+            String owner
     ) {
     }
 
@@ -80,11 +119,17 @@ public final class ImportDtos {
             SearchEnums.Track track,
             CandidateEnums.Status status,
             CandidateEnums.Source source,
+            List<CandidateEnums.RoleArea> roleAreas,
+            SearchEnums.WorkModel workPreference,
+            CandidateEnums.Experience experience,
+            Boolean willingToRelocate,
+            CandidateEnums.EmploymentType employmentType,
             String compExpectation,
             String productionEvidence,
             LocalDate nextActionDate,
             ActionType nextActionType,
-            String notes
+            String notes,
+            String owner
     ) {
     }
 

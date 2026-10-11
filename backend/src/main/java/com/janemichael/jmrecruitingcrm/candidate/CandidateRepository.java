@@ -16,9 +16,9 @@ public interface CandidateRepository extends JpaRepository<Candidate, Long> {
     @Query("select c from Candidate c left join fetch c.owner where c.id = :id")
     Optional<Candidate> findWithOwnerById(@Param("id") Long id);
 
-    boolean existsByEmailIgnoreCase(String email);
+    boolean existsByEmailHash(String emailHash);
 
-    boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
+    boolean existsByEmailHashAndIdNot(String emailHash, Long id);
 
     @Modifying
     @Query("DELETE FROM Candidate c WHERE c.id = :id")

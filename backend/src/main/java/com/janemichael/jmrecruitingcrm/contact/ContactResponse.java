@@ -13,6 +13,7 @@ public record ContactResponse(
         String phone,
         String linkedinUrl,
         OutreachStatus status,
+        BuyingRole buyingRole,
         int touchCount,
         int maxTouches,
         LocalDate lastContactedDate,
@@ -28,6 +29,15 @@ public record ContactResponse(
 ) {
 
     public static ContactResponse from(Contact contact) {
+        return build(contact, contact.getNotes());
+    }
+
+    /** For lists and the Today queue: everything except the notes. */
+    public static ContactResponse summary(Contact contact) {
+        return build(contact, null);
+    }
+
+    private static ContactResponse build(Contact contact, String notes) {
         return new ContactResponse(
                 contact.getId(),
                 contact.getName(),
@@ -36,12 +46,13 @@ public record ContactResponse(
                 contact.getPhone(),
                 contact.getLinkedinUrl(),
                 contact.getStatus(),
+                contact.getBuyingRole(),
                 contact.getTouchCount(),
                 ContactService.MAX_SEQUENCE_TOUCHES,
                 contact.getLastContactedDate(),
                 contact.getNextActionDate(),
                 contact.getNextActionType(),
-                contact.getNotes(),
+                notes,
                 contact.getCompany().getId(),
                 contact.getCompany().getName(),
                 contact.getOwner() == null ? null : contact.getOwner().getId(),

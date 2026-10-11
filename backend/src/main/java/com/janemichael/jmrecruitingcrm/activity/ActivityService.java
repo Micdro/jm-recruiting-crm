@@ -14,6 +14,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -27,19 +29,22 @@ public class ActivityService {
     private final CompanyRepository companyRepository;
     private final SearchRepository searchRepository;
     private final CurrentUserService currentUserService;
+    private final Clock clock;
 
     public ActivityService(
             ActivityRepository activityRepository,
             ActivityLogger activityLogger,
             CompanyRepository companyRepository,
             SearchRepository searchRepository,
-            CurrentUserService currentUserService
+            CurrentUserService currentUserService,
+            Clock clock
     ) {
         this.activityRepository = activityRepository;
         this.activityLogger = activityLogger;
         this.companyRepository = companyRepository;
         this.searchRepository = searchRepository;
         this.currentUserService = currentUserService;
+        this.clock = clock;
     }
 
     /** The activity history for one record, newest first. With no filter, the team's latest activity. */
@@ -82,10 +87,29 @@ public class ActivityService {
         if (request.companyId() != null) {
             Company company = companyRepository.findById(request.companyId())
                     .orElseThrow(() -> new NotFoundException("Company not found"));
+            updateCompanyFollowUp(company, type, request);
             return ActivityResponse.from(activityLogger.forCompany(company, type, request.summary(), user));
         }
 
         throw new BadRequestException("Choose a company or a search for this note");
+    }
+
+    /**
+     * A call, email or meeting with a company counts as contact and completes a follow-up that was due.
+     * A new follow-up date can be set at the same time.
+     */
+    private void updateCompanyFollowUp(Company company, ActivityType type, NoteRequest request) {
+        LocalDate today = LocalDate.now(clock);
+        boolean contact = type == ActivityType.CALL || type == ActivityType.EMAIL || type == ActivityType.MEETING;
+
+        if (contact) {
+            company.setLastContactedDate(today);
+        }
+        if (request.followUpDate() != null) {
+            company.setFollowUpDate(request.followUpDate());
+        } else if (contact && company.getFollowUpDate() != null && !company.getFollowUpDate().isAfter(today)) {
+            company.setFollowUpDate(null);
+        }
     }
 
     public record NoteRequest(
@@ -97,7 +121,10 @@ public class ActivityService {
 
             Long companyId,
 
-            Long searchId
+            Long searchId,
+
+            /** For company notes: the next follow-up date. */
+            LocalDate followUpDate
     ) {
     }
 }

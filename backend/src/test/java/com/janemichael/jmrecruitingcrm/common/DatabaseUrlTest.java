@@ -28,6 +28,22 @@ class DatabaseUrlTest {
     }
 
     @Test
+    void addsTheRequestedSslModeUnlessTheUrlHasOne() {
+        assertThat(DatabaseUrl.toSpringProperties(Map.of(
+                "DATABASE_URL", "postgres://user:pass@db.example.com/jmcrm",
+                "DB_SSLMODE", "verify-full")))
+                .containsEntry("spring.datasource.url", "jdbc:postgresql://db.example.com:5432/jmcrm?sslmode=verify-full");
+
+        assertThat(DatabaseUrl.toSpringProperties(Map.of(
+                "DATABASE_URL", "postgres://user:pass@db.example.com/jmcrm?sslmode=require",
+                "DB_SSLMODE", "verify-full")))
+                .containsEntry("spring.datasource.url", "jdbc:postgresql://db.example.com:5432/jmcrm?sslmode=require");
+
+        assertThat(DatabaseUrl.withSslMode("connectTimeout=10", "require")).isEqualTo("connectTimeout=10&sslmode=require");
+        assertThat(DatabaseUrl.withSslMode(null, "")).isNull();
+    }
+
+    @Test
     void explicitSpringSettingsWin() {
         assertThat(DatabaseUrl.toSpringProperties(Map.of(
                 "DATABASE_URL", "postgres://user:pass@host/db",

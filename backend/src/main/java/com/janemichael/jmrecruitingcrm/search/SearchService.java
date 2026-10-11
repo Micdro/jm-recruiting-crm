@@ -20,6 +20,7 @@ import com.janemichael.jmrecruitingcrm.placement.PlacementRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -75,7 +76,10 @@ public class SearchService {
         return SearchResponse.from(find(id), stageCounts().get(id));
     }
 
-    /** Opens a search. The company becomes a client, since a search means an engagement. */
+    /** The fee when none is entered: 20% of first-year base, as in the ClickUp revenue formula. */
+    public static final BigDecimal DEFAULT_FEE_PERCENT = new BigDecimal("20");
+
+    /** Opens a search. The company moves to Placing, since a search means the firm is working for them. */
     @Transactional
     public SearchResponse create(SearchRequest request) {
         AppUser user = currentUserService.get();
@@ -90,15 +94,18 @@ public class SearchService {
                 : request.engagementType());
         search.setOpenedDate(request.openedDate() == null ? LocalDate.now(clock) : request.openedDate());
         search.setOwner(request.ownerId() == null ? user : currentUserService.findOwner(request.ownerId()));
+        if (search.getFeePercent() == null) {
+            search.setFeePercent(DEFAULT_FEE_PERCENT);
+        }
 
         Search saved = searchRepository.save(search);
         activityLogger.forSearch(saved, ActivityType.NOTE, "Search opened: " + saved.getTitle(), user);
 
-        if (company.getStatus() != CompanyStatus.CLIENT) {
+        if (company.getStatus() != CompanyStatus.PLACING) {
             CompanyStatus previous = company.getStatus();
-            company.setStatus(CompanyStatus.CLIENT);
+            company.setStatus(CompanyStatus.PLACING);
             activityLogger.forCompany(company, ActivityType.STATUS_CHANGE,
-                    "Status changed from " + Labels.of(previous) + " to Client (search opened)", user);
+                    "Status changed from " + Labels.of(previous) + " to Placing (search opened)", user);
         }
 
         return SearchResponse.from(saved, Map.of());

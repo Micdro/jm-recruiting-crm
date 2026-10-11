@@ -28,13 +28,15 @@ public record ContactRequest(
 
         OutreachStatus status,
 
+        BuyingRole buyingRole,
+
         LocalDate lastContactedDate,
 
         LocalDate nextActionDate,
 
         ActionType nextActionType,
 
-        @Size(max = 2000, message = "Notes must be 2000 characters or fewer")
+        @Size(max = 10000, message = "Notes must be 10,000 characters or fewer")
         String notes,
 
         @NotNull(message = "Company ID is required")

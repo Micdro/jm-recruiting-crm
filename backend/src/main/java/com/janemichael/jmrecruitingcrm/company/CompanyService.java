@@ -5,6 +5,7 @@ import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
+import com.janemichael.jmrecruitingcrm.common.EnumCsv;
 import com.janemichael.jmrecruitingcrm.common.Labels;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
@@ -57,7 +58,7 @@ public class CompanyService {
                 .stream()
                 .filter(company -> status == null || company.getStatus() == status)
                 .filter(company -> query == null || matches(company, query))
-                .map(company -> CompanyResponse.from(company,
+                .map(company -> CompanyResponse.summary(company,
                         contactCounts.getOrDefault(company.getId(), 0L),
                         openSearchCounts.getOrDefault(company.getId(), 0L)))
                 .toList();
@@ -81,7 +82,7 @@ public class CompanyService {
 
         Company company = new Company();
         apply(request, company);
-        company.setStatus(request.status() == null ? CompanyStatus.TARGET : request.status());
+        company.setStatus(request.status() == null ? CompanyStatus.LEAD : request.status());
         company.setOwner(request.ownerId() == null ? user : currentUserService.findOwner(request.ownerId()));
 
         return CompanyResponse.from(companyRepository.save(company), 0L, 0L);
@@ -150,6 +151,7 @@ public class CompanyService {
     private static boolean matches(Company company, String query) {
         return contains(company.getName(), query)
                 || contains(company.getFocus(), query)
+                || contains(company.getNotes(), query)
                 || contains(company.getLocation(), query)
                 || contains(company.getWebsite(), query);
     }
@@ -164,6 +166,16 @@ public class CompanyService {
         company.setLocation(Text.clean(request.location()));
         company.setCompanySize(Text.clean(request.companySize()));
         company.setFocus(Text.clean(request.focus()));
+        company.setIndustry(request.industry());
+        company.setSegments(EnumCsv.join(request.segments()));
+        company.setTier(request.tier());
+        company.setPriority(request.priority());
+        company.setHiringNeed(request.hiringNeed());
+        company.setHiringTimeline(request.hiringTimeline());
+        company.setAnticipatedHires(request.anticipatedHires());
+        company.setLeadSource(request.leadSource());
+        company.setLastContactedDate(request.lastContactedDate());
+        company.setFollowUpDate(request.followUpDate());
         company.setLinkedinProfile(Text.clean(request.linkedinProfile()));
         company.setNotes(Text.clean(request.notes()));
     }

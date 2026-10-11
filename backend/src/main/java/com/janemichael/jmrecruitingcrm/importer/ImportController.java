@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.importer;
 
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.CandidateImportRequest;
+import com.janemichael.jmrecruitingcrm.importer.ImportDtos.CompanyImportRequest;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.ContactImportRequest;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.ImportResult;
 import jakarta.validation.Valid;
@@ -17,6 +18,11 @@ public class ImportController {
 
     public ImportController(ImportService importService) {
         this.importService = importService;
+    }
+
+    @PostMapping("/companies")
+    public ImportResult importCompanies(@Valid @RequestBody CompanyImportRequest request) {
+        return importService.importCompanies(request);
     }
 
     @PostMapping("/contacts")

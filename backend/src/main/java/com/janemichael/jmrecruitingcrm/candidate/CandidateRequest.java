@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public record CandidateRequest(
         @NotBlank(message = "Candidate name is required")
@@ -40,13 +41,23 @@ public record CandidateRequest(
 
         Boolean regulatedExperience,
 
+        List<CandidateEnums.RoleArea> roleAreas,
+
+        SearchEnums.WorkModel workPreference,
+
+        CandidateEnums.Experience experience,
+
+        Boolean willingToRelocate,
+
+        CandidateEnums.EmploymentType employmentType,
+
         @Size(max = 255, message = "Compensation expectation must be 255 characters or fewer")
         String compExpectation,
 
         @Size(max = 500, message = "Resume link must be 500 characters or fewer")
         String resumeUrl,
 
-        @Size(max = 4000, message = "Production evidence must be 4000 characters or fewer")
+        @Size(max = 10000, message = "Production evidence must be 10,000 characters or fewer")
         String productionEvidence,
 
         LocalDate lastContactedDate,
@@ -55,7 +66,7 @@ public record CandidateRequest(
 
         ActionType nextActionType,
 
-        @Size(max = 2000, message = "Notes must be 2000 characters or fewer")
+        @Size(max = 10000, message = "Notes must be 10,000 characters or fewer")
         String notes,
 
         Long ownerId

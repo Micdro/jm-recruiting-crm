@@ -5,7 +5,8 @@ spring:
   application:
     name: jm-recruiting-crm
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:jmcrm}}
+    # Uses TLS whenever the database offers it. Set DB_SSLMODE=verify-full for a database on the public internet.
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:jmcrm}?sslmode=${DB_SSLMODE:prefer}}
     username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:postgres}}
     password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:postgres}}
   jpa:
@@ -25,6 +26,11 @@ spring:
 server:
   port: ${PORT:8080}
   forward-headers-strategy: framework
+  # Gzip API responses and app files. Lists of hundreds of records shrink to a fraction of their size.
+  compression:
+    enabled: true
+    min-response-size: 1KB
+    mime-types: application/json,text/html,text/css,application/javascript,text/javascript,image/svg+xml,application/manifest+json
   servlet:
     session:
       timeout: 12h
@@ -34,6 +40,11 @@ server:
         secure: ${COOKIE_SECURE:false}
 
 app:
+  # 32 random bytes, base64. Encrypts emails, phone numbers, notes, salaries and other sensitive
+  # fields in the database. Generate with: openssl rand -base64 32
+  # Keep a copy in your password manager. Without it the encrypted data cannot be read.
+  encryption:
+    key: ${APP_ENCRYPTION_KEY:}
   # Used for "today", due dates and daily touch counts.
   timezone: ${APP_TIMEZONE:America/New_York}
   outreach:

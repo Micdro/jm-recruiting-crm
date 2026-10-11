@@ -1,6 +1,8 @@
 # Runs the whole CRM on one machine: PostgreSQL plus the app on http://localhost:8080.
+#   export APP_ENCRYPTION_KEY="$(openssl rand -base64 32)"   # save this in your password manager
 #   ADMIN_EMAIL=you@jane-michael.com ADMIN_PASSWORD='a-long-password' docker compose up --build
 # The admin account is created on first start. Data lives in the jmcrm-data volume.
+# Use the same APP_ENCRYPTION_KEY every time: it is the only way to read the encrypted fields.
 
 services:
   db:
@@ -31,6 +33,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_NAME: ${ADMIN_NAME:-Michael}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY first. Generate it with openssl rand -base64 32}
     ports:
       - '8080:8080'
 

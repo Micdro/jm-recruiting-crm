@@ -9,22 +9,27 @@ import com.janemichael.jmrecruitingcrm.common.ActionType;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.BusinessDays;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.Labels;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Contacts and the outbound rules the firm runs on: one row per person, track only the
- * next action, and at most four touches in a cold sequence.
+ * next action, and at most four touches in a cold sequence: LinkedIn, email, LinkedIn, email.
  */
 @Service
 @Transactional(readOnly = true)
@@ -34,10 +39,15 @@ public class ContactService {
     public static final int TOUCH_GAP_BUSINESS_DAYS = 3;
     public static final int MAX_FILL_QUEUE = 100;
 
+    /** The channel for each touch in the cold sequence (the ClickUp Next Action Type order). */
+    public static final List<ActionType> SEQUENCE_CHANNELS =
+            List.of(ActionType.LINKEDIN, ActionType.EMAIL, ActionType.LINKEDIN, ActionType.EMAIL);
+
     private final ContactRepository contactRepository;
     private final CompanyRepository companyRepository;
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
+    private final FieldEncryptor encryptor;
     private final Clock clock;
 
     public ContactService(
@@ -45,13 +55,21 @@ public class ContactService {
             CompanyRepository companyRepository,
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
+            FieldEncryptor encryptor,
             Clock clock
     ) {
         this.contactRepository = contactRepository;
         this.companyRepository = companyRepository;
         this.currentUserService = currentUserService;
         this.activityLogger = activityLogger;
+        this.encryptor = encryptor;
         this.clock = clock;
+    }
+
+    /** The channel for the touch after {@code touchesSent}, following LinkedIn, email, LinkedIn, email. */
+    public static ActionType channelForTouch(int touchesSent) {
+        int index = Math.max(0, Math.min(touchesSent, SEQUENCE_CHANNELS.size() - 1));
+        return SEQUENCE_CHANNELS.get(index);
     }
 
     public List<ContactResponse> list(Long companyId, OutreachStatus status, Long ownerId, boolean dueOnly, String q) {
@@ -66,7 +84,7 @@ public class ContactService {
                         || (contact.getOwner() != null && contact.getOwner().getId().equals(ownerId)))
                 .filter(contact -> !dueOnly || isDue(contact, today))
                 .filter(contact -> query == null || matches(contact, query))
-                .map(ContactResponse::from)
+                .map(ContactResponse::summary)
                 .toList();
     }
 
@@ -80,7 +98,7 @@ public class ContactService {
         Company company = findCompany(request.companyId());
 
         String email = Text.clean(request.email());
-        if (email != null && contactRepository.existsByEmailIgnoreCase(email)) {
+        if (email != null && contactRepository.existsByEmailHash(encryptor.blindIndex(email))) {
             throw new ConflictException("A contact with this email already exists");
         }
 
@@ -98,7 +116,7 @@ public class ContactService {
         Company company = findCompany(request.companyId());
 
         String email = Text.clean(request.email());
-        if (email != null && contactRepository.existsByEmailIgnoreCaseAndIdNot(email, id)) {
+        if (email != null && contactRepository.existsByEmailHashAndIdNot(encryptor.blindIndex(email), id)) {
             throw new ConflictException("A contact with this email already exists");
         }
 
@@ -196,9 +214,7 @@ public class ContactService {
         contact.setTouchCount(0);
         contact.setStatus(OutreachStatus.NEW);
         contact.setNextActionDate(LocalDate.now(clock));
-        if (contact.getNextActionType() == null) {
-            contact.setNextActionType(ActionType.EMAIL);
-        }
+        contact.setNextActionType(channelForTouch(0));
 
         activityLogger.forContact(contact, ActivityType.STATUS_CHANGE, false,
                 "Sequence restarted (was " + Labels.of(previousStatus) + ")", currentUserService.get());
@@ -208,7 +224,8 @@ public class ContactService {
 
     /**
      * Pulls new, unscheduled contacts into today's queue so the day's touch target can be met.
-     * Takes the signed-in user's contacts and unassigned ones, oldest first.
+     * Takes the signed-in user's contacts and unassigned ones, oldest first, rotating through
+     * companies so one day's outreach doesn't land on the same company several times.
      */
     @Transactional
     public FillQueueResponse fillQueue(int count) {
@@ -219,14 +236,12 @@ public class ContactService {
         AppUser user = currentUserService.get();
         LocalDate today = LocalDate.now(clock);
 
-        List<Contact> contacts = contactRepository.findUnscheduled(
-                OutreachStatus.NEW, user.getId(), PageRequest.of(0, count));
+        List<Contact> contacts = rotateByCompany(
+                contactRepository.findUnscheduled(OutreachStatus.NEW, user.getId()), count);
 
         for (Contact contact : contacts) {
             contact.setNextActionDate(today);
-            if (contact.getNextActionType() == null) {
-                contact.setNextActionType(ActionType.EMAIL);
-            }
+            contact.setNextActionType(channelForTouch(contact.getTouchCount()));
             if (contact.getOwner() == null) {
                 contact.setOwner(user);
             }
@@ -234,6 +249,27 @@ public class ContactService {
 
         long remaining = contactRepository.countUnscheduled(OutreachStatus.NEW, user.getId());
         return new FillQueueResponse(contacts.size(), remaining);
+    }
+
+    /** Takes one contact per company in turn, keeping each company's oldest first. */
+    static List<Contact> rotateByCompany(List<Contact> oldestFirst, int count) {
+        Map<Long, Deque<Contact>> byCompany = new LinkedHashMap<>();
+        for (Contact contact : oldestFirst) {
+            byCompany.computeIfAbsent(contact.getCompany().getId(), key -> new ArrayDeque<>()).add(contact);
+        }
+
+        List<Contact> picked = new ArrayList<>();
+        while (picked.size() < count && !byCompany.isEmpty()) {
+            var companies = byCompany.values().iterator();
+            while (companies.hasNext() && picked.size() < count) {
+                Deque<Contact> queue = companies.next();
+                picked.add(queue.poll());
+                if (queue.isEmpty()) {
+                    companies.remove();
+                }
+            }
+        }
+        return picked;
     }
 
     public long countUnscheduledForCurrentUser() {
@@ -279,7 +315,7 @@ public class ContactService {
                 contact.setNextActionDate(BusinessDays.add(today, TOUCH_GAP_BUSINESS_DAYS));
                 contact.setNextActionType(request.nextActionType() != null
                         ? request.nextActionType()
-                        : type.toActionType());
+                        : channelForTouch(contact.getTouchCount()));
             }
             return;
         }
@@ -313,6 +349,7 @@ public class ContactService {
     private static boolean matches(Contact contact, String query) {
         return contains(contact.getName(), query)
                 || contains(contact.getEmail(), query)
+                || contains(contact.getNotes(), query)
                 || contains(contact.getTitle(), query)
                 || contains(contact.getCompany().getName(), query);
     }
@@ -328,8 +365,11 @@ public class ContactService {
         contact.setPhone(Text.clean(request.phone()));
         contact.setLinkedinUrl(Text.clean(request.linkedinUrl()));
         contact.setLastContactedDate(request.lastContactedDate());
+        contact.setBuyingRole(request.buyingRole());
         contact.setNextActionDate(request.nextActionDate());
-        contact.setNextActionType(request.nextActionDate() == null ? null : request.nextActionType());
+        contact.setNextActionType(request.nextActionDate() == null
+                ? null
+                : request.nextActionType() != null ? request.nextActionType() : channelForTouch(contact.getTouchCount()));
         contact.setNotes(Text.clean(request.notes()));
         contact.setCompany(company);
     }

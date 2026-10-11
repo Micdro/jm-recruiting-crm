@@ -8,6 +8,8 @@ import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.common.ActionType;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
+import com.janemichael.jmrecruitingcrm.common.EnumCsv;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.Labels;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
@@ -37,6 +39,7 @@ public class CandidateService {
     private final SearchRepository searchRepository;
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
+    private final FieldEncryptor encryptor;
     private final Clock clock;
 
     public CandidateService(
@@ -46,6 +49,7 @@ public class CandidateService {
             SearchRepository searchRepository,
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
+            FieldEncryptor encryptor,
             Clock clock
     ) {
         this.candidateRepository = candidateRepository;
@@ -54,6 +58,7 @@ public class CandidateService {
         this.searchRepository = searchRepository;
         this.currentUserService = currentUserService;
         this.activityLogger = activityLogger;
+        this.encryptor = encryptor;
         this.clock = clock;
     }
 
@@ -76,7 +81,7 @@ public class CandidateService {
                         || (candidate.getOwner() != null && candidate.getOwner().getId().equals(ownerId)))
                 .filter(candidate -> !dueOnly || isDue(candidate, today))
                 .filter(candidate -> query == null || matches(candidate, query))
-                .map(candidate -> CandidateResponse.from(candidate,
+                .map(candidate -> CandidateResponse.summary(candidate,
                         activeCounts.getOrDefault(candidate.getId(), 0L)))
                 .toList();
     }
@@ -91,7 +96,7 @@ public class CandidateService {
         AppUser user = currentUserService.get();
 
         String email = Text.clean(request.email());
-        if (email != null && candidateRepository.existsByEmailIgnoreCase(email)) {
+        if (email != null && candidateRepository.existsByEmailHash(encryptor.blindIndex(email))) {
             throw new ConflictException("A candidate with this email already exists");
         }
 
@@ -108,7 +113,7 @@ public class CandidateService {
         Candidate candidate = find(id);
 
         String email = Text.clean(request.email());
-        if (email != null && candidateRepository.existsByEmailIgnoreCaseAndIdNot(email, id)) {
+        if (email != null && candidateRepository.existsByEmailHashAndIdNot(encryptor.blindIndex(email), id)) {
             throw new ConflictException("A candidate with this email already exists");
         }
 
@@ -211,7 +216,8 @@ public class CandidateService {
                 || contains(candidate.getCurrentTitle(), query)
                 || contains(candidate.getCurrentCompany(), query)
                 || contains(candidate.getLocation(), query)
-                || contains(candidate.getProductionEvidence(), query);
+                || contains(candidate.getProductionEvidence(), query)
+                || contains(candidate.getNotes(), query);
     }
 
     private static boolean contains(String value, String query) {
@@ -229,6 +235,11 @@ public class CandidateService {
         candidate.setTrack(request.track());
         candidate.setSource(request.source());
         candidate.setRegulatedExperience(Boolean.TRUE.equals(request.regulatedExperience()));
+        candidate.setRoleAreas(EnumCsv.join(request.roleAreas()));
+        candidate.setWorkPreference(request.workPreference());
+        candidate.setExperience(request.experience());
+        candidate.setWillingToRelocate(Boolean.TRUE.equals(request.willingToRelocate()));
+        candidate.setEmploymentType(request.employmentType());
         candidate.setCompExpectation(Text.clean(request.compExpectation()));
         candidate.setResumeUrl(Text.clean(request.resumeUrl()));
         candidate.setProductionEvidence(Text.clean(request.productionEvidence()));

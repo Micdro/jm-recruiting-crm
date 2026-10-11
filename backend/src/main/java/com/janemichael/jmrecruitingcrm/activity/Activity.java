@@ -2,10 +2,12 @@ package com.janemichael.jmrecruitingcrm.activity;
 
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.candidate.Candidate;
+import com.janemichael.jmrecruitingcrm.common.EncryptedString;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.contact.Contact;
 import com.janemichael.jmrecruitingcrm.search.Search;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -34,6 +36,7 @@ public class Activity {
     @Column(nullable = false)
     private boolean touch;
 
+    @Convert(converter = EncryptedString.class)
     private String summary;
 
     @Column(name = "occurred_at", nullable = false)

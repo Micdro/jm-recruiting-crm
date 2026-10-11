@@ -3,8 +3,11 @@ package com.janemichael.jmrecruitingcrm.contact;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.common.ActionType;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
+import com.janemichael.jmrecruitingcrm.common.EncryptedString;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -14,6 +17,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 
 import java.time.LocalDate;
 
@@ -30,9 +35,19 @@ public class Contact extends Auditable {
 
     private String title;
 
+    @Convert(converter = EncryptedString.class)
     private String email;
 
+    /** Keyed fingerprint of the email, for finding duplicates without decrypting. */
+    @Column(name = "email_hash")
+    private String emailHash;
+
+    @Convert(converter = EncryptedString.class)
     private String phone;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "buying_role")
+    private BuyingRole buyingRole;
 
     @Column(name = "linkedin_url")
     private String linkedinUrl;
@@ -55,6 +70,7 @@ public class Contact extends Auditable {
     @Column(name = "next_action_type")
     private ActionType nextActionType;
 
+    @Convert(converter = EncryptedString.class)
     private String notes;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -66,6 +82,12 @@ public class Contact extends Auditable {
     private AppUser owner;
 
     public Contact() {
+    }
+
+    @PrePersist
+    @PreUpdate
+    void indexEmail() {
+        emailHash = FieldEncryptor.current().blindIndex(email);
     }
 
     public Long getId() {
@@ -98,6 +120,18 @@ public class Contact extends Auditable {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getEmailHash() {
+        return emailHash;
+    }
+
+    public BuyingRole getBuyingRole() {
+        return buyingRole;
+    }
+
+    public void setBuyingRole(BuyingRole buyingRole) {
+        this.buyingRole = buyingRole;
     }
 
     public String getPhone() {

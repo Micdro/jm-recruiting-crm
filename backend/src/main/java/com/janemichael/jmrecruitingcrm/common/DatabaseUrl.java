@@ -36,8 +36,9 @@ public final class DatabaseUrl {
         }
 
         int port = uri.getPort() == -1 ? 5432 : uri.getPort();
+        String query = withSslMode(uri.getRawQuery(), environment.get("DB_SSLMODE"));
         String jdbcUrl = "jdbc:postgresql://" + uri.getHost() + ":" + port + uri.getPath()
-                + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
+                + (query == null ? "" : "?" + query);
         properties.put("spring.datasource.url", jdbcUrl);
 
         String userInfo = uri.getRawUserInfo();
@@ -55,6 +56,21 @@ public final class DatabaseUrl {
         }
 
         return properties;
+    }
+
+    /**
+     * Adds DB_SSLMODE (for example require or verify-full) unless the URL already sets one.
+     * Without either, the driver uses TLS whenever the server offers it.
+     */
+    static String withSslMode(String query, String sslMode) {
+        if (sslMode == null || sslMode.isBlank()) {
+            return query;
+        }
+        if (query != null && (query.startsWith("sslmode=") || query.contains("&sslmode="))) {
+            return query;
+        }
+        String param = "sslmode=" + sslMode.trim();
+        return query == null || query.isEmpty() ? param : query + "&" + param;
     }
 
     private static String decode(String value) {

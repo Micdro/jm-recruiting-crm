@@ -2,8 +2,10 @@ package com.janemichael.jmrecruitingcrm.pipeline;
 
 import com.janemichael.jmrecruitingcrm.candidate.Candidate;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
+import com.janemichael.jmrecruitingcrm.common.EncryptedString;
 import com.janemichael.jmrecruitingcrm.search.Search;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -39,6 +41,7 @@ public class PipelineEntry extends Auditable {
     private PipelineStage stage = PipelineStage.SOURCED;
 
     /** Why this candidate fits the search. Shown on the shortlist the client receives. */
+    @Convert(converter = EncryptedString.class)
     private String rationale;
 
     @Column(name = "stage_changed_at", nullable = false)

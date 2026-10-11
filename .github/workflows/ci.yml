@@ -91,6 +91,8 @@ jobs:
       ADMIN_EMAIL: e2e-admin@jane-michael.com
       ADMIN_PASSWORD: e2e-admin-password
       ADMIN_NAME: E2E Admin
+      # Test-only key. Production keys come from openssl rand -base64 32 and live in the host's settings.
+      APP_ENCRYPTION_KEY: ZTJlLW9ubHkta2V5LTAxMjM0NTY3ODlhYmNkZWYwMTI=
       # Put exception messages in error responses so failures are readable in the report.
       SERVER_ERROR_INCLUDE_MESSAGE: always
     services:
@@ -212,6 +214,7 @@ jobs:
           docker run -d --name crm --network host \
             -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/jmcrm \
             -e ADMIN_EMAIL=smoke@jane-michael.com -e ADMIN_PASSWORD=smoke-test-password \
+            -e APP_ENCRYPTION_KEY=c21va2UtdGVzdC1vbmx5LWtleS0wMTIzNDU2Nzg5YWI= \
             jm-recruiting-crm:ci
           for attempt in $(seq 1 60); do
             curl -sf http://localhost:8080/api/health > /dev/null && break
@@ -223,7 +226,14 @@ jobs:
           curl -sf -o /dev/null http://localhost:8080/favicon.svg
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/companies)" = 401
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/assets/missing.js)" = 404
-          echo "The image serves the app and protects the API"
+          curl -s -D - -o /dev/null http://localhost:8080/ | grep -qi "^content-security-policy: default-src 'self'"
+          curl -s -D - -o /dev/null http://localhost:8080/ | grep -qi '^x-frame-options: DENY'
+          curl -s -D - -o /dev/null http://localhost:8080/ | grep -qi '^cache-control: no-cache'
+          asset=$(curl -s http://localhost:8080/ | grep -o '/assets/[^"]*\.js' | head -1)
+          curl -s -D - -o /dev/null "http://localhost:8080$asset" | grep -qi '^cache-control: max-age=31536000'
+          curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip' "http://localhost:8080$asset" | grep -qi '^content-encoding: gzip'
+          curl -sf -o /dev/null http://localhost:8080/manifest.webmanifest
+          echo "The image serves the app, sends security and caching headers, and protects the API"
 
       - name: Report the container log
         if: failure()

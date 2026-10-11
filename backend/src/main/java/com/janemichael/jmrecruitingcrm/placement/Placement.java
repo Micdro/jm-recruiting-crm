@@ -2,8 +2,11 @@ package com.janemichael.jmrecruitingcrm.placement;
 
 import com.janemichael.jmrecruitingcrm.candidate.Candidate;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
+import com.janemichael.jmrecruitingcrm.common.EncryptedInteger;
+import com.janemichael.jmrecruitingcrm.common.EncryptedString;
 import com.janemichael.jmrecruitingcrm.search.Search;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -42,6 +45,7 @@ public class Placement extends Auditable {
     @Column(name = "start_date")
     private LocalDate startDate;
 
+    @Convert(converter = EncryptedInteger.class)
     @Column(name = "base_salary")
     private Integer baseSalary;
 
@@ -64,6 +68,7 @@ public class Placement extends Auditable {
     @Column(name = "guarantee_end_date")
     private LocalDate guaranteeEndDate;
 
+    @Convert(converter = EncryptedString.class)
     private String notes;
 
     public Long getId() {

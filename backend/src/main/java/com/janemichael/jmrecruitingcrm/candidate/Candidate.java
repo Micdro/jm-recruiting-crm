@@ -3,8 +3,11 @@ package com.janemichael.jmrecruitingcrm.candidate;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.common.ActionType;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
+import com.janemichael.jmrecruitingcrm.common.EncryptedString;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -14,6 +17,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 
 import java.time.LocalDate;
 
@@ -28,8 +33,13 @@ public class Candidate extends Auditable {
     @Column(nullable = false)
     private String name;
 
+    @Convert(converter = EncryptedString.class)
     private String email;
 
+    @Column(name = "email_hash")
+    private String emailHash;
+
+    @Convert(converter = EncryptedString.class)
     private String phone;
 
     @Column(name = "linkedin_url")
@@ -57,13 +67,34 @@ public class Candidate extends Auditable {
     @Column(name = "regulated_experience", nullable = false)
     private boolean regulatedExperience;
 
+    /** Comma-separated {@link CandidateEnums.RoleArea} names. */
+    @Column(name = "role_areas")
+    private String roleAreas;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "work_preference")
+    private SearchEnums.WorkModel workPreference;
+
+    @Enumerated(EnumType.STRING)
+    private CandidateEnums.Experience experience;
+
+    @Column(name = "willing_to_relocate", nullable = false)
+    private boolean willingToRelocate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "employment_type")
+    private CandidateEnums.EmploymentType employmentType;
+
+    @Convert(converter = EncryptedString.class)
     @Column(name = "comp_expectation")
     private String compExpectation;
 
+    @Convert(converter = EncryptedString.class)
     @Column(name = "resume_url")
     private String resumeUrl;
 
     /** What they have owned in production: systems, decisions, incidents. Accountability over titles. */
+    @Convert(converter = EncryptedString.class)
     @Column(name = "production_evidence")
     private String productionEvidence;
 
@@ -77,11 +108,62 @@ public class Candidate extends Auditable {
     @Column(name = "next_action_type")
     private ActionType nextActionType;
 
+    @Convert(converter = EncryptedString.class)
     private String notes;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id")
     private AppUser owner;
+
+    @PrePersist
+    @PreUpdate
+    void indexEmail() {
+        emailHash = FieldEncryptor.current().blindIndex(email);
+    }
+
+    public String getEmailHash() {
+        return emailHash;
+    }
+
+    public String getRoleAreas() {
+        return roleAreas;
+    }
+
+    public void setRoleAreas(String roleAreas) {
+        this.roleAreas = roleAreas;
+    }
+
+    public SearchEnums.WorkModel getWorkPreference() {
+        return workPreference;
+    }
+
+    public void setWorkPreference(SearchEnums.WorkModel workPreference) {
+        this.workPreference = workPreference;
+    }
+
+    public CandidateEnums.Experience getExperience() {
+        return experience;
+    }
+
+    public void setExperience(CandidateEnums.Experience experience) {
+        this.experience = experience;
+    }
+
+    public boolean isWillingToRelocate() {
+        return willingToRelocate;
+    }
+
+    public void setWillingToRelocate(boolean willingToRelocate) {
+        this.willingToRelocate = willingToRelocate;
+    }
+
+    public CandidateEnums.EmploymentType getEmploymentType() {
+        return employmentType;
+    }
+
+    public void setEmploymentType(CandidateEnums.EmploymentType employmentType) {
+        this.employmentType = employmentType;
+    }
 
     public Long getId() {
         return id;

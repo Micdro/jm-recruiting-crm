@@ -1,12 +1,18 @@
 # Render Blueprint: one web service (the Docker image) and one PostgreSQL database.
 # In Render: New > Blueprint > pick this repo. You'll be asked for ADMIN_EMAIL and ADMIN_PASSWORD.
 # Plans are left at Render's defaults; change them in the dashboard if you need more capacity.
+#
+# APP_ENCRYPTION_KEY is generated once on the first deploy. Copy it from the service's
+# Environment tab into your password manager straight away: if it is lost or changed, the
+# encrypted fields (emails, phones, notes, salaries) can't be read, including from backups.
 
 databases:
   - name: jm-crm-db
     databaseName: jmcrm
     user: jmcrm
     region: virginia
+    # No connections from the internet. Only the app, on Render's private network, can reach it.
+    ipAllowList: []
 
 services:
   - type: web
@@ -19,6 +25,8 @@ services:
         fromDatabase:
           name: jm-crm-db
           property: connectionString
+      - key: APP_ENCRYPTION_KEY
+        generateValue: true
       - key: COOKIE_SECURE
         value: 'true'
       - key: APP_TIMEZONE

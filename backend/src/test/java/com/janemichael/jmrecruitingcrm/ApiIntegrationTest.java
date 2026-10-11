@@ -5,13 +5,16 @@ import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.auth.AppUserRepository;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.jayway.jsonpath.JsonPath;
+import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -26,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -33,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Runs the API against a real PostgreSQL database (migrated by Flyway), with real security.
  * Each test rolls back, so nothing is left behind.
  */
-@SpringBootTest
+@SpringBootTest(properties = TestSettings.ENCRYPTION_KEY)
 @Transactional
 class ApiIntegrationTest {
 
@@ -55,6 +60,12 @@ class ApiIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private EntityManager entityManager;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -136,6 +147,111 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void repeatedWrongPasswordsLockTheAccountForAWhile() throws Exception {
+        String email = "throttle-test@jane-michael.test";
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            mockMvc.perform(login(email, "wrong-" + attempt, "203.0.113.50"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(login(email, "wrong-6", "203.0.113.50"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().exists("Retry-After"))
+                .andExpect(jsonPath("$.messages[0]").value(containsString("Too many failed sign-in attempts")));
+    }
+
+    @Test
+    void passwordsAreHashedWithArgon2AndOldBcryptHashesAreUpgradedAtSignIn() throws Exception {
+        assertThat(userRepository.findByEmailIgnoreCase(EMAIL).orElseThrow().getPasswordHash())
+                .startsWith("{argon2}");
+
+        AppUser legacy = new AppUser();
+        legacy.setEmail("legacy@jane-michael.test");
+        legacy.setDisplayName("Legacy User");
+        legacy.setRole(UserRole.MEMBER);
+        legacy.setActive(true);
+        legacy.setPasswordHash("{bcrypt}" + new BCryptPasswordEncoder().encode(PASSWORD));
+        userRepository.save(legacy);
+
+        mockMvc.perform(login("legacy@jane-michael.test", PASSWORD, "198.51.100.20"))
+                .andExpect(status().isNoContent());
+
+        assertThat(userRepository.findByEmailIgnoreCase("legacy@jane-michael.test").orElseThrow().getPasswordHash())
+                .startsWith("{argon2}");
+    }
+
+    @Test
+    void deactivatedUsersAreSignedOutOnTheirNextRequest() throws Exception {
+        AppUser former = new AppUser();
+        former.setEmail("former@jane-michael.test");
+        former.setDisplayName("Former Partner");
+        former.setRole(UserRole.MEMBER);
+        former.setActive(false);
+        former.setPasswordHash(passwordEncoder.encode(PASSWORD));
+        userRepository.save(former);
+
+        mockMvc.perform(get("/api/companies").with(user("former@jane-michael.test")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.messages[0]").value("Your account is no longer active"));
+    }
+
+    @Test
+    void responsesCarrySecurityHeaders() throws Exception {
+        mockMvc.perform(get("/api/health").secure(true))
+                .andExpect(header().string("Content-Security-Policy", containsString("default-src 'self'")))
+                .andExpect(header().string("Content-Security-Policy", containsString("frame-ancestors 'none'")))
+                .andExpect(header().string("X-Frame-Options", "DENY"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Referrer-Policy", "strict-origin-when-cross-origin"))
+                .andExpect(header().string("Permissions-Policy", containsString("camera=()")))
+                .andExpect(header().string("Strict-Transport-Security", containsString("max-age=31536000")));
+
+        mockMvc.perform(signedIn(get("/api/companies")))
+                .andExpect(header().string("Cache-Control", containsString("no-store")));
+    }
+
+    @Test
+    void sensitiveFieldsAreEncryptedInTheDatabase() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body(
+                        "name", "Cipher Test Co",
+                        "notes", "Budget approved for two FDE hires")))
+                .andExpect(status().isCreated())
+                .andReturn());
+
+        long contactId = id(mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Morgan Lee",
+                        "email", "morgan@ciphertest.test",
+                        "phone", "+1 212 555 0101",
+                        "notes", "Prefers LinkedIn",
+                        "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("morgan@ciphertest.test"))
+                .andReturn());
+
+        entityManager.flush();
+
+        Map<String, Object> row = jdbc.queryForMap(
+                "select email, phone, notes, email_hash from contact where id = ?", contactId);
+        assertThat((String) row.get("email")).startsWith("enc:v1:").doesNotContain("morgan");
+        assertThat((String) row.get("phone")).startsWith("enc:v1:").doesNotContain("555");
+        assertThat((String) row.get("notes")).startsWith("enc:v1:").doesNotContain("LinkedIn");
+        assertThat((String) row.get("email_hash")).isNotBlank().doesNotContain("morgan");
+
+        String companyNotes = jdbc.queryForObject("select notes from company where id = ?", String.class, companyId);
+        assertThat(companyNotes).startsWith("enc:v1:").doesNotContain("Budget");
+
+        // Reading back through the app decrypts, and duplicates are still caught.
+        mockMvc.perform(signedIn(get("/api/contacts/" + contactId)))
+                .andExpect(jsonPath("$.phone").value("+1 212 555 0101"))
+                .andExpect(jsonPath("$.notes").value("Prefers LinkedIn"));
+        mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Morgan Again",
+                        "email", "MORGAN@ciphertest.test",
+                        "companyId", companyId)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void adminsCanAddTeammates() throws Exception {
         mockMvc.perform(send(post("/api/users"), body(
                         "email", "jane@jane-michael.test",
@@ -157,9 +273,13 @@ class ApiIntegrationTest {
         long companyId = id(mockMvc.perform(send(post("/api/companies"), body(
                         "name", "Ledgerlight AI",
                         "focus", "AI fraud detection for banks",
-                        "status", "PROSPECTING")))
+                        "status", "INITIAL_OUTREACH",
+                        "industry", "BANKS",
+                        "segments", List.of("FRAUD_IDENTITY_RISK"),
+                        "hiringNeed", "FDE")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.ownerName").value("Integration Admin"))
+                .andExpect(jsonPath("$.segments[0]").value("FRAUD_IDENTITY_RISK"))
                 .andReturn());
 
         long contactId = id(mockMvc.perform(send(post("/api/contacts"), body(
@@ -195,7 +315,7 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(5))
                 .andExpect(jsonPath("$[0].type").value("REPLY"));
 
-        // A search makes the company a client.
+        // A search moves the company to Placing.
         long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
                         "companyId", companyId,
                         "hiringManagerId", contactId,
@@ -212,7 +332,7 @@ class ApiIntegrationTest {
                 .andReturn());
 
         mockMvc.perform(signedIn(get("/api/companies/" + companyId)))
-                .andExpect(jsonPath("$.status").value("CLIENT"))
+                .andExpect(jsonPath("$.status").value("PLACING"))
                 .andExpect(jsonPath("$.openSearchCount").value(1));
 
         long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body(
@@ -325,6 +445,30 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void clientListImportCreatesCompaniesWithTheirFollowUps() throws Exception {
+        Map<String, Object> request = body(
+                "duplicateMode", "UPDATE",
+                "rows", List.of(
+                        body("name", "Import Client Co", "status", "DISCOVERY_SCHEDULED", "priority", "HIGH",
+                                "hiringTimeline", "ASAP", "anticipatedHires", 2, "followUpDate", "2020-01-02",
+                                "owner", "IA", "notes", "Long discovery memo"),
+                        body("name", "", "status", "LEAD")
+                ));
+
+        mockMvc.perform(send(post("/api/import/companies"), request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(1))
+                .andExpect(jsonPath("$.errors[0].row").value(3));
+
+        mockMvc.perform(signedIn(get("/api/companies").param("q", "Import Client Co")))
+                .andExpect(jsonPath("$[0].status").value("DISCOVERY_SCHEDULED"))
+                .andExpect(jsonPath("$[0].ownerName").value("Integration Admin"));
+
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.companiesDue[?(@.name == 'Import Client Co')]").exists());
+    }
+
+    @Test
     void validationErrorsComeBackAsMessages() throws Exception {
         mockMvc.perform(send(post("/api/companies"), body("name", "")))
                 .andExpect(status().isBadRequest())
@@ -338,6 +482,18 @@ class ApiIntegrationTest {
     }
 
     // Helpers -----------------------------------------------------------------
+
+    private MockHttpServletRequestBuilder login(String email, String password, String address) {
+        return post("/api/auth/login")
+                .param("email", email)
+                .param("password", password)
+                .cookie(csrf)
+                .header("X-XSRF-TOKEN", csrf.getValue())
+                .with(request -> {
+                    request.setRemoteAddr(address);
+                    return request;
+                });
+    }
 
     private MockHttpServletRequestBuilder signedIn(MockHttpServletRequestBuilder request) {
         return request

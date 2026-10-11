@@ -37,11 +37,13 @@ public final class SearchEnums {
         ONSITE
     }
 
-    /** Matches the timeline choices on the website's search intake form. */
+    /** Matches the hiring timeline choices on the website intake form and in ClickUp. */
     public enum Timeline {
+        /** Within 30 days. */
         ASAP,
-        WITHIN_60_DAYS,
-        WITHIN_90_DAYS,
+        ONE_TO_TWO_MONTHS,
+        THREE_PLUS_MONTHS,
+        /** Building a pipeline for later. */
         EXPLORATORY
     }
 }

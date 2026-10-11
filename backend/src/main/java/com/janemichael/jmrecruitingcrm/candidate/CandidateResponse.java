@@ -1,10 +1,12 @@
 package com.janemichael.jmrecruitingcrm.candidate;
 
 import com.janemichael.jmrecruitingcrm.common.ActionType;
+import com.janemichael.jmrecruitingcrm.common.EnumCsv;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 public record CandidateResponse(
         Long id,
@@ -19,6 +21,11 @@ public record CandidateResponse(
         CandidateEnums.Status status,
         CandidateEnums.Source source,
         boolean regulatedExperience,
+        List<CandidateEnums.RoleArea> roleAreas,
+        SearchEnums.WorkModel workPreference,
+        CandidateEnums.Experience experience,
+        boolean willingToRelocate,
+        CandidateEnums.EmploymentType employmentType,
         String compExpectation,
         String resumeUrl,
         String productionEvidence,
@@ -35,6 +42,15 @@ public record CandidateResponse(
 ) {
 
     public static CandidateResponse from(Candidate candidate, long activeSearchCount) {
+        return build(candidate, candidate.getNotes(), activeSearchCount);
+    }
+
+    /** For lists and the Today queue: everything except the notes. */
+    public static CandidateResponse summary(Candidate candidate, long activeSearchCount) {
+        return build(candidate, null, activeSearchCount);
+    }
+
+    private static CandidateResponse build(Candidate candidate, String notes, long activeSearchCount) {
         return new CandidateResponse(
                 candidate.getId(),
                 candidate.getName(),
@@ -48,13 +64,18 @@ public record CandidateResponse(
                 candidate.getStatus(),
                 candidate.getSource(),
                 candidate.isRegulatedExperience(),
+                EnumCsv.split(candidate.getRoleAreas(), CandidateEnums.RoleArea.class),
+                candidate.getWorkPreference(),
+                candidate.getExperience(),
+                candidate.isWillingToRelocate(),
+                candidate.getEmploymentType(),
                 candidate.getCompExpectation(),
                 candidate.getResumeUrl(),
                 candidate.getProductionEvidence(),
                 candidate.getLastContactedDate(),
                 candidate.getNextActionDate(),
                 candidate.getNextActionType(),
-                candidate.getNotes(),
+                notes,
                 candidate.getOwner() == null ? null : candidate.getOwner().getId(),
                 candidate.getOwner() == null ? null : candidate.getOwner().getDisplayName(),
                 activeSearchCount,

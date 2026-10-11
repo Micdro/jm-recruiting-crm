@@ -1,6 +1,5 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -19,23 +18,19 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
 
     boolean existsByCompanyId(Long companyId);
 
-    boolean existsByEmailIgnoreCase(String email);
+    boolean existsByEmailHash(String emailHash);
 
-    boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
+    boolean existsByEmailHashAndIdNot(String emailHash, Long id);
 
     /** Rows of [companyId, count]. */
     @Query("select c.company.id, count(c) from Contact c group by c.company.id")
     List<Object[]> countByCompany();
 
     /** New contacts with nothing scheduled, owned by this user or by nobody, oldest first. */
-    @Query("select c from Contact c left join c.owner o "
+    @Query("select c from Contact c join fetch c.company left join c.owner o "
             + "where c.status = :status and c.nextActionDate is null and (o is null or o.id = :ownerId) "
             + "order by c.createdAt asc, c.id asc")
-    List<Contact> findUnscheduled(
-            @Param("status") OutreachStatus status,
-            @Param("ownerId") Long ownerId,
-            Pageable pageable
-    );
+    List<Contact> findUnscheduled(@Param("status") OutreachStatus status, @Param("ownerId") Long ownerId);
 
     @Query("select count(c) from Contact c left join c.owner o "
             + "where c.status = :status and c.nextActionDate is null and (o is null or o.id = :ownerId)")

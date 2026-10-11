@@ -2,9 +2,11 @@ package com.janemichael.jmrecruitingcrm.search;
 
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
+import com.janemichael.jmrecruitingcrm.common.EncryptedString;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.contact.Contact;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -73,18 +75,23 @@ public class Search extends Auditable {
     private LocalDate openedDate;
 
     /** The production outcome this hire must deliver. */
+    @Convert(converter = EncryptedString.class)
     @Column(name = "production_outcome")
     private String productionOutcome;
 
+    @Convert(converter = EncryptedString.class)
     @Column(name = "technical_scope")
     private String technicalScope;
 
     /** What the person will own and answer for. */
+    @Convert(converter = EncryptedString.class)
     private String accountability;
 
+    @Convert(converter = EncryptedString.class)
     @Column(name = "regulatory_constraints")
     private String regulatoryConstraints;
 
+    @Convert(converter = EncryptedString.class)
     private String notes;
 
     @ManyToOne(fetch = FetchType.LAZY)
