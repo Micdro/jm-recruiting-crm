@@ -216,7 +216,8 @@ function ContactQueue({ data, scope, onChanged, onLog }) {
         <ul className="queue">
           {contacts.map((contact) => {
             const cold = contact.status === 'NEW' || contact.status === 'IN_SEQUENCE';
-            const capped = cold && contact.touchCount >= MAX_TOUCHES;
+            const capped =
+              (cold && contact.touchCount >= MAX_TOUCHES) || contact.status === 'NO_RESPONSE' || contact.status === 'NOT_INTERESTED';
             return (
               <li key={contact.id} className="queue-row" data-testid="queue-contact">
                 <div className="queue-who">

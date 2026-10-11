@@ -17,6 +17,10 @@ function preview(kind, record, type, today) {
     return { blocked: `${firstName} is marked Do not contact.` };
   }
 
+  if (kind === 'contact' && outreach && (record.status === 'NO_RESPONSE' || record.status === 'NOT_INTERESTED')) {
+    return { blocked: 'The sequence is over. Restart it to reach out again, or log a reply or note.' };
+  }
+
   if (kind === 'contact' && outreach && (record.status === 'NEW' || record.status === 'IN_SEQUENCE')) {
     const touch = record.touchCount + 1;
     if (touch > MAX_TOUCHES) {

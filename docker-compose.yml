@@ -1,0 +1,38 @@
+# Runs the whole CRM on one machine: PostgreSQL plus the app on http://localhost:8080.
+#   ADMIN_EMAIL=you@jane-michael.com ADMIN_PASSWORD='a-long-password' docker compose up --build
+# The admin account is created on first start. Data lives in the jmcrm-data volume.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: jmcrm
+      POSTGRES_USER: jmcrm
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-jmcrm-local}
+    volumes:
+      - jmcrm-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U jmcrm -d jmcrm']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: jmcrm
+      DB_USER: jmcrm
+      DB_PASSWORD: ${DB_PASSWORD:-jmcrm-local}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NAME: ${ADMIN_NAME:-Michael}
+    ports:
+      - '8080:8080'
+
+volumes:
+  jmcrm-data:

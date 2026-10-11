@@ -1,0 +1,31 @@
+# Render Blueprint: one web service (the Docker image) and one PostgreSQL database.
+# In Render: New > Blueprint > pick this repo. You'll be asked for ADMIN_EMAIL and ADMIN_PASSWORD.
+# Plans are left at Render's defaults; change them in the dashboard if you need more capacity.
+
+databases:
+  - name: jm-crm-db
+    databaseName: jmcrm
+    user: jmcrm
+    region: virginia
+
+services:
+  - type: web
+    runtime: docker
+    name: jm-recruiting-crm
+    region: virginia
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jm-crm-db
+          property: connectionString
+      - key: COOKIE_SECURE
+        value: 'true'
+      - key: APP_TIMEZONE
+        value: America/New_York
+      - key: ADMIN_NAME
+        value: Michael
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -150,6 +150,10 @@ public class ContactService {
             if (contact.getStatus() == OutreachStatus.DO_NOT_CONTACT) {
                 throw new ConflictException("This contact is marked Do not contact");
             }
+            if (contact.getStatus().needsRestart()) {
+                throw new ConflictException("This contact's sequence is over (" + Labels.of(contact.getStatus())
+                        + "). Restart the sequence to reach out again.");
+            }
             if (contact.getStatus().isCold()) {
                 if (contact.getTouchCount() >= MAX_SEQUENCE_TOUCHES) {
                     throw new ConflictException(

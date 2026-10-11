@@ -22,6 +22,11 @@ public enum OutreachStatus {
         return this == NEW || this == IN_SEQUENCE;
     }
 
+    /** The four touches are spent or the answer was no: outreach waits for a restarted sequence. */
+    public boolean needsRestart() {
+        return this == NO_RESPONSE || this == NOT_INTERESTED;
+    }
+
     /** Statuses that should never appear in the outreach queue. */
     public boolean isClosed() {
         return this == NOT_INTERESTED || this == DO_NOT_CONTACT;

@@ -106,6 +106,24 @@ class ContactServiceTest {
     }
 
     @Test
+    void outreachAfterTheSequenceEndsNeedsARestart() {
+        contact(OutreachStatus.NO_RESPONSE, 4);
+
+        assertThatThrownBy(() -> contactService.logActivity(1L, request(ActivityType.LINKEDIN)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Restart the sequence");
+    }
+
+    @Test
+    void aReplyIsStillLoggedAfterTheSequenceEnds() {
+        contact(OutreachStatus.NO_RESPONSE, 4);
+
+        ContactResponse response = contactService.logActivity(1L, request(ActivityType.REPLY));
+
+        assertThat(response.status()).isEqualTo(OutreachStatus.REPLIED);
+    }
+
+    @Test
     void doNotContactBlocksOutreach() {
         contact(OutreachStatus.DO_NOT_CONTACT, 0);
 
