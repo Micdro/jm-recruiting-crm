@@ -23,7 +23,8 @@ Tailscale only connects your own devices to each other. The CRM is never exposed
    release). Share the file with the others however you like (Drive, OneDrive, a USB stick).
 2. Unzip it somewhere permanent, such as `Documents\JM CRM`. Don't run it from the Downloads
    preview: the shortcuts point at wherever it is when you first open it.
-3. Open **JM CRM.exe** in that folder.
+3. Open **JM CRM.exe** in that folder. A small "Starting" window shows while it loads (the first
+   start takes up to a minute while it creates the database).
 4. Windows may say "Windows protected your PC", because the app isn't signed with a paid
    certificate. Click **More info**, then **Run anyway**. This happens once.
 
@@ -33,7 +34,8 @@ the desktop, and starts with Windows from then on so sync keeps running.
 ## 3. The first computer: start the CRM
 
 1. Choose **Start a new CRM**. Enter your name, email and a password (10 characters or more).
-2. Windows asks whether JM CRM may accept connections from your other computers. Click **Yes**.
+2. Windows asks twice about network access, so your computers can sync. Click **Allow access**,
+   then **Yes**.
 3. The app shows your **CRM key**. Copy it into your password manager now. You need it to add
    the other computers, and it's the only way to read the data on a replacement computer.
 4. Sign in.
@@ -47,7 +49,7 @@ the desktop, and starts with Windows from then on so sync keeps running.
    connected.
 2. Choose **Join the team's CRM**.
 3. Enter the first computer's Tailscale name (for example `michael-pc`) and paste the CRM key.
-4. Windows asks about connections. Click **Yes**.
+4. Windows asks twice about network access. Click **Allow access**, then **Yes**.
 5. The CRM copies everything over. This takes a few seconds, or longer the first time on a large
    list. Then sign in with your own account.
 

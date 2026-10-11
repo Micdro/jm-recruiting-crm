@@ -319,6 +319,7 @@ jobs:
           $jar = Get-ChildItem target/jm-recruiting-crm-*.jar | Where-Object { $_.Name -notlike '*original*' } | Select-Object -First 1
           Copy-Item $jar.FullName target/desktop/app.jar
           Pop-Location
+          Copy-Item packaging/windows/splash.png backend/target/desktop/splash.png
 
       - name: Package JM CRM.exe
         shell: pwsh
@@ -326,7 +327,8 @@ jobs:
           jpackage --type app-image --name "JM CRM" --input backend/target/desktop --main-jar app.jar `
             --dest dist --icon packaging/windows/jm-crm.ico --app-version "1.0.${{ github.run_number }}" `
             --vendor "Jane Michael LLC" --description "Jane Michael recruiting CRM" `
-            --java-options "-Djmcrm.desktop=true" --java-options "-Xmx768m"
+            --java-options "-Djmcrm.desktop=true" --java-options "-Xmx768m" `
+            --java-options '-splash:$APPDIR/splash.png'
           if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }
           Compress-Archive -Path "dist/JM CRM" -DestinationPath JM-CRM-Windows.zip
           "{0:N0} MB" -f ((Get-Item JM-CRM-Windows.zip).Length / 1MB)
@@ -364,6 +366,14 @@ jobs:
           # Opening it again while it runs just opens the browser.
           $second = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
           if (-not $second.WaitForExit(60000)) { throw "A second copy kept running" }
+
+          # The sync port only opens after setup, and it answers only with the right key.
+          try {
+            Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:4781/api/sync/changes?since=0" | Out-Null
+            throw "The sync port answered without a key"
+          } catch [System.Net.WebException], [Microsoft.PowerShell.Commands.HttpResponseException] {
+            if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw "Expected 401 from the sync port, got: $($_.Exception.Message)" }
+          }
 
           Stop-Process -Id $app.Id -Force
           Write-Output "The Windows app starts its database, serves the CRM and completes setup"

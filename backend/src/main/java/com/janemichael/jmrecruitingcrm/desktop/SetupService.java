@@ -12,6 +12,7 @@ import com.janemichael.jmrecruitingcrm.sync.SyncClient;
 import com.janemichael.jmrecruitingcrm.sync.SyncClient.SyncException;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity;
 import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.JoinResponse;
+import com.janemichael.jmrecruitingcrm.sync.SyncServer;
 import com.janemichael.jmrecruitingcrm.sync.SyncService;
 import com.janemichael.jmrecruitingcrm.sync.SyncService.Peer;
 import org.slf4j.Logger;
@@ -49,6 +50,7 @@ public class SetupService {
     private final SyncIdentity identity;
     private final SyncService sync;
     private final SyncClient client;
+    private final SyncServer server;
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final EncryptionBackfill backfill;
@@ -62,6 +64,7 @@ public class SetupService {
             SyncIdentity identity,
             SyncService sync,
             SyncClient client,
+            SyncServer server,
             AppUserRepository users,
             PasswordEncoder passwordEncoder,
             EncryptionBackfill backfill,
@@ -74,6 +77,7 @@ public class SetupService {
         this.identity = identity;
         this.sync = sync;
         this.client = client;
+        this.server = server;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.backfill = backfill;
@@ -154,6 +158,7 @@ public class SetupService {
     }
 
     private void finishSetup() {
+        server.open();
         backfill.run(null);
         DesktopOs.setStartsWithWindows(true);
         DesktopOs.allowSyncThroughFirewall(sync.syncPort());

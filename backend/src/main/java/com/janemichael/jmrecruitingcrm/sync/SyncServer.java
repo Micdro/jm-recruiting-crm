@@ -62,9 +62,21 @@ public class SyncServer implements SmartLifecycle {
         this.bindAddress = bindAddress;
     }
 
+    /**
+     * Opens the port once this computer is set up. Until then nothing listens, so Windows only asks
+     * about network access at the moment setup explains it.
+     */
     @Override
     public void start() {
-        if (!desktop || port <= 0) {
+        running = true;
+        if (identity.isEnabled()) {
+            open();
+        }
+    }
+
+    /** Starts listening, if this is a desktop copy and it isn't already. */
+    public synchronized void open() {
+        if (!desktop || port <= 0 || server != null) {
             return;
         }
         try {
@@ -81,15 +93,15 @@ public class SyncServer implements SmartLifecycle {
         server.setExecutor(executor);
         server.createContext("/api/sync/", this::handle);
         server.start();
-        running = true;
         log.info("Sync port open on {}:{}", bindAddress, port);
     }
 
     @Override
-    public void stop() {
+    public synchronized void stop() {
         if (server != null) {
             server.stop(1);
             executor.shutdownNow();
+            server = null;
         }
         running = false;
     }

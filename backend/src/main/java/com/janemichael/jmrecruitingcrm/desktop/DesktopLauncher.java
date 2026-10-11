@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 
+import java.awt.SplashScreen;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -14,8 +15,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -33,6 +37,11 @@ public final class DesktopLauncher {
 
     private static final Logger log = LoggerFactory.getLogger(DesktopLauncher.class);
     private static final String BACKGROUND = "--background";
+
+    /** Held for as long as the app runs, so a second copy can tell one is already starting. */
+    private static FileLock instanceLock;
+    /** Found before Spring starts (Spring switches AWT to headless, after which it can't be looked up). */
+    private static SplashScreen splash;
 
     private DesktopLauncher() {
     }
@@ -53,14 +62,30 @@ public final class DesktopLauncher {
         int databasePort = DesktopPaths.port("jmcrm.db-port", "JMCRM_DB_PORT", DesktopPaths.DATABASE_PORT);
         String url = "http://localhost:" + uiPort + "/";
 
-        if (alreadyRunning(uiPort)) {
-            if (openBrowser) {
+        splash = findSplash();
+        if (background) {
+            closeSplash();
+        }
+
+        // Opened again while it runs, or while it's still starting: wait for it and open the browser.
+        instanceLock = FileChannel.open(home.resolve("app.lock"),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE).tryLock();
+        if (instanceLock == null || alreadyRunning(uiPort)) {
+            if (openBrowser && waitUntilRunning(uiPort, Duration.ofMinutes(3))) {
                 DesktopOs.openBrowser(url);
             }
+            closeSplash();
             return;
         }
 
         EmbeddedPostgres database = startDatabase(home, databasePort);
+        ConfigurableApplicationContext[] started = new ConfigurableApplicationContext[1];
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (started[0] != null) {
+                started[0].close();
+            }
+            stopDatabase(database);
+        }, "desktop-shutdown"));
         createDatabaseIfMissing(databasePort);
 
         DesktopSettings settings = new DesktopSettings(home);
@@ -79,12 +104,7 @@ public final class DesktopLauncher {
 
         SpringApplication application = new SpringApplication(JmRecruitingCrmApplication.class);
         application.setRegisterShutdownHook(false);
-        ConfigurableApplicationContext context = application.run(springArgs);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            context.close();
-            stopDatabase(database);
-        }, "desktop-shutdown"));
+        started[0] = application.run(springArgs);
 
         if (!settings.shortcutsCreated()) {
             DesktopOs.createShortcuts();
@@ -93,7 +113,38 @@ public final class DesktopLauncher {
         if (openBrowser) {
             DesktopOs.openBrowser(url);
         }
+        closeSplash();
         log.info("JM CRM is running at {}", url);
+    }
+
+    /** The "starting" picture shown while the app loads (the Windows app is packaged with one). */
+    private static SplashScreen findSplash() {
+        try {
+            return SplashScreen.getSplashScreen();
+        } catch (RuntimeException | LinkageError noDisplay) {
+            return null;
+        }
+    }
+
+    private static void closeSplash() {
+        try {
+            if (splash != null && splash.isVisible()) {
+                splash.close();
+            }
+        } catch (RuntimeException | LinkageError ignored) {
+            // Already gone.
+        }
+    }
+
+    private static boolean waitUntilRunning(int port, Duration limit) throws InterruptedException {
+        long deadline = System.nanoTime() + limit.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (alreadyRunning(port)) {
+                return true;
+            }
+            Thread.sleep(1000);
+        }
+        return false;
     }
 
     /**

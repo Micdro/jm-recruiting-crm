@@ -103,7 +103,10 @@ function JoinForm({ status, onJoined }) {
         required
       />
       <TextField label="Name for this computer" value={computerName} onChange={setComputerName} maxLength={100} />
-      <p className="setup-note">Windows will ask whether JM CRM may accept connections from your other computers. Click Yes.</p>
+      <p className="setup-note">
+        Next, Windows asks twice about network access so your computers can sync. Click <strong>Allow access</strong>, then{' '}
+        <strong>Yes</strong>.
+      </p>
       <ErrorNote>{error}</ErrorNote>
       <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
         {busy ? 'Copying the CRM to this computer…' : 'Join and copy the CRM'}
@@ -149,7 +152,10 @@ function StartForm({ status, onStarted }) {
         required
       />
       <TextField label="Name for this computer" value={form.computerName} onChange={set('computerName')} maxLength={100} />
-      <p className="setup-note">Windows will ask whether JM CRM may accept connections from your other computers. Click Yes.</p>
+      <p className="setup-note">
+        Next, Windows asks twice about network access so your computers can sync. Click <strong>Allow access</strong>, then{' '}
+        <strong>Yes</strong>.
+      </p>
       <ErrorNote>{error}</ErrorNote>
       <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
         {busy ? 'Starting…' : 'Start the CRM'}
