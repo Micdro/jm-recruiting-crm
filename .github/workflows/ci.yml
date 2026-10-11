@@ -124,9 +124,24 @@ jobs:
             frontend/package-lock.json
             e2e/package-lock.json
 
-      - name: Compile backend
+      - name: Build backend
         working-directory: backend
-        run: ./mvnw -B -DskipTests compile
+        run: ./mvnw -B -q -DskipTests package
+
+      # Started here (not by Playwright) so its log can be reported if anything fails.
+      - name: Start backend
+        run: |
+          nohup java -jar backend/target/jm-recruiting-crm-*.jar > backend.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -sf http://localhost:8080/api/health > /dev/null; then
+              echo "Backend is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "The backend did not start"
+          tail -80 backend.log
+          exit 1
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -140,10 +155,25 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps chromium
 
-      # Playwright starts the backend and frontend itself (see webServer in playwright.config.js).
+      # Playwright reuses the running backend and starts the frontend (see webServer in playwright.config.js).
       - name: Run Playwright tests
         working-directory: e2e
         run: npx playwright test
+
+      - name: Report backend errors
+        if: failure()
+        run: |
+          annotate() {
+            local title="$1" file="$2"
+            [ -s "$file" ] || return 0
+            local message
+            message=$(cut -c1-400 "$file" | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=${title}::${message}"
+          }
+          grep -E ' ERROR |Exception|Caused by' backend.log | head -40 > causes.txt || true
+          tail -40 backend.log > tail.txt || true
+          annotate "Backend errors" causes.txt
+          annotate "Backend log tail" tail.txt
 
       - name: Upload test report
         if: ${{ !cancelled() }}

@@ -1,62 +1,48 @@
 import { test, expect, uniqueName } from '../support/fixtures.js';
 
-test.describe('Companies page', () => {
-  test('adds a company from the form and lists it', async ({ page, crm }) => {
-    const name = uniqueName('Northwind Bank');
-    crm.trackCompanyName(name);
+test.describe('Companies', () => {
+  test('adds a company and opens its page', async ({ page, crm }) => {
+    const name = uniqueName('Ledgerlight AI');
+    crm.trackName('companies', name);
 
-    await page.goto('/');
-    const companies = page.locator('#companies');
+    await page.goto('/companies');
+    await page.getByRole('button', { name: 'Add company' }).click();
 
-    await companies.getByLabel('Company name').fill(name);
-    await companies.getByLabel('Website').fill('https://northwind.example');
-    await companies.getByLabel('Location').fill('Charlotte, NC');
-    await companies.getByLabel('Company size').fill('1000+');
-    await companies.getByLabel('Status').fill('Prospect');
-    await companies.getByRole('button', { name: 'Save Company' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add company' });
+    await dialog.getByLabel('Company name').fill(name);
+    await dialog.getByLabel('Focus').fill('AI model risk monitoring for insurers');
+    await dialog.getByLabel('Status').selectOption({ label: 'Prospecting' });
+    await dialog.getByLabel('Location').fill('Boston, MA');
+    await dialog.getByRole('button', { name: 'Save company' }).click();
 
-    const listItem = companies.locator('.company-list-item').filter({ hasText: name });
-    await expect(listItem).toBeVisible();
-    await expect(listItem).toContainText('Prospect');
-    await expect(listItem).toContainText('Charlotte, NC');
+    await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+    await expect(page.getByText('AI model risk monitoring for insurers')).toBeVisible();
+    await expect(page.getByText('Prospecting', { exact: true })).toBeVisible();
 
-    // Form resets, and the new company is selectable for contacts.
-    await expect(companies.getByLabel('Company name')).toHaveValue('');
-    await expect(
-      page.locator('#contacts').getByRole('combobox').locator('option', { hasText: name }),
-    ).toHaveCount(1);
-
-    // Saved in the database, not just in page state.
     const saved = await crm.findCompanyByName(name);
-    expect(saved).toMatchObject({ name, location: 'Charlotte, NC', status: 'Prospect' });
+    expect(saved).toMatchObject({ name, status: 'PROSPECTING', location: 'Boston, MA' });
   });
 
-  test('lists companies that already exist', async ({ page, crm }) => {
-    const company = await crm.createCompany({ status: 'Client' });
+  test('lists companies and filters by name', async ({ page, crm }) => {
+    const company = await crm.createCompany({ location: 'Charlotte, NC' });
 
-    await page.goto('/');
+    await page.goto('/companies');
+    await page.getByPlaceholder('Search name, focus or location').fill(company.name);
 
-    const listItem = page.locator('#companies .company-list-item').filter({ hasText: company.name });
-    await expect(listItem).toBeVisible();
-    await expect(listItem).toContainText('Client');
+    const row = page.getByRole('row', { name: new RegExp(company.name) });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('Charlotte, NC');
+    await expect(page.getByRole('row')).toHaveCount(2);
   });
 
-  test('shows an error when the server rejects a new company', async ({ page }) => {
-    await page.route('**/api/companies', (route) =>
-      route.request().method() === 'POST'
-        ? route.fulfill({ status: 500, body: 'Server error' })
-        : route.continue(),
-    );
+  test('explains why a company with contacts can’t be deleted', async ({ page, crm }) => {
+    const company = await crm.createCompany();
+    await crm.createContact(company.id);
 
-    await page.goto('/');
-    const companies = page.locator('#companies');
+    await page.goto(`/companies/${company.id}`);
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: 'Confirm delete' }).click();
 
-    await companies.getByLabel('Company name').fill(uniqueName('Failing Co'));
-    await companies.getByRole('button', { name: 'Save Company' }).click();
-
-    await expect(companies.locator('.error-message')).toHaveText(
-      'Unable to create company. Check the form and make sure the backend is running.',
-    );
-    await expect(companies.getByRole('button', { name: 'Save Company' })).toBeEnabled();
+    await expect(page.getByRole('alert')).toContainText('Company has contacts');
   });
 });

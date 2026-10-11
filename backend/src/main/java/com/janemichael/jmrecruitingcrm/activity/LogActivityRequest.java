@@ -22,9 +22,13 @@ public record LogActivityRequest(
         ActionType nextActionType,
 
         /** Clears the next action instead of scheduling one. */
-        boolean clearNextAction,
+        Boolean clearNextAction,
 
         /** For candidates: the search this activity relates to, if any. */
         Long searchId
 ) {
+
+    public boolean clearsNextAction() {
+        return Boolean.TRUE.equals(clearNextAction);
+    }
 }

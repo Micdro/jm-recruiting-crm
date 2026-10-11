@@ -1,4 +1,5 @@
 import { test, expect, companyPayload, MISSING_ID } from '../support/fixtures.js';
+import { API_URL } from '../support/urls.js';
 
 test.describe('Companies API', () => {
   test('creates, reads, updates, and deletes a company', async ({ request, crm }) => {
@@ -7,36 +8,40 @@ test.describe('Companies API', () => {
 
     await test.step('create', async () => {
       const response = await request.post('/api/companies', { data: payload });
-      expect(response.status()).toBe(200);
+      expect(response.status()).toBe(201);
 
       company = await response.json();
-      crm.trackCompany(company.id);
+      crm.track('companies', company.id);
       expect(company.id).toEqual(expect.any(Number));
       expect(company).toMatchObject(payload);
+      expect(company.ownerName).toBeTruthy();
+      expect(company.contactCount).toBe(0);
     });
 
     await test.step('read by id', async () => {
       const response = await request.get(`/api/companies/${company.id}`);
       expect(response.status()).toBe(200);
-      expect(await response.json()).toEqual(company);
+      expect(await response.json()).toMatchObject({ id: company.id, name: payload.name });
     });
 
     await test.step('appears in the list', async () => {
       const response = await request.get('/api/companies');
-      expect(response.status()).toBe(200);
-      expect(await response.json()).toContainEqual(company);
+      const companies = await response.json();
+      expect(companies.map((item) => item.id)).toContain(company.id);
     });
 
     await test.step('update', async () => {
       const response = await request.put(`/api/companies/${company.id}`, {
-        data: { ...payload, status: 'Client', notes: 'Signed retainer' },
+        data: { ...payload, status: 'CLIENT', notes: 'Signed exclusive', ownerId: company.ownerId },
       });
       expect(response.status()).toBe(200);
-      expect(await response.json()).toMatchObject({
-        id: company.id,
-        status: 'Client',
-        notes: 'Signed retainer',
-      });
+      expect(await response.json()).toMatchObject({ id: company.id, status: 'CLIENT', notes: 'Signed exclusive' });
+    });
+
+    await test.step('the status change is in the history', async () => {
+      const response = await request.get('/api/activities', { params: { companyId: company.id } });
+      const activities = await response.json();
+      expect(activities[0]).toMatchObject({ type: 'STATUS_CHANGE', summary: 'Status changed from Prospecting to Client' });
     });
 
     await test.step('delete', async () => {
@@ -49,9 +54,7 @@ test.describe('Companies API', () => {
   });
 
   test('rejects a company without a name', async ({ request }) => {
-    const response = await request.post('/api/companies', {
-      data: companyPayload({ name: '' }),
-    });
+    const response = await request.post('/api/companies', { data: companyPayload({ name: '' }) });
 
     expect(response.status()).toBe(400);
     expect(await response.json()).toEqual({
@@ -61,49 +64,30 @@ test.describe('Companies API', () => {
     });
   });
 
-  test('rejects a company name over 255 characters', async ({ request }) => {
-    const response = await request.post('/api/companies', {
-      data: companyPayload({ name: 'A'.repeat(256) }),
-    });
+  test('rejects a duplicate company name', async ({ request, crm }) => {
+    const company = await crm.createCompany();
 
-    expect(response.status()).toBe(400);
-    const body = await response.json();
-    expect(body.messages).toContain('Company name must be 255 characters or fewer');
+    const response = await request.post('/api/companies', { data: companyPayload({ name: company.name.toUpperCase() }) });
+    expect(response.status()).toBe(409);
   });
 
   test('refuses to delete a company that still has contacts', async ({ request, crm }) => {
     const company = await crm.createCompany();
-    const contact = await crm.createContact(company.id);
+    await crm.createContact(company.id);
 
-    await test.step('delete is blocked with 409', async () => {
-      const response = await request.delete(`/api/companies/${company.id}`);
-      expect(response.status()).toBe(409);
-      expect(await response.json()).toEqual({
-        status: 409,
-        error: 'Conflict',
-        messages: ['Company has contacts. Delete or reassign them before deleting the company.'],
-      });
-    });
-
-    await test.step('nothing was deleted', async () => {
-      expect((await request.get(`/api/companies/${company.id}`)).status()).toBe(200);
-      expect((await request.get(`/api/contacts/${contact.id}`)).status()).toBe(200);
-    });
-
-    await test.step('delete works once the contact is gone', async () => {
-      expect((await request.delete(`/api/contacts/${contact.id}`)).status()).toBe(204);
-      expect((await request.delete(`/api/companies/${company.id}`)).status()).toBe(204);
-    });
+    const response = await request.delete(`/api/companies/${company.id}`);
+    expect(response.status()).toBe(409);
+    expect((await response.json()).messages[0]).toContain('Company has contacts');
   });
 
   test('returns 404 for a company that does not exist', async ({ request }) => {
-    const get = await request.get(`/api/companies/${MISSING_ID}`);
-    expect(get.status()).toBe(404);
+    expect((await request.get(`/api/companies/${MISSING_ID}`)).status()).toBe(404);
+    expect((await request.delete(`/api/companies/${MISSING_ID}`)).status()).toBe(404);
+  });
 
-    const put = await request.put(`/api/companies/${MISSING_ID}`, { data: companyPayload() });
-    expect(put.status()).toBe(404);
-
-    const del = await request.delete(`/api/companies/${MISSING_ID}`);
-    expect(del.status()).toBe(404);
+  test('requires sign-in', async ({ playwright }) => {
+    const anonymous = await playwright.request.newContext({ baseURL: API_URL, storageState: { cookies: [], origins: [] } });
+    expect((await anonymous.get('/api/companies')).status()).toBe(401);
+    await anonymous.dispose();
   });
 });

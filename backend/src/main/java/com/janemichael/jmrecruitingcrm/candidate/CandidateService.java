@@ -164,7 +164,7 @@ public class CandidateService {
             candidate.setLastContactedDate(today);
         }
 
-        if (request.clearNextAction()) {
+        if (request.clearsNextAction()) {
             candidate.setNextActionDate(null);
             candidate.setNextActionType(null);
         } else if (request.nextActionDate() != null) {
@@ -228,7 +228,7 @@ public class CandidateService {
         candidate.setCurrentCompany(Text.clean(request.currentCompany()));
         candidate.setTrack(request.track());
         candidate.setSource(request.source());
-        candidate.setRegulatedExperience(request.regulatedExperience());
+        candidate.setRegulatedExperience(Boolean.TRUE.equals(request.regulatedExperience()));
         candidate.setCompExpectation(Text.clean(request.compExpectation()));
         candidate.setResumeUrl(Text.clean(request.resumeUrl()));
         candidate.setProductionEvidence(Text.clean(request.productionEvidence()));

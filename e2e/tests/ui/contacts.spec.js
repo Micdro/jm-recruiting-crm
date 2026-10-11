@@ -1,51 +1,58 @@
-import { test, expect, uniqueName } from '../support/fixtures.js';
+import { test, expect, uniqueEmail, uniqueName } from '../support/fixtures.js';
 
-test.describe('Contacts page', () => {
+test.describe('Contacts', () => {
   test('adds a contact linked to a company', async ({ page, crm }) => {
     const company = await crm.createCompany();
     const name = uniqueName('Priya Shah');
-    crm.trackContactName(name);
+    const email = uniqueEmail('priya');
+    crm.trackName('contacts', name);
 
-    await page.goto('/');
-    const contacts = page.locator('#contacts');
+    await page.goto('/contacts');
+    await page.getByRole('button', { name: 'Add contact' }).click();
 
-    await contacts.getByLabel('Contact name').fill(name);
-    await contacts.getByRole('combobox').selectOption({ label: company.name });
-    await contacts.getByLabel('Title').fill('Head of ML Platform');
-    await contacts.getByLabel('Email').fill('priya.shah@acme.example');
-    await contacts.getByLabel('Relationship status').fill('Warm');
-    await contacts.getByLabel('Next follow-up date').fill('2026-11-02');
-    await contacts.getByRole('button', { name: 'Save Contact' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add contact' });
+    await dialog.getByLabel('Contact name').fill(name);
+    await dialog.getByLabel('Title').fill('Head of ML Platform');
+    await dialog.getByLabel('Company').selectOption({ label: company.name });
+    await dialog.getByLabel('Email').fill(email);
+    await dialog.getByRole('button', { name: 'Save contact' }).click();
 
-    const listItem = contacts.locator('.contact-list-item').filter({ hasText: name });
-    await expect(listItem).toBeVisible();
-    await expect(listItem).toContainText('Head of ML Platform');
-    await expect(listItem).toContainText(company.name);
-    await expect(listItem).toContainText('Status: Warm');
-    await expect(listItem).toContainText('Next follow-up: 2026-11-02');
+    await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+    await expect(page.getByRole('link', { name: company.name })).toBeVisible();
 
-    await expect(contacts.getByLabel('Contact name')).toHaveValue('');
-
-    // Saved in the database and linked to the right company.
     const saved = await crm.findContactByName(name);
-    expect(saved).toMatchObject({
-      name,
-      email: 'priya.shah@acme.example',
-      nextFollowUpDate: '2026-11-02',
-      companyId: company.id,
-      companyName: company.name,
-    });
+    expect(saved).toMatchObject({ email, companyId: company.id, status: 'NEW', title: 'Head of ML Platform' });
   });
 
-  test('lists contacts that already exist with their company', async ({ page, crm }) => {
+  test('logs a touch from the contact page', async ({ page, crm }) => {
     const company = await crm.createCompany();
-    const contact = await crm.createContact(company.id, { title: 'CISO' });
+    const contact = await crm.createContact(company.id);
 
-    await page.goto('/');
+    await page.goto(`/contacts/${contact.id}`);
+    await expect(page.getByText('Touch 1 of 4. Next touch')).toBeVisible();
 
-    const listItem = page.locator('#contacts .contact-list-item').filter({ hasText: contact.name });
-    await expect(listItem).toBeVisible();
-    await expect(listItem).toContainText('CISO');
-    await expect(listItem).toContainText(company.name);
+    await page.getByLabel('Notes').first().fill('Intro email about FDE hiring');
+    await page.getByRole('button', { name: 'Log email' }).click();
+
+    await expect(page.getByRole('status')).toContainText(`Email logged for ${contact.name}`);
+    await expect(page.getByRole('img', { name: '1 of 4 touches' })).toBeVisible();
+    await expect(page.getByText('Touch 1 of 4: Intro email about FDE hiring')).toBeVisible();
+
+    const saved = await crm.getJson(`/api/contacts/${contact.id}`);
+    expect(saved).toMatchObject({ touchCount: 1, status: 'IN_SEQUENCE' });
+  });
+
+  test('filters the list by status', async ({ page, crm }) => {
+    const company = await crm.createCompany();
+    const replied = await crm.createContact(company.id, { status: 'REPLIED' });
+    const fresh = await crm.createContact(company.id);
+
+    await page.goto(`/contacts?q=${encodeURIComponent(company.name)}`);
+    await expect(page.getByRole('link', { name: replied.name })).toBeVisible();
+    await expect(page.getByRole('link', { name: fresh.name })).toBeVisible();
+
+    await page.getByLabel('Status').selectOption({ label: 'Replied' });
+    await expect(page.getByRole('link', { name: replied.name })).toBeVisible();
+    await expect(page.getByRole('link', { name: fresh.name })).toHaveCount(0);
   });
 });

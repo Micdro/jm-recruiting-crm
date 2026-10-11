@@ -255,7 +255,7 @@ public class ContactService {
     ) {
         ActivityType type = request.type();
 
-        if (request.clearNextAction()) {
+        if (request.clearsNextAction()) {
             clearNextAction(contact);
             return;
         }

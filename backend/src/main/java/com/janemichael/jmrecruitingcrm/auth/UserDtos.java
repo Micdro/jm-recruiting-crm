@@ -53,7 +53,8 @@ public final class UserDtos {
             @NotNull(message = "Role is required")
             UserRole role,
 
-            boolean active
+            @NotNull(message = "Choose whether the account is active")
+            Boolean active
     ) {
     }
 

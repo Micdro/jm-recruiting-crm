@@ -1,5 +1,6 @@
 import { test as base, expect } from '@playwright/test';
-import { API_URL } from './urls.js';
+import { API_URL, AUTH_FILE } from './urls.js';
+import { savedXsrfToken } from './session.js';
 
 // An id far beyond anything the database will reach, for not-found checks.
 export const MISSING_ID = 999_999_999_999;
@@ -8,13 +9,27 @@ export function uniqueName(label) {
   return `${label} E2E ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+export function uniqueEmail(label = 'person') {
+  return `${label}.${Date.now()}.${Math.random().toString(36).slice(2, 7)}@e2e.example`;
+}
+
+/** A date relative to today, as YYYY-MM-DD in local time. */
+export function isoDate(offsetDays = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 export function companyPayload(overrides = {}) {
   return {
     name: uniqueName('Acme AI'),
     website: 'https://acme.example',
     location: 'New York, NY',
     companySize: '51-200',
-    status: 'Prospect',
+    status: 'PROSPECTING',
+    focus: 'AI fraud detection for regional banks',
     linkedinProfile: 'https://linkedin.com/company/acme-ai',
     notes: 'Created by Playwright',
     ...overrides,
@@ -25,86 +40,134 @@ export function contactPayload(companyId, overrides = {}) {
   return {
     name: uniqueName('Jane Doe'),
     title: 'VP Engineering',
-    email: 'jane.doe@acme.example',
+    email: uniqueEmail('jane'),
     linkedinUrl: 'https://linkedin.com/in/jane-doe',
-    relationshipStatus: 'Warm',
-    lastContactedDate: '2026-10-01',
-    nextFollowUpDate: '2026-10-15',
+    status: 'NEW',
     notes: 'Created by Playwright',
     companyId,
     ...overrides,
   };
 }
 
-/**
- * `crm` fixture: creates test data through the API and deletes everything
- * the test created when it finishes, so runs never leave records behind.
- */
+export function candidatePayload(overrides = {}) {
+  return {
+    name: uniqueName('Avery Chen'),
+    email: uniqueEmail('avery'),
+    currentTitle: 'Staff ML Platform Engineer',
+    currentCompany: 'Cardwise',
+    location: 'New York, NY',
+    track: 'PRODUCTION_AI_ENGINEERING',
+    regulatedExperience: true,
+    productionEvidence: 'Owned real-time model serving for a card issuer; led two Sev-1 recoveries.',
+    ...overrides,
+  };
+}
+
+export function searchPayload(companyId, overrides = {}) {
+  return {
+    companyId,
+    title: uniqueName('Forward Deployed Engineer'),
+    track: 'PRODUCTION_AI_ENGINEERING',
+    engagementType: 'EXCLUSIVE',
+    feePercent: 25,
+    baseMin: 180000,
+    baseMax: 230000,
+    productionOutcome: 'Live fraud models running at two tier-1 banks',
+    ...overrides,
+  };
+}
+
 export const test = base.extend({
-  crm: async ({ request }, use) => {
-    const companyIds = new Set();
-    const contactIds = new Set();
-    const companyNames = new Set();
-    const contactNames = new Set();
+  // API tests send the CSRF header on every request, as the React app does.
+  extraHTTPHeaders: async ({ extraHTTPHeaders }, use, testInfo) => {
+    if (testInfo.project.name === 'api') {
+      await use({ ...extraHTTPHeaders, 'X-XSRF-TOKEN': savedXsrfToken() });
+    } else {
+      await use(extraHTTPHeaders);
+    }
+  },
+
+  /**
+   * `crm` creates test data through the API and deletes everything the test created
+   * when it finishes, so runs never leave records behind.
+   */
+  crm: async ({ playwright }, use) => {
+    const api = await playwright.request.newContext({
+      baseURL: API_URL,
+      storageState: AUTH_FILE,
+      extraHTTPHeaders: { 'X-XSRF-TOKEN': savedXsrfToken() },
+    });
+
+    const created = {
+      placements: new Set(),
+      searches: new Set(),
+      candidates: new Set(),
+      contacts: new Set(),
+      companies: new Set(),
+    };
+    const named = { companies: new Set(), contacts: new Set(), candidates: new Set() };
+
+    async function createVia(path, data, bucket) {
+      const response = await api.post(path, { data });
+      expect(response.ok(), `${path}: ${await response.text()}`).toBeTruthy();
+      const record = await response.json();
+      if (bucket) created[bucket].add(record.id);
+      return record;
+    }
+
+    async function findByName(path, name) {
+      const response = await api.get(path);
+      const records = await response.json();
+      return records.find((record) => record.name === name);
+    }
 
     const crm = {
-      async createCompany(overrides = {}) {
-        const response = await request.post(`${API_URL}/api/companies`, {
-          data: companyPayload(overrides),
-        });
-        expect(response.ok(), await response.text()).toBeTruthy();
-        const company = await response.json();
-        companyIds.add(company.id);
-        return company;
+      api,
+      createCompany: (overrides) => createVia('/api/companies', companyPayload(overrides), 'companies'),
+      createContact: (companyId, overrides) => createVia('/api/contacts', contactPayload(companyId, overrides), 'contacts'),
+      createCandidate: (overrides) => createVia('/api/candidates', candidatePayload(overrides), 'candidates'),
+      createSearch: (companyId, overrides) => createVia('/api/searches', searchPayload(companyId, overrides), 'searches'),
+      addToSearch: (searchId, candidateId, overrides = {}) =>
+        createVia('/api/pipeline', { searchId, candidateId, ...overrides }),
+      createPlacement: (data) => createVia('/api/placements', data, 'placements'),
+      getJson: async (path) => {
+        const response = await api.get(path);
+        expect(response.ok(), `${path}: ${await response.text()}`).toBeTruthy();
+        return response.json();
       },
+      findCompanyByName: (name) => findByName('/api/companies', name),
+      findContactByName: (name) => findByName('/api/contacts', name),
+      findCandidateByName: (name) => findByName('/api/candidates', name),
 
-      async createContact(companyId, overrides = {}) {
-        const response = await request.post(`${API_URL}/api/contacts`, {
-          data: contactPayload(companyId, overrides),
-        });
-        expect(response.ok(), await response.text()).toBeTruthy();
-        const contact = await response.json();
-        contactIds.add(contact.id);
-        return contact;
-      },
-
-      async findCompanyByName(name) {
-        const response = await request.get(`${API_URL}/api/companies`);
-        const companies = await response.json();
-        return companies.find((company) => company.name === name);
-      },
-
-      async findContactByName(name) {
-        const response = await request.get(`${API_URL}/api/contacts`);
-        const contacts = await response.json();
-        return contacts.find((contact) => contact.name === name);
-      },
-
-      // Register records created some other way (the UI, or a raw request).
-      trackCompany: (id) => companyIds.add(id),
-      trackContact: (id) => contactIds.add(id),
-      trackCompanyName: (name) => companyNames.add(name),
-      trackContactName: (name) => contactNames.add(name),
+      // Register records created some other way (the UI, an import, or a raw request).
+      track: (bucket, id) => created[bucket].add(id),
+      trackName: (bucket, name) => named[bucket].add(name),
     };
 
     await use(crm);
 
-    for (const name of contactNames) {
+    for (const name of named.contacts) {
       const contact = await crm.findContactByName(name);
-      if (contact) contactIds.add(contact.id);
+      if (contact) created.contacts.add(contact.id);
     }
-    for (const name of companyNames) {
+    for (const name of named.candidates) {
+      const candidate = await crm.findCandidateByName(name);
+      if (candidate) created.candidates.add(candidate.id);
+    }
+    for (const name of named.companies) {
       const company = await crm.findCompanyByName(name);
-      if (company) companyIds.add(company.id);
+      if (company) created.companies.add(company.id);
     }
 
-    // Contacts reference companies, so they go first.
-    for (const id of contactIds) {
-      await request.delete(`${API_URL}/api/contacts/${id}`);
-    }
-    for (const id of companyIds) {
-      await request.delete(`${API_URL}/api/companies/${id}`);
-    }
+    // Delete in dependency order: placements, then searches (their pipeline goes with them),
+    // then candidates and contacts, then companies.
+    for (const id of created.placements) await api.delete(`/api/placements/${id}`);
+    for (const id of created.searches) await api.delete(`/api/searches/${id}`);
+    for (const id of created.candidates) await api.delete(`/api/candidates/${id}`);
+    for (const id of created.contacts) await api.delete(`/api/contacts/${id}`);
+    for (const id of created.companies) await api.delete(`/api/companies/${id}`);
+
+    await api.dispose();
   },
 });
 

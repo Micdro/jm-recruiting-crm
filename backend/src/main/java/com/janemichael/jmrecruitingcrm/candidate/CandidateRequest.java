@@ -38,7 +38,7 @@ public record CandidateRequest(
 
         CandidateEnums.Source source,
 
-        boolean regulatedExperience,
+        Boolean regulatedExperience,
 
         @Size(max = 255, message = "Compensation expectation must be 255 characters or fewer")
         String compExpectation,

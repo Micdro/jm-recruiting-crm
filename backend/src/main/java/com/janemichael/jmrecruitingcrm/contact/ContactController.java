@@ -73,9 +73,9 @@ public class ContactController {
 
     @PostMapping("/fill-queue")
     public FillQueueResponse fillQueue(@RequestBody FillQueueRequest request) {
-        return contactService.fillQueue(request.count());
+        return contactService.fillQueue(request.count() == null ? 0 : request.count());
     }
 
-    public record FillQueueRequest(int count) {
+    public record FillQueueRequest(Integer count) {
     }
 }
