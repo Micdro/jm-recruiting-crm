@@ -32,7 +32,7 @@ services:
       - key: APP_TIMEZONE
         value: America/New_York
       - key: ADMIN_NAME
-        value: Michael
+        value: Michael Drougas
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
