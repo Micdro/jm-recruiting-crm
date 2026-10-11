@@ -2,7 +2,7 @@ import { test, expect, isoDate } from '../support/fixtures.js';
 
 test.describe('Searches, pipeline and placements API', () => {
   test('takes a candidate from sourced to placed', async ({ request, crm }) => {
-    const company = await crm.createCompany({ status: 'IN_CONVERSATION' });
+    const company = await crm.createCompany({ status: 'DISCOVERY_COMPLETED' });
     const manager = await crm.createContact(company.id, { title: 'VP Engineering' });
     const search = await crm.createSearch(company.id, { hiringManagerId: manager.id });
     const candidate = await crm.createCandidate();
@@ -10,7 +10,7 @@ test.describe('Searches, pipeline and placements API', () => {
     await test.step('opening a search makes the company a client', async () => {
       expect(search).toMatchObject({ status: 'INTAKE', hiringManagerName: manager.name, feePercent: 25 });
       const refreshed = await crm.getJson(`/api/companies/${company.id}`);
-      expect(refreshed).toMatchObject({ status: 'CLIENT', openSearchCount: 1 });
+      expect(refreshed).toMatchObject({ status: 'PLACING', openSearchCount: 1 });
     });
 
     let entry;

@@ -11,8 +11,11 @@ import {
   ACTIVITY_TYPE,
   BOARD_STAGES,
   CANDIDATE_STATUS,
+  COMPANY_STATUS,
+  HIRING_NEED,
   MAX_TOUCHES,
   OUTREACH_STATUS,
+  PRIORITY,
   SEARCH_STATUS,
   SHORTLIST_STAGES,
 } from '../labels.js';
@@ -24,7 +27,7 @@ const QUICK_TYPES = ['EMAIL', 'LINKEDIN', 'CALL'];
 export default function TodayPage() {
   useTitle('Today');
   const [scope, setScope] = useState('mine');
-  const dashboard = useLoader(() => api.dashboard(scope), [scope]);
+  const dashboard = useLoader(() => api.dashboard(scope), [scope], `dashboard:${scope}`);
   const [logging, setLogging] = useState(null);
 
   const data = dashboard.data;
@@ -62,6 +65,7 @@ export default function TodayPage() {
           <div className="today-grid">
             <div className="today-main">
               <ContactQueue data={data} scope={scope} onChanged={dashboard.reload} onLog={(contact) => setLogging({ kind: 'contact', record: contact })} />
+              <CompanyFollowUps data={data} />
               <CandidateQueue data={data} onLog={(candidate) => setLogging({ kind: 'candidate', record: candidate })} />
             </div>
 
@@ -285,6 +289,51 @@ function ContactQueue({ data, scope, onChanged, onLog }) {
           Showing {contacts.length} of {data.contactsDueTotal}. <Link to="/contacts?due=true">See all due contacts</Link>
         </p>
       )}
+    </section>
+  );
+}
+
+/** Client and prospect companies whose follow-up date has come (ClickUp's Follow-Up Date). */
+function CompanyFollowUps({ data }) {
+  const companies = data.companiesDue ?? [];
+  if (companies.length === 0) return null;
+
+  return (
+    <section className="panel" aria-labelledby="queue-companies">
+      <div className="panel-head">
+        <h2 id="queue-companies">
+          Client follow-ups <span className="count">{data.companiesDueTotal}</span>
+        </h2>
+        <Link to="/companies?due=true" className="panel-link">
+          All due
+        </Link>
+      </div>
+      <ul className="queue">
+        {companies.map((company) => (
+          <li key={company.id} className="queue-row">
+            <div className="queue-who">
+              <Link to={`/companies/${company.id}`} className="queue-name">
+                {company.name}
+              </Link>
+              <span className="queue-org">{HIRING_NEED[company.hiringNeed] ?? company.focus}</span>
+            </div>
+            <div className="queue-state">
+              <Pill value={company.status} labels={COMPANY_STATUS} />
+              <span className="queue-due">
+                <DueTag date={company.followUpDate} today={data.today} />
+                {company.priority && company.priority !== 'NORMAL' && (
+                  <span className="queue-type">{PRIORITY[company.priority]} priority</span>
+                )}
+              </span>
+            </div>
+            <div className="queue-actions">
+              <Link to={`/companies/${company.id}`} className="btn btn-sm">
+                Open
+              </Link>
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

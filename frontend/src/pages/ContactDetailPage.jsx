@@ -6,7 +6,7 @@ import LogActivityForm from '../components/LogActivityForm.jsx';
 import Modal from '../components/Modal.jsx';
 import Timeline from '../components/Timeline.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
-import { ACTION_TYPE, MAX_TOUCHES, OUTREACH_STATUS } from '../labels.js';
+import { ACTION_TYPE, BUYING_ROLE, MAX_TOUCHES, OUTREACH_STATUS } from '../labels.js';
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 
@@ -14,8 +14,8 @@ export default function ContactDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const contact = useLoader(() => api.contacts.get(id), [id]);
-  const history = useLoader(() => api.activities.list({ contactId: id }), [id]);
+  const contact = useLoader(() => api.contacts.get(id), [id], `contact:${id}`);
+  const history = useLoader(() => api.activities.list({ contactId: id }), [id], `contact:${id}:history`);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
 
@@ -137,6 +137,7 @@ export default function ContactDetailPage() {
                 { label: 'Email', value: record.email && <a href={`mailto:${record.email}`}>{record.email}</a> },
                 { label: 'Phone', value: record.phone && <a href={`tel:${record.phone}`}>{record.phone}</a> },
                 { label: 'LinkedIn', value: record.linkedinUrl && <ExternalLink href={href(record.linkedinUrl)}>Profile</ExternalLink> },
+                { label: 'Buying role', value: BUYING_ROLE[record.buyingRole] },
                 { label: 'Owner', value: record.ownerName ?? 'Unassigned' },
               ]}
             />

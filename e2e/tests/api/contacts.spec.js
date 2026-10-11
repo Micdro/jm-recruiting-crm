@@ -62,6 +62,8 @@ test.describe('Contacts API', () => {
         const body = await response.json();
         expect(body).toMatchObject({ touchCount: touch, status: 'IN_SEQUENCE', lastContactedDate: isoDate(0) });
         expect(body.nextActionDate > isoDate(0)).toBeTruthy();
+        // The sequence alternates: LinkedIn, email, LinkedIn, email.
+        expect(body.nextActionType).toBe(['EMAIL', 'LINKEDIN', 'EMAIL'][touch - 1]);
       }
     });
 

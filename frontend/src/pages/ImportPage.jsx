@@ -3,19 +3,43 @@ import { Link } from 'react-router';
 import Papa from 'papaparse';
 import { api, errorMessage } from '../api.js';
 import { ErrorNote, PageHeader } from '../components/Bits.jsx';
-import { OUTREACH_STATUS, options } from '../labels.js';
-import {
-  CANDIDATE_FIELDS,
-  CONTACT_FIELDS,
-  buildRow,
-  guessMapping,
-  guessOutreachStatus,
-  templateCsv,
-} from '../importMapping.js';
+import { CANDIDATE_STATUS, COMPANY_STATUS, OUTREACH_STATUS, options } from '../labels.js';
+import { IMPORT_FIELDS, STATUS_GUESSERS, buildRow, guessMapping, templateCsv } from '../importMapping.js';
 import { plural } from '../format.js';
 import { useTitle, useToast } from '../hooks.js';
 
 const CHUNK = 1000;
+
+const KINDS = {
+  contacts: {
+    label: 'Contacts',
+    noun: 'contact',
+    hint: 'ClickUp’s outbound pipeline or buyer list. One row per person; companies are created from the Company column when they don’t exist yet.',
+    statuses: OUTREACH_STATUS,
+    statusHint: 'Each status becomes one of the CRM’s outreach statuses. “From touches” uses New, or In sequence when the row has touches.',
+    send: (body) => api.imports.contacts(body),
+    view: '/contacts',
+  },
+  companies: {
+    label: 'Companies',
+    noun: 'company',
+    plural: 'companies',
+    hint: 'ClickUp’s client list. One row per company, with its stage, priority, hiring need and follow-up date.',
+    statuses: COMPANY_STATUS,
+    statusHint: 'Each status becomes one of the client stages. “Keep as is” leaves existing companies at their stage and starts new ones at Lead.',
+    send: (body) => api.imports.companies(body),
+    view: '/companies',
+  },
+  candidates: {
+    label: 'Candidates',
+    noun: 'candidate',
+    hint: 'ClickUp’s candidate list. One row per candidate.',
+    statuses: CANDIDATE_STATUS,
+    statusHint: 'Each status becomes a candidate status. Offer accepted, onboarding and placed become Placed; dq becomes Not a fit.',
+    send: (body) => api.imports.candidates(body),
+    view: '/candidates',
+  },
+};
 
 export default function ImportPage() {
   useTitle('Import');
@@ -29,7 +53,8 @@ export default function ImportPage() {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
 
-  const fields = kind === 'contacts' ? CONTACT_FIELDS : CANDIDATE_FIELDS;
+  const fields = IMPORT_FIELDS[kind];
+  const config = KINDS[kind];
 
   function reset(nextKind = kind) {
     setKind(nextKind);
@@ -65,15 +90,15 @@ export default function ImportPage() {
   }
 
   function statusGuesses(rows, column) {
-    if (!column || kind !== 'contacts') return {};
+    if (!column) return {};
     const values = [...new Set(rows.map((row) => String(row[column] ?? '').trim()).filter(Boolean))];
-    return Object.fromEntries(values.map((value) => [value, guessOutreachStatus(value)]));
+    return Object.fromEntries(values.map((value) => [value, STATUS_GUESSERS[kind](value)]));
   }
 
   const built = file ? file.rows.map((row) => buildRow(kind, row, mapping, statusMap)) : [];
   const problemCount = built.filter((item) => item.problems.length > 0).length;
-  const hasName = mapping.name || mapping.firstName || mapping.lastName;
-  const ready = file && hasName && (kind === 'candidates' || mapping.companyName);
+  const hasName = mapping.name || (kind !== 'companies' && (mapping.firstName || mapping.lastName));
+  const ready = file && hasName && (kind !== 'contacts' || mapping.companyName);
 
   async function runImport() {
     setBusy(true);
@@ -84,7 +109,7 @@ export default function ImportPage() {
       for (let start = 0; start < built.length; start += CHUNK) {
         const rows = built.slice(start, start + CHUNK).map((item) => item.row);
         const body = { rows, duplicateMode };
-        const response = kind === 'contacts' ? await api.imports.contacts(body) : await api.imports.candidates(body);
+        const response = await config.send(body);
         totals.created += response.created;
         totals.updated += response.updated;
         totals.skipped += response.skipped;
@@ -92,7 +117,7 @@ export default function ImportPage() {
         totals.errors.push(...response.errors.map((rowError) => ({ ...rowError, row: rowError.row + start })));
       }
       setResult(totals);
-      toast(`Imported ${plural(totals.created, kind === 'contacts' ? 'contact' : 'candidate')}`);
+      toast(`Imported ${plural(totals.created, config.noun, config.plural)}`);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -104,16 +129,13 @@ export default function ImportPage() {
 
   return (
     <>
-      <PageHeader title="Import" sub="Bring in a buyer list or a candidate list from a spreadsheet." />
+      <PageHeader title="Import" sub="Bring in your ClickUp lists, or any spreadsheet saved as CSV." />
 
       <section className="panel import-step">
         <h2>1. What are you importing?</h2>
         <fieldset className="segmented">
           <legend className="visually-hidden">Import type</legend>
-          {[
-            ['contacts', 'Contacts and companies'],
-            ['candidates', 'Candidates'],
-          ].map(([value, label]) => (
+          {Object.entries(KINDS).map(([value, { label }]) => (
             <label key={value} className={kind === value ? 'segment segment-on' : 'segment'}>
               <input type="radio" name="import-kind" checked={kind === value} onChange={() => reset(value)} />
               {label}
@@ -121,12 +143,14 @@ export default function ImportPage() {
           ))}
         </fieldset>
         <p className="muted">
-          {kind === 'contacts'
-            ? 'One row per person. Companies are created from the Company column when they don’t exist yet.'
-            : 'One row per candidate.'}{' '}
+          {config.hint}{' '}
           <a href={templateHref} download={`${kind}-template.csv`}>
             Download a template
           </a>
+        </p>
+        <p className="muted">
+          From ClickUp: open the list, export the view as CSV with all columns, then choose that file below. Field types in the column
+          names, like “(date)”, are ignored.
         </p>
       </section>
 
@@ -179,18 +203,19 @@ export default function ImportPage() {
               </div>
             ))}
           </div>
-          {!hasName && <p className="error-note">Match a Full name column, or First name and Last name.</p>}
+          {!hasName && (
+            <p className="error-note">
+              {kind === 'companies' ? 'Match the Company name column.' : 'Match a Full name column, or First name and Last name.'}
+            </p>
+          )}
           {kind === 'contacts' && !mapping.companyName && <p className="error-note">Match the Company column.</p>}
         </section>
       )}
 
-      {file && kind === 'contacts' && Object.keys(statusMap).length > 0 && (
+      {file && Object.keys(statusMap).length > 0 && (
         <section className="panel import-step">
           <h2>4. Translate statuses</h2>
-          <p className="muted">
-            Each status in your file becomes one of the CRM’s outreach statuses. “From touches” uses New, or In sequence when the
-            row has touches.
-          </p>
+          <p className="muted">{config.statusHint}</p>
           <div className="mapping">
             {Object.entries(statusMap).map(([value, mapped]) => (
               <div key={value} className="mapping-row">
@@ -200,8 +225,8 @@ export default function ImportPage() {
                   value={mapped}
                   onChange={(event) => setStatusMap((current) => ({ ...current, [value]: event.target.value }))}
                 >
-                  <option value="">From touches</option>
-                  {options(OUTREACH_STATUS).map((option) => (
+                  <option value="">{kind === 'contacts' ? 'From touches' : 'Keep as is'}</option>
+                  {options(config.statuses).map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -215,10 +240,10 @@ export default function ImportPage() {
 
       {file && (
         <section className="panel import-step">
-          <h2>{kind === 'contacts' && Object.keys(statusMap).length > 0 ? '5' : '4'}. Check and import</h2>
+          <h2>{Object.keys(statusMap).length > 0 ? '5' : '4'}. Check and import</h2>
 
           <fieldset className="radio-group">
-            <legend>When someone is already in the CRM</legend>
+            <legend>When a record is already in the CRM</legend>
             <label className="radio">
               <input type="radio" name="duplicates" checked={duplicateMode === 'SKIP'} onChange={() => setDuplicateMode('SKIP')} />
               Skip them
@@ -228,7 +253,12 @@ export default function ImportPage() {
               Update them with the file’s values
             </label>
           </fieldset>
-          <p className="muted">Duplicates are matched by email, then LinkedIn URL, then name.</p>
+          <p className="muted">
+            {kind === 'companies'
+              ? 'Companies are matched by name.'
+              : 'Duplicates are matched by email, then LinkedIn URL, then name.'}{' '}
+            Owners are matched by name, initials (MD, DD) or email; anyone else’s rows are assigned to you.
+          </p>
 
           <Preview kind={kind} built={built} />
 
@@ -256,7 +286,32 @@ function Preview({ kind, built }) {
   const sample = built.slice(0, 5);
   if (sample.length === 0) return null;
 
-  const name = (row) => row.name || [row.firstName, row.lastName].filter(Boolean).join(' ') || <span className="muted">Missing</span>;
+  const missing = <span className="muted">Missing</span>;
+  const name = (row) => row.name || [row.firstName, row.lastName].filter(Boolean).join(' ') || missing;
+
+  const columns = {
+    contacts: [
+      ['Company', (row) => row.companyName ?? missing],
+      ['Email', (row) => row.email],
+      ['Status', (row) => (row.status ? OUTREACH_STATUS[row.status] : <span className="muted">From touches</span>)],
+      ['Touches', (row) => row.touchCount ?? '', 'num'],
+      ['Next action', (row) => row.nextActionDate],
+      ['Owner', (row) => row.owner],
+    ],
+    companies: [
+      ['Stage', (row) => (row.status ? COMPANY_STATUS[row.status] : <span className="muted">Lead</span>)],
+      ['Priority', (row) => row.priority?.toLowerCase()],
+      ['Follow up', (row) => row.followUpDate],
+      ['Hires', (row) => row.anticipatedHires ?? '', 'num'],
+      ['Owner', (row) => row.owner],
+    ],
+    candidates: [
+      ['Status', (row) => (row.status ? CANDIDATE_STATUS[row.status] : <span className="muted">Active</span>)],
+      ['Email', (row) => row.email],
+      ['Roles', (row) => (row.roleAreas ?? []).map((area) => area.toLowerCase()).join(', ')],
+      ['Owner', (row) => row.owner],
+    ],
+  }[kind];
 
   return (
     <div className="table-wrap">
@@ -265,44 +320,22 @@ function Preview({ kind, built }) {
         <thead>
           <tr>
             <th scope="col">Name</th>
-            {kind === 'contacts' ? (
-              <>
-                <th scope="col">Company</th>
-                <th scope="col">Email</th>
-                <th scope="col">Status</th>
-                <th scope="col" className="num">Touches</th>
-                <th scope="col">Next action</th>
-              </>
-            ) : (
-              <>
-                <th scope="col">Title</th>
-                <th scope="col">Company</th>
-                <th scope="col">Email</th>
-                <th scope="col">Track</th>
-              </>
-            )}
+            {columns.map(([label, , className]) => (
+              <th key={label} scope="col" className={className}>
+                {label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {sample.map(({ row }, index) => (
             <tr key={index}>
               <td>{name(row)}</td>
-              {kind === 'contacts' ? (
-                <>
-                  <td>{row.companyName ?? <span className="muted">Missing</span>}</td>
-                  <td>{row.email}</td>
-                  <td>{row.status ? OUTREACH_STATUS[row.status] : <span className="muted">From touches</span>}</td>
-                  <td className="num">{row.touchCount ?? ''}</td>
-                  <td>{row.nextActionDate}</td>
-                </>
-              ) : (
-                <>
-                  <td>{row.currentTitle}</td>
-                  <td>{row.currentCompany}</td>
-                  <td>{row.email}</td>
-                  <td>{row.track ? row.track.replaceAll('_', ' ').toLowerCase() : ''}</td>
-                </>
-              )}
+              {columns.map(([label, cell, className]) => (
+                <td key={label} className={className}>
+                  {cell(row)}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -312,12 +345,12 @@ function Preview({ kind, built }) {
 }
 
 function ImportResult({ kind, result }) {
-  const noun = kind === 'contacts' ? 'contact' : 'candidate';
+  const { noun, plural: nouns, view } = KINDS[kind];
   return (
     <div className="import-result" role="status">
       <p>
-        <strong>Import finished.</strong> {plural(result.created, `new ${noun}`)}, {result.updated} updated, {result.skipped} skipped as
-        duplicates
+        <strong>Import finished.</strong> {plural(result.created, `new ${noun}`, `new ${nouns ?? `${noun}s`}`)}, {result.updated} updated,{' '}
+        {result.skipped} skipped as duplicates
         {kind === 'contacts' ? `, ${plural(result.companiesCreated, 'new company', 'new companies')}` : ''}.
       </p>
       {result.errors.length > 0 && (
@@ -333,7 +366,7 @@ function ImportResult({ kind, result }) {
         </>
       )}
       <p>
-        <Link to={kind === 'contacts' ? '/contacts' : '/candidates'}>View {noun}s</Link>
+        <Link to={view}>View {nouns ?? `${noun}s`}</Link>
         {kind === 'contacts' && (
           <>
             {' '}

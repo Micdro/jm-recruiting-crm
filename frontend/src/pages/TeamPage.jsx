@@ -10,7 +10,7 @@ export default function TeamPage() {
   useTitle('Team');
   const { user } = useAuth();
   const toast = useToast();
-  const users = useLoader(() => api.users.list(), []);
+  const users = useLoader(() => api.users.list(), [], 'users');
   const [modal, setModal] = useState(null);
 
   const isAdmin = user?.role === 'ADMIN';

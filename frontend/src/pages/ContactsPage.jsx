@@ -5,7 +5,7 @@ import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore, TouchPip
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
-import { ACTION_TYPE, OUTREACH_STATUS, options } from '../labels.js';
+import { ACTION_TYPE, BUYING_ROLE, OUTREACH_STATUS, options } from '../labels.js';
 import { todayIso } from '../format.js';
 import { matchesQuery, useAuth, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
 
@@ -19,7 +19,7 @@ export default function ContactsPage() {
   const toast = useToast();
   const { user } = useAuth();
   const users = useUsers();
-  const contacts = useLoader(() => api.contacts.list(), []);
+  const contacts = useLoader(() => api.contacts.list(), [], 'contacts');
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -96,7 +96,12 @@ export default function ContactsPage() {
                     <Link to={`/contacts/${contact.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
                       {contact.name}
                     </Link>
-                    {contact.title && <span className="cell-sub">{contact.title}</span>}
+                    {(contact.title || contact.buyingRole) && (
+                      <span className="cell-sub">
+                        {contact.title}
+                        {contact.buyingRole && <span className="tag">{BUYING_ROLE[contact.buyingRole]}</span>}
+                      </span>
+                    )}
                   </td>
                   <td>{contact.companyName}</td>
                   <td>

@@ -32,16 +32,16 @@ test.describe('Companies API', () => {
 
     await test.step('update', async () => {
       const response = await request.put(`/api/companies/${company.id}`, {
-        data: { ...payload, status: 'CLIENT', notes: 'Signed exclusive', ownerId: company.ownerId },
+        data: { ...payload, status: 'PLACING', notes: 'Signed exclusive', ownerId: company.ownerId },
       });
       expect(response.status()).toBe(200);
-      expect(await response.json()).toMatchObject({ id: company.id, status: 'CLIENT', notes: 'Signed exclusive' });
+      expect(await response.json()).toMatchObject({ id: company.id, status: 'PLACING', notes: 'Signed exclusive' });
     });
 
     await test.step('the status change is in the history', async () => {
       const response = await request.get('/api/activities', { params: { companyId: company.id } });
       const activities = await response.json();
-      expect(activities[0]).toMatchObject({ type: 'STATUS_CHANGE', summary: 'Status changed from Prospecting to Client' });
+      expect(activities[0]).toMatchObject({ type: 'STATUS_CHANGE', summary: 'Status changed from Initial outreach to Placing' });
     });
 
     await test.step('delete', async () => {

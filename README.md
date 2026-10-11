@@ -17,13 +17,13 @@ Built with Java 21, Spring Boot 4, PostgreSQL (Flyway migrations), React 19 and 
 
 | Page | What it's for |
 | --- | --- |
-| **Today** | Your queue of contacts and candidates due now, with one-click logging (Email, LinkedIn, Call, Replied). Tally marks show today's touches against the 30 target and 50 stretch, for you and the team. Pull new contacts into today when the queue runs short. Open searches, fees this year and guarantees ending soon sit alongside. |
-| **Contacts** | Buyers and hiring managers. Status, touch count (four boxes), next action, owner. Logging a touch moves the sequence forward and schedules the next one three business days out. The fourth touch ends the sequence; a reply puts a response on today's list. |
-| **Companies** | Target accounts and clients, with their people, searches and history. Opening a search makes the company a client. |
+| **Today** | Your queue of contacts, client follow-ups and candidates due now, with one-click logging (Email, LinkedIn, Call, Replied). Tally marks show today's touches against the 30 target and 50 stretch, for you and the team. Pull new contacts into today when the queue runs short. Open searches, fees this year and guarantees ending soon sit alongside. |
+| **Contacts** | Buyers and hiring managers, with their buying role. Status, touch count (four boxes), next action, owner. The sequence follows the ClickUp outbound list: LinkedIn, email, LinkedIn, email, three business days apart. The fourth touch ends the sequence; a reply puts a response on today's list. New contacts are pulled into today one company at a time, so no account gets four emails in a morning. |
+| **Companies** | The ClickUp client list: stage (Lead through Complete), priority, tier, industry, segments, hiring need and timeline, anticipated hires, lead source and a follow-up date. Logging a call, email or meeting records the contact and clears a follow-up that was due. Opening a search moves the company to Placing. |
 | **Searches** | The role, terms (contingency, exclusive or retained, fee percent), and the brief: production outcome, technical scope, accountability, regulatory constraints. A pipeline board from Sourced to Placed. Moving someone to Shortlisted asks for the rationale the client will read. The Shortlist tab prints a clean slate (or saves it as PDF). |
-| **Candidates** | Production AI engineers and technical leaders, with production evidence (what they owned, decided and fixed), regulated-industry experience, searches and follow-ups. |
+| **Candidates** | Production AI engineers and technical leaders, with production evidence (what they owned, decided and fixed), regulated-industry experience, applicable roles (design, deploy, operate), experience, work preference, employment type, searches and follow-ups. |
 | **Placements** | Start date, base, fee (calculated from the search terms unless entered), invoice status and the 90-day guarantee. |
-| **Import** | Upload a CSV (for example the ClickUp buyer list). Columns are matched by name, your statuses are translated to the CRM's, duplicates are skipped or updated, and missing companies are created. |
+| **Import** | Upload ClickUp CSV exports (outbound pipeline, buyer list, client list, candidate list) or any spreadsheet. ClickUp's column names and values are recognised, statuses are translated, owners (MD, DD, names or emails) are matched to the team, duplicates are skipped or updated, and missing companies are created. |
 | **Team** | Admins add teammates, reset passwords and deactivate accounts. Everyone can change their own password. |
 
 Everything a person does is recorded in the activity history on the record it touches.
@@ -35,8 +35,11 @@ You need Java 21, Node 22 and PostgreSQL 16 (or Docker).
 ### Option A: Docker (simplest)
 
 ```
+export APP_ENCRYPTION_KEY="$(openssl rand -base64 32)"   # save it in your password manager
 ADMIN_EMAIL=you@jane-michael.com ADMIN_PASSWORD='a-long-password' docker compose up --build
 ```
+
+Use the same `APP_ENCRYPTION_KEY` every time you start it.
 
 Open http://localhost:8080 and sign in with that email and password. Data is kept in the
 `jmcrm-data` Docker volume.
@@ -45,8 +48,8 @@ Open http://localhost:8080 and sign in with that email and password. Data is kep
 
 1. Create a database: `createdb jmcrm`
 2. Copy `backend/src/main/resources/application-example.properties` to
-   `application.properties` in the same folder and fill in your database password and the
-   admin email and password you want.
+   `application.properties` in the same folder and fill in your database password, an
+   encryption key (`openssl rand -base64 32`) and the admin email and password you want.
 3. Run `start-dev.bat` (Windows), or in two terminals run `cd backend && ./mvnw spring-boot:run`
    and `cd frontend && npm install && npm run dev`.
 4. Open http://localhost:5173. The React dev server forwards `/api` to the backend on 8080.
@@ -68,8 +71,16 @@ The repo builds one Docker image that serves the API and the React app together.
 1. In Render, choose **New > Blueprint** and select this repository. `render.yaml` creates the
    web service and a PostgreSQL database in Virginia.
 2. Enter `ADMIN_EMAIL` and `ADMIN_PASSWORD` when asked. They create your account on first start.
-3. When the deploy finishes, open the service URL and sign in. Add a custom domain such as
+   Render generates `APP_ENCRYPTION_KEY` for you.
+3. **Copy `APP_ENCRYPTION_KEY` from the service's Environment tab into your password manager
+   now.** It is the only way to read the encrypted fields, including in database backups.
+   Never change it on a running system.
+4. When the deploy finishes, open the service URL and sign in. Add a custom domain such as
    `crm.jane-michael.com` in the service settings if you want one.
+
+The database only accepts connections from the app over Render's private network
+(`ipAllowList: []`). To connect from your own machine for a one-off task, add your IP address
+in the database's settings and remove it afterwards.
 
 ### Anywhere else that runs containers
 
@@ -78,19 +89,45 @@ Build with `docker build -t jm-recruiting-crm .` and set:
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | `postgresql://user:password@host:5432/dbname` (or set `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`) |
+| `APP_ENCRYPTION_KEY` | **Required.** 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts sensitive fields. Keep a copy in your password manager; losing it loses that data. |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | First admin account, created when no users exist. Password at least 10 characters. |
+| `DB_SSLMODE` | TLS to the database. Defaults to `prefer` (TLS whenever offered). Use `verify-full` for a database reached over the public internet. |
 | `COOKIE_SECURE` | `true` when served over HTTPS (always in production) |
 | `APP_TIMEZONE` | Time zone for "today" and daily touch counts. Defaults to `America/New_York`. |
 | `PORT` | Port to listen on. Defaults to 8080. |
 
 ## Security
 
-- Session sign-in with BCrypt-hashed passwords. Sessions last 12 hours.
-- CSRF protection on every change (the React app sends the `XSRF-TOKEN` cookie back as a header).
-- Every `/api` endpoint except the health check requires sign-in. Admin-only actions are
-  checked on the server.
-- Candidate and contact data is internal. Keep the service behind HTTPS and give accounts only
-  to the team.
+- **Encryption at rest.** Emails, phone numbers, notes, compensation, salaries, production
+  evidence, search briefs, shortlist rationales and activity notes are encrypted with
+  AES-256-GCM before they reach the database. A stolen database or backup is unreadable without
+  `APP_ENCRYPTION_KEY`. Emails also get a keyed fingerprint (HMAC-SHA256) so duplicates are
+  still caught. Existing plain-text rows are encrypted automatically on the first start.
+- **Passwords** are hashed with Argon2id (19 MiB memory, 2 iterations, the OWASP setting).
+  Older bcrypt hashes are upgraded the next time that person signs in.
+- **Sign-in throttling.** Five wrong passwords for one account, or twenty from one address,
+  within 15 minutes block further attempts for the rest of that window.
+- **Sessions** last 12 hours. Deactivating someone ends their session on their next request.
+- **Browser protections.** A strict Content-Security-Policy (only the app's own scripts, styles
+  and fonts), HSTS, no framing, no referrer leaks and no camera, microphone or location access.
+- **In transit.** HTTPS to the browser; TLS to the database whenever it's offered.
+- CSRF protection on every change, and every `/api` endpoint except the health check requires
+  sign-in. Admin-only actions are checked on the server.
+
+## Speed
+
+- Lists load once and filter in the browser, so searching and filtering are instant.
+- Pages you've opened show immediately the next time and refresh in the background. After
+  sign-in, the main lists load quietly so the first visit to each page is instant too. This copy
+  lives only in the open tab's memory: nothing is saved to disk, and sign-out clears it.
+- Responses are gzip-compressed, and the app's files are cached by the browser for a year
+  (each release gets new file names, so updates still show up straight away).
+- Fonts ship with the app; nothing is fetched from third parties.
+
+**Install it like a desktop app.** In Chrome or Edge, open the CRM and click the install icon at
+the right end of the address bar, or choose Install from the browser menu. It gets its own
+window, Dock or taskbar icon and shortcuts to Today, Contacts, Companies and Candidates. On an
+iPhone, use **Share > Add to Home Screen**.
 
 ## Tests
 

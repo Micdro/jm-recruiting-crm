@@ -13,7 +13,8 @@ const FIELDS = {
   track: 'PRODUCTION_AI_ENGINEERING',
   status: 'INTAKE',
   engagementType: 'CONTINGENCY',
-  feePercent: '',
+  // The firm's standard fee (ClickUp's projected revenue is salary x 20%).
+  feePercent: '20',
   baseMin: '',
   baseMax: '',
   location: '',
@@ -32,7 +33,7 @@ const FIELDS = {
 export default function SearchForm({ search, onSaved, onCancel }) {
   const { user } = useAuth();
   const users = useUsers();
-  const companies = useLoader(() => api.companies.list(), []);
+  const companies = useLoader(() => api.companies.list(), [], 'companies');
   const [form, setForm] = useState(() => {
     const initial = asForm(search, FIELDS);
     if (!search?.id && !initial.ownerId && user) initial.ownerId = String(user.id);
@@ -139,7 +140,7 @@ export default function SearchForm({ search, onSaved, onCancel }) {
           inputMode="decimal"
           value={form.feePercent}
           onChange={set('feePercent')}
-          placeholder="25"
+          placeholder="20"
         />
       </div>
       <div className="form-row">

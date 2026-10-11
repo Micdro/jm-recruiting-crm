@@ -117,6 +117,7 @@ export const api = {
     note: (body) => post('/api/activities', body),
   },
   imports: {
+    companies: (body) => post('/api/import/companies', body),
     contacts: (body) => post('/api/import/contacts', body),
     candidates: (body) => post('/api/import/candidates', body),
   },

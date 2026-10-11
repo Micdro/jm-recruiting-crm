@@ -14,7 +14,7 @@ export default function SearchesPage() {
   useTitle('Searches');
   const navigate = useNavigate();
   const toast = useToast();
-  const searches = useLoader(() => api.searches.list(), []);
+  const searches = useLoader(() => api.searches.list(), [], 'searches');
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
 

@@ -37,9 +37,9 @@ export default function SearchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const search = useLoader(() => api.searches.get(id), [id]);
-  const pipeline = useLoader(() => api.searches.pipeline(id), [id]);
-  const history = useLoader(() => api.activities.list({ searchId: id }), [id]);
+  const search = useLoader(() => api.searches.get(id), [id], `search:${id}`);
+  const pipeline = useLoader(() => api.searches.pipeline(id), [id], `search:${id}:pipeline`);
+  const history = useLoader(() => api.activities.list({ searchId: id }), [id], `search:${id}:history`);
   const [tab, setTab] = useState('pipeline');
   const [modal, setModal] = useState(null);
   const [error, setError] = useState('');
@@ -403,7 +403,7 @@ function PipelineCard({ entry, onStage, onEditRationale, onPlace, onRemove }) {
 
 function AddToSearch({ search, entries, onAdded, onNewCandidate }) {
   const toast = useToast();
-  const candidates = useLoader(() => api.candidates.list(), []);
+  const candidates = useLoader(() => api.candidates.list(), [], 'candidates');
   const [candidateId, setCandidateId] = useState('');
   const [stage, setStage] = useState('SOURCED');
   const [busy, setBusy] = useState(false);
@@ -521,9 +521,7 @@ function BriefTab({ search, onEdit }) {
 }
 
 function ShortlistTab({ search, entries }) {
-  const candidates = useLoader(() => api.candidates.list(), []);
   const slate = entries.filter((entry) => SHORTLIST_STAGES.includes(entry.stage));
-  const evidence = new Map((candidates.data ?? []).map((candidate) => [candidate.id, candidate]));
   const missing = slate.filter((entry) => !entry.rationale).length;
 
   return (
@@ -550,25 +548,22 @@ function ShortlistTab({ search, entries }) {
             <p className="slate-date">Shortlist prepared {formatDate(todayIso())}</p>
           </header>
           <ol className="slate-list">
-            {slate.map((entry) => {
-              const candidate = evidence.get(entry.candidateId);
-              return (
-                <li key={entry.id} className="slate-item">
-                  <h3>{entry.candidateName}</h3>
-                  <p className="slate-role">
-                    {[entry.candidateTitle, entry.candidateCompany, entry.candidateLocation].filter(Boolean).join(', ')}
-                  </p>
-                  <h4>Why this candidate</h4>
-                  <p>{entry.rationale || <span className="muted">Rationale not written yet.</span>}</p>
-                  {candidate?.productionEvidence && (
-                    <>
-                      <h4>Production evidence</h4>
-                      <p>{candidate.productionEvidence}</p>
-                    </>
-                  )}
-                </li>
-              );
-            })}
+            {slate.map((entry) => (
+              <li key={entry.id} className="slate-item">
+                <h3>{entry.candidateName}</h3>
+                <p className="slate-role">
+                  {[entry.candidateTitle, entry.candidateCompany, entry.candidateLocation].filter(Boolean).join(', ')}
+                </p>
+                <h4>Why this candidate</h4>
+                <p>{entry.rationale || <span className="muted">Rationale not written yet.</span>}</p>
+                {entry.candidateEvidence && (
+                  <>
+                    <h4>Production evidence</h4>
+                    <p>{entry.candidateEvidence}</p>
+                  </>
+                )}
+              </li>
+            ))}
           </ol>
         </article>
       )}

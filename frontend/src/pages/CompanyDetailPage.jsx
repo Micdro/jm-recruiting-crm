@@ -8,7 +8,20 @@ import Timeline from '../components/Timeline.jsx';
 import CompanyForm from '../forms/CompanyForm.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
 import SearchForm from '../forms/SearchForm.jsx';
-import { COMPANY_STATUS, OUTREACH_STATUS, SEARCH_STATUS, TRACK } from '../labels.js';
+import {
+  BUYING_ROLE,
+  COMPANY_STATUS,
+  HIRING_NEED,
+  INDUSTRY,
+  LEAD_SOURCE,
+  OUTREACH_STATUS,
+  PRIORITY,
+  SEARCH_STATUS,
+  SEGMENT,
+  TIER,
+  TIMELINE,
+  TRACK,
+} from '../labels.js';
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 
@@ -16,10 +29,10 @@ export default function CompanyDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const company = useLoader(() => api.companies.get(id), [id]);
-  const contacts = useLoader(() => api.contacts.list({ companyId: id }), [id]);
-  const searches = useLoader(() => api.searches.list({ companyId: id }), [id]);
-  const history = useLoader(() => api.activities.list({ companyId: id }), [id]);
+  const company = useLoader(() => api.companies.get(id), [id], `company:${id}`);
+  const contacts = useLoader(() => api.contacts.list({ companyId: id }), [id], `company:${id}:contacts`);
+  const searches = useLoader(() => api.searches.list({ companyId: id }), [id], `company:${id}:searches`);
+  const history = useLoader(() => api.activities.list({ companyId: id }), [id], `company:${id}:history`);
   const [modal, setModal] = useState(null);
   const [error, setError] = useState('');
 
@@ -50,6 +63,12 @@ export default function CompanyDetailPage() {
           <h1>{record.name}</h1>
           <div className="page-sub page-sub-row">
             <Pill value={record.status} labels={COMPANY_STATUS} />
+            <Pill value={record.priority} labels={PRIORITY} />
+            {record.followUpDate && (
+              <span>
+                Follow up <DueTag date={record.followUpDate} today={today} />
+              </span>
+            )}
             {record.focus && <span>{record.focus}</span>}
           </div>
         </div>
@@ -92,7 +111,9 @@ export default function CompanyDetailPage() {
                       <Link to={`/contacts/${contact.id}`} className="cell-title">
                         {contact.name}
                       </Link>
-                      {contact.title && <span className="cell-sub">{contact.title}</span>}
+                      <span className="cell-sub">
+                        {[contact.title, BUYING_ROLE[contact.buyingRole]].filter(Boolean).join(', ')}
+                      </span>
                     </div>
                     <Pill value={contact.status} labels={OUTREACH_STATUS} />
                     <TouchPips count={contact.touchCount} />
@@ -137,6 +158,14 @@ export default function CompanyDetailPage() {
             </div>
             <Details
               items={[
+                { label: 'Industry', value: INDUSTRY[record.industry] },
+                { label: 'Segments', value: (record.segments ?? []).map((value) => SEGMENT[value]).join(', ') },
+                { label: 'Tier', value: TIER[record.tier] },
+                { label: 'Hiring need', value: HIRING_NEED[record.hiringNeed] },
+                { label: 'Timeline', value: TIMELINE[record.hiringTimeline] },
+                { label: 'Anticipated hires', value: record.anticipatedHires },
+                { label: 'Lead source', value: LEAD_SOURCE[record.leadSource] },
+                { label: 'Last contacted', value: record.lastContactedDate && formatDate(record.lastContactedDate) },
                 { label: 'Website', value: record.website && <ExternalLink href={href(record.website)}>{record.website}</ExternalLink> },
                 { label: 'LinkedIn', value: record.linkedinProfile && <ExternalLink href={href(record.linkedinProfile)}>Company page</ExternalLink> },
                 { label: 'Location', value: record.location },
@@ -153,9 +182,11 @@ export default function CompanyDetailPage() {
             <h2 id="company-history">History</h2>
           </div>
           <NoteForm
+            withFollowUp
             onSave={async (body) => {
               await api.activities.note({ ...body, companyId: record.id });
               history.reload();
+              company.reload();
             }}
           />
           <Timeline activities={history.data} loading={history.loading} show={['contact', 'candidate', 'search']} />

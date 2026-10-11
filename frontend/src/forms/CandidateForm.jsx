@@ -1,8 +1,18 @@
 import { useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { ErrorNote } from '../components/Bits.jsx';
-import { CheckboxField, OwnerField, SelectField, TextArea, TextField } from '../components/Fields.jsx';
-import { ACTION_TYPE, CANDIDATE_SOURCE, CANDIDATE_STATUS, TRACK, options } from '../labels.js';
+import { CheckboxField, CheckboxGroup, OwnerField, SelectField, TextArea, TextField } from '../components/Fields.jsx';
+import {
+  ACTION_TYPE,
+  CANDIDATE_SOURCE,
+  CANDIDATE_STATUS,
+  EMPLOYMENT_TYPE,
+  EXPERIENCE,
+  ROLE_AREA,
+  TRACK,
+  WORK_MODEL,
+  options,
+} from '../labels.js';
 import { useAuth, useUsers } from '../hooks.js';
 import { asForm, blankToNull, toId } from './formUtils.js';
 
@@ -18,6 +28,11 @@ const FIELDS = {
   status: 'ACTIVE',
   source: '',
   regulatedExperience: false,
+  roleAreas: [],
+  experience: '',
+  workPreference: '',
+  employmentType: '',
+  willingToRelocate: false,
   compExpectation: '',
   resumeUrl: '',
   productionEvidence: '',
@@ -58,6 +73,11 @@ export default function CandidateForm({ candidate, onSaved, onCancel }) {
       status: form.status || null,
       source: form.source || null,
       regulatedExperience: !!form.regulatedExperience,
+      roleAreas: form.roleAreas,
+      experience: blankToNull(form.experience),
+      workPreference: blankToNull(form.workPreference),
+      employmentType: blankToNull(form.employmentType),
+      willingToRelocate: !!form.willingToRelocate,
       compExpectation: blankToNull(form.compExpectation),
       resumeUrl: blankToNull(form.resumeUrl),
       productionEvidence: blankToNull(form.productionEvidence),
@@ -96,7 +116,7 @@ export default function CandidateForm({ candidate, onSaved, onCancel }) {
         value={form.productionEvidence}
         onChange={set('productionEvidence')}
         rows={4}
-        maxLength={4000}
+        maxLength={10000}
         placeholder="Systems they owned in production, decisions they made, incidents they handled"
         hint="Accountability over titles: what they were answerable for, with specifics."
       />
@@ -105,6 +125,33 @@ export default function CandidateForm({ candidate, onSaved, onCancel }) {
         checked={form.regulatedExperience}
         onChange={set('regulatedExperience')}
       />
+      <CheckboxGroup
+        label="Applicable roles"
+        options={options(ROLE_AREA)}
+        value={form.roleAreas}
+        onChange={set('roleAreas')}
+        hint="Which part of production AI they cover."
+      />
+      <div className="form-row">
+        <SelectField label="Experience" value={form.experience} onChange={set('experience')} options={options(EXPERIENCE)} placeholder="Not set" />
+        <SelectField
+          label="Employment"
+          value={form.employmentType}
+          onChange={set('employmentType')}
+          options={options(EMPLOYMENT_TYPE)}
+          placeholder="Not set"
+        />
+      </div>
+      <div className="form-row">
+        <SelectField
+          label="Work preference"
+          value={form.workPreference}
+          onChange={set('workPreference')}
+          options={options(WORK_MODEL)}
+          placeholder="Not set"
+        />
+        <CheckboxField label="Willing to relocate" checked={form.willingToRelocate} onChange={set('willingToRelocate')} />
+      </div>
       <div className="form-row">
         <TextField label="Email" type="email" value={form.email} onChange={set('email')} maxLength={255} />
         <TextField label="Phone" type="tel" value={form.phone} onChange={set('phone')} maxLength={50} />
@@ -131,7 +178,7 @@ export default function CandidateForm({ candidate, onSaved, onCancel }) {
         <TextField label="Last contacted" type="date" value={form.lastContactedDate} onChange={set('lastContactedDate')} />
         <OwnerField users={users} value={form.ownerId} onChange={set('ownerId')} />
       </div>
-      <TextArea label="Notes" value={form.notes} onChange={set('notes')} maxLength={2000} />
+      <TextArea label="Notes" value={form.notes} onChange={set('notes')} rows={4} maxLength={10000} />
 
       <ErrorNote>{error}</ErrorNote>
       <div className="form-actions">

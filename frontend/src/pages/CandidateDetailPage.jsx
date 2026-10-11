@@ -7,7 +7,19 @@ import LogActivityForm from '../components/LogActivityForm.jsx';
 import Modal from '../components/Modal.jsx';
 import Timeline from '../components/Timeline.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
-import { ACTION_TYPE, CANDIDATE_SOURCE, CANDIDATE_STATUS, OPEN_SEARCH_STATUSES, STAGE, TRACK, options } from '../labels.js';
+import {
+  ACTION_TYPE,
+  CANDIDATE_SOURCE,
+  CANDIDATE_STATUS,
+  EMPLOYMENT_TYPE,
+  EXPERIENCE,
+  OPEN_SEARCH_STATUSES,
+  ROLE_AREA,
+  STAGE,
+  TRACK,
+  WORK_MODEL,
+  options,
+} from '../labels.js';
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 
@@ -15,9 +27,9 @@ export default function CandidateDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const candidate = useLoader(() => api.candidates.get(id), [id]);
-  const pipeline = useLoader(() => api.candidates.pipeline(id), [id]);
-  const history = useLoader(() => api.activities.list({ candidateId: id }), [id]);
+  const candidate = useLoader(() => api.candidates.get(id), [id], `candidate:${id}`);
+  const pipeline = useLoader(() => api.candidates.pipeline(id), [id], `candidate:${id}:pipeline`);
+  const history = useLoader(() => api.activities.list({ candidateId: id }), [id], `candidate:${id}:history`);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
 
@@ -121,6 +133,11 @@ export default function CandidateDetailPage() {
                 { label: 'Resume', value: record.resumeUrl && <ExternalLink href={href(record.resumeUrl)}>Open resume</ExternalLink> },
                 { label: 'Location', value: record.location },
                 { label: 'Track', value: TRACK[record.track] },
+                { label: 'Roles', value: (record.roleAreas ?? []).map((area) => ROLE_AREA[area]).join(', ') },
+                { label: 'Experience', value: EXPERIENCE[record.experience] },
+                { label: 'Works', value: WORK_MODEL[record.workPreference] },
+                { label: 'Employment', value: EMPLOYMENT_TYPE[record.employmentType] },
+                { label: 'Relocation', value: record.willingToRelocate ? 'Willing to relocate' : null },
                 { label: 'Compensation', value: record.compExpectation },
                 { label: 'Source', value: CANDIDATE_SOURCE[record.source] },
                 { label: 'Last contacted', value: record.lastContactedDate && formatDate(record.lastContactedDate) },
@@ -158,7 +175,7 @@ export default function CandidateDetailPage() {
 
 function CandidateSearches({ candidate, entries, onChanged }) {
   const toast = useToast();
-  const searches = useLoader(() => api.searches.list(), []);
+  const searches = useLoader(() => api.searches.list(), [], 'searches');
   const [searchId, setSearchId] = useState('');
   const [error, setError] = useState('');
 

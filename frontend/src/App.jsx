@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import Layout from './components/Layout.jsx';
 import { Loading } from './components/Bits.jsx';
@@ -13,7 +14,8 @@ import SearchDetailPage from './pages/SearchDetailPage.jsx';
 import CandidatesPage from './pages/CandidatesPage.jsx';
 import CandidateDetailPage from './pages/CandidateDetailPage.jsx';
 import PlacementsPage from './pages/PlacementsPage.jsx';
-import ImportPage from './pages/ImportPage.jsx';
+// The CSV reader is only needed on the import page, so it loads when that page opens.
+const ImportPage = lazy(() => import('./pages/ImportPage.jsx'));
 import TeamPage from './pages/TeamPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
@@ -55,7 +57,14 @@ export default function App() {
         <Route path="candidates" element={<CandidatesPage />} />
         <Route path="candidates/:id" element={<CandidateDetailPage />} />
         <Route path="placements" element={<PlacementsPage />} />
-        <Route path="import" element={<ImportPage />} />
+        <Route
+          path="import"
+          element={
+            <Suspense fallback={<Loading label="Opening import" />}>
+              <ImportPage />
+            </Suspense>
+          }
+        />
         <Route path="team" element={<TeamPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

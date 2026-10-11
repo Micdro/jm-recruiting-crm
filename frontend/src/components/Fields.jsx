@@ -76,3 +76,29 @@ export function OwnerField({ users, value, onChange, label = 'Owner' }) {
     />
   );
 }
+
+/** Several choices from a fixed list, stored as an array of values. */
+export function CheckboxGroup({ label, options, value, onChange, hint }) {
+  const selected = value ?? [];
+  const toggle = (option, checked) =>
+    onChange(checked ? [...selected, option] : selected.filter((item) => item !== option));
+
+  return (
+    <fieldset className="field check-group">
+      <legend>{label}</legend>
+      <div className="check-group-options">
+        {options.map((option) => (
+          <label key={option.value} className="check-option">
+            <input
+              type="checkbox"
+              checked={selected.includes(option.value)}
+              onChange={(event) => toggle(option.value, event.target.checked)}
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+      {hint && <p className="field-hint">{hint}</p>}
+    </fieldset>
+  );
+}

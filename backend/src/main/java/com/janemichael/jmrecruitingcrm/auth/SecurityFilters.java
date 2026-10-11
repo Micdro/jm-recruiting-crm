@@ -19,6 +19,11 @@ final class SecurityFilters {
     private SecurityFilters() {
     }
 
+    /** The path within the app, independent of how the servlet is mapped. */
+    static String path(HttpServletRequest request) {
+        return request.getRequestURI().substring(request.getContextPath().length());
+    }
+
     static void writeError(HttpServletResponse response, int status, String error, String message)
             throws IOException {
         response.setStatus(status);
@@ -38,7 +43,7 @@ final class SecurityFilters {
 
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
-            return !("POST".equals(request.getMethod()) && "/api/auth/login".equals(request.getServletPath()));
+            return !("POST".equals(request.getMethod()) && "/api/auth/login".equals(path(request)));
         }
 
         @Override
@@ -71,7 +76,7 @@ final class SecurityFilters {
 
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
-            return !request.getServletPath().startsWith("/api/");
+            return !path(request).startsWith("/api/");
         }
 
         @Override

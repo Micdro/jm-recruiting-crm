@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { errorMessage } from '../api.js';
 import { ErrorNote } from './Bits.jsx';
-import { SelectField, TextArea } from './Fields.jsx';
+import { SelectField, TextArea, TextField } from './Fields.jsx';
 
-/** A short note, call or meeting about a company or search. */
-export default function NoteForm({ onSave }) {
+/**
+ * A short note, call or meeting about a company or search. For companies, a follow-up date can be
+ * set at the same time; logging a call, email or meeting clears a follow-up that was due.
+ */
+export default function NoteForm({ onSave, withFollowUp = false }) {
   const [summary, setSummary] = useState('');
   const [type, setType] = useState('NOTE');
+  const [followUpDate, setFollowUpDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -18,8 +22,9 @@ export default function NoteForm({ onSave }) {
         setBusy(true);
         setError('');
         try {
-          await onSave({ type, summary });
+          await onSave(withFollowUp ? { type, summary, followUpDate: followUpDate || null } : { type, summary });
           setSummary('');
+          setFollowUpDate('');
         } catch (err) {
           setError(errorMessage(err));
         } finally {
@@ -41,6 +46,7 @@ export default function NoteForm({ onSave }) {
             { value: 'EMAIL', label: 'Email' },
           ]}
         />
+        {withFollowUp && <TextField label="Follow up on" type="date" value={followUpDate} onChange={setFollowUpDate} />}
         <button type="submit" className="btn btn-sm" disabled={busy || !summary.trim()}>
           {busy ? 'Saving…' : 'Save note'}
         </button>

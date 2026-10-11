@@ -23,7 +23,9 @@ export function asForm(record, fields) {
   const form = {};
   for (const [key, fallback] of Object.entries(fields)) {
     const value = record?.[key];
-    form[key] = value === undefined || value === null ? fallback : typeof value === 'boolean' ? value : String(value);
+    if (value === undefined || value === null) form[key] = fallback;
+    else if (typeof value === 'boolean' || Array.isArray(value)) form[key] = value;
+    else form[key] = String(value);
   }
   return form;
 }

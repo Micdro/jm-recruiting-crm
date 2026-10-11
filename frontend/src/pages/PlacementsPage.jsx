@@ -11,7 +11,7 @@ import { useLoader, useTitle, useToast } from '../hooks.js';
 export default function PlacementsPage() {
   useTitle('Placements');
   const toast = useToast();
-  const placements = useLoader(() => api.placements.list(), []);
+  const placements = useLoader(() => api.placements.list(), [], 'placements');
   const [editing, setEditing] = useState(null);
 
   const list = placements.data ?? [];

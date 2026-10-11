@@ -11,16 +11,19 @@ test.describe('Companies', () => {
     const dialog = page.getByRole('dialog', { name: 'Add company' });
     await dialog.getByLabel('Company name').fill(name);
     await dialog.getByLabel('Focus').fill('AI model risk monitoring for insurers');
-    await dialog.getByLabel('Status').selectOption({ label: 'Prospecting' });
+    await dialog.getByLabel('Stage').selectOption({ label: 'Initial outreach' });
+    await dialog.getByLabel('Priority').selectOption({ label: 'High' });
+    await dialog.getByLabel('Compliance and AML').check();
     await dialog.getByLabel('Location').fill('Boston, MA');
     await dialog.getByRole('button', { name: 'Save company' }).click();
 
     await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
     await expect(page.getByText('AI model risk monitoring for insurers')).toBeVisible();
-    await expect(page.getByText('Prospecting', { exact: true })).toBeVisible();
+    await expect(page.getByText('Initial outreach', { exact: true })).toBeVisible();
+    await expect(page.getByText('Compliance and AML')).toBeVisible();
 
     const saved = await crm.findCompanyByName(name);
-    expect(saved).toMatchObject({ name, status: 'PROSPECTING', location: 'Boston, MA' });
+    expect(saved).toMatchObject({ name, status: 'INITIAL_OUTREACH', priority: 'HIGH', location: 'Boston, MA' });
   });
 
   test('lists companies and filters by name', async ({ page, crm }) => {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { ErrorNote } from '../components/Bits.jsx';
 import { OwnerField, SelectField, TextArea, TextField } from '../components/Fields.jsx';
-import { ACTION_TYPE, OUTREACH_STATUS, options } from '../labels.js';
+import { ACTION_TYPE, BUYING_ROLE, OUTREACH_STATUS, options } from '../labels.js';
 import { useAuth, useLoader, useUsers } from '../hooks.js';
 import { asForm, blankToNull, toId } from './formUtils.js';
 
@@ -13,9 +13,11 @@ const FIELDS = {
   phone: '',
   linkedinUrl: '',
   status: 'NEW',
+  buyingRole: '',
   lastContactedDate: '',
   nextActionDate: '',
-  nextActionType: 'EMAIL',
+  // The sequence opens on LinkedIn, then alternates with email.
+  nextActionType: 'LINKEDIN',
   notes: '',
   companyId: '',
   ownerId: '',
@@ -25,7 +27,7 @@ const FIELDS = {
 export default function ContactForm({ contact, onSaved, onCancel }) {
   const { user } = useAuth();
   const users = useUsers();
-  const companies = useLoader(() => api.companies.list(), []);
+  const companies = useLoader(() => api.companies.list(), [], 'companies');
   const [form, setForm] = useState(() => {
     const initial = asForm(contact, FIELDS);
     if (!contact?.id && !initial.ownerId && user) initial.ownerId = String(user.id);
@@ -48,9 +50,10 @@ export default function ContactForm({ contact, onSaved, onCancel }) {
       phone: blankToNull(form.phone),
       linkedinUrl: blankToNull(form.linkedinUrl),
       status: form.status || null,
+      buyingRole: blankToNull(form.buyingRole),
       lastContactedDate: form.lastContactedDate || null,
       nextActionDate: form.nextActionDate || null,
-      nextActionType: form.nextActionDate ? form.nextActionType || 'EMAIL' : null,
+      nextActionType: form.nextActionDate ? form.nextActionType || null : null,
       notes: blankToNull(form.notes),
       companyId: toId(form.companyId),
       ownerId: toId(form.ownerId),
@@ -73,14 +76,24 @@ export default function ContactForm({ contact, onSaved, onCancel }) {
         <TextField label="Contact name" value={form.name} onChange={set('name')} required maxLength={255} autoFocus />
         <TextField label="Title" value={form.title} onChange={set('title')} placeholder="VP Engineering" maxLength={255} />
       </div>
-      <SelectField
-        label="Company"
-        value={form.companyId}
-        onChange={set('companyId')}
-        options={companyOptions}
-        placeholder={companies.loading ? 'Loading companies…' : 'Select a company'}
-        required
-      />
+      <div className="form-row">
+        <SelectField
+          label="Company"
+          value={form.companyId}
+          onChange={set('companyId')}
+          options={companyOptions}
+          placeholder={companies.loading && !companies.data ? 'Loading companies…' : 'Select a company'}
+          required
+        />
+        <SelectField
+          label="Buying role"
+          value={form.buyingRole}
+          onChange={set('buyingRole')}
+          options={options(BUYING_ROLE)}
+          placeholder="Not set"
+          hint="Buyer signs off on the search; influencers shape it."
+        />
+      </div>
       <div className="form-row">
         <TextField label="Email" type="email" value={form.email} onChange={set('email')} maxLength={255} />
         <TextField label="Phone" type="tel" value={form.phone} onChange={set('phone')} maxLength={50} />
@@ -107,7 +120,7 @@ export default function ContactForm({ contact, onSaved, onCancel }) {
         />
       </div>
       <TextField label="Last contacted" type="date" value={form.lastContactedDate} onChange={set('lastContactedDate')} />
-      <TextArea label="Notes" value={form.notes} onChange={set('notes')} rows={4} maxLength={2000} />
+      <TextArea label="Notes" value={form.notes} onChange={set('notes')} rows={4} maxLength={10000} />
 
       <ErrorNote>{error}</ErrorNote>
       <div className="form-actions">

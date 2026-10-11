@@ -27,7 +27,7 @@ const FIELDS = {
  */
 export default function PlacementForm({ placement, onSaved, onCancel, onDeleted }) {
   const [form, setForm] = useState(() => asForm(placement, FIELDS));
-  const searches = useLoader(() => api.searches.list(), []);
+  const searches = useLoader(() => api.searches.list(), [], 'searches');
   const pipeline = useLoader(
     () => (form.searchId ? api.searches.pipeline(form.searchId) : Promise.resolve([])),
     [form.searchId],

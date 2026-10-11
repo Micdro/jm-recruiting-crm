@@ -1302,6 +1302,32 @@ a.cell-title:hover {
   grid-column: 2;
 }
 
+.check-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.check-group legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.check-group-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.check-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
 .form-actions {
   display: flex;
   flex-wrap: wrap;
