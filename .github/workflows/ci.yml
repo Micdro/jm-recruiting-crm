@@ -285,8 +285,6 @@ jobs:
     permissions:
       contents: write
     env:
-      # A folder name with a space, like most Windows user folders.
-      JMCRM_HOME: ${{ runner.temp }}\JM CRM test
       JMCRM_NO_BROWSER: '1'
     steps:
       - uses: actions/checkout@v7
@@ -335,6 +333,9 @@ jobs:
 
       - name: Start the app and set it up
         shell: pwsh
+        env:
+          # A folder name with a space, like most Windows user folders.
+          JMCRM_HOME: ${{ runner.temp }}\JM CRM test
         run: |
           $app = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
           $base = 'http://127.0.0.1:4780'
@@ -369,6 +370,8 @@ jobs:
       - name: Show the app log
         if: failure()
         shell: pwsh
+        env:
+          JMCRM_HOME: ${{ runner.temp }}\JM CRM test
         run: |
           Get-ChildItem -Recurse "$env:JMCRM_HOME\logs" -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Output "--- $($_.Name)"
