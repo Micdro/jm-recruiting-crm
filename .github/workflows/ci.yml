@@ -373,10 +373,15 @@ jobs:
         env:
           JMCRM_HOME: ${{ runner.temp }}\JM CRM test
         run: |
-          Get-ChildItem -Recurse "$env:JMCRM_HOME\logs" -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Output "--- $($_.Name)"
-            Get-Content $_.FullName -Tail 150
+          $lines = @()
+          Get-ChildItem -Recurse "$env:JMCRM_HOME\logs" -File -ErrorAction SilentlyContinue | ForEach-Object {
+            $lines += "--- $($_.Name)"
+            $lines += Get-Content $_.FullName | Select-String -Pattern 'ERROR|Exception|Caused by|WARN' | Select-Object -First 30 | ForEach-Object { $_.Line }
+            $lines += Get-Content $_.FullName -Tail 25
           }
+          if ($lines.Count -eq 0) { $lines = @('No log files were written.') }
+          $message = ($lines | ForEach-Object { $_.Substring(0, [Math]::Min(300, $_.Length)) }) -join '%0A'
+          Write-Output "::error title=Windows app log::$message"
 
       - uses: actions/upload-artifact@v7
         with:

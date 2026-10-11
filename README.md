@@ -28,6 +28,27 @@ Built with Java 21, Spring Boot 4, PostgreSQL (Flyway migrations), React 19 and 
 
 Everything a person does is recorded in the activity history on the record it touches.
 
+## Windows app (each computer keeps its own copy)
+
+The team runs the CRM as a Windows app. Each computer has its own built-in database, so pages
+open and save instantly, and the copies sync with each other over Tailscale within a few seconds.
+Setup steps for the team: **[docs/WINDOWS.md](docs/WINDOWS.md)**.
+
+How it works:
+
+- `JM CRM.exe` (built by CI with jpackage) starts PostgreSQL from files bundled in the app, keeps
+  its data in `%LOCALAPPDATA%\JMCRM`, and serves the CRM on http://localhost:4780 only.
+- Every change to a shared table is versioned by a database trigger. Each computer asks the others
+  for changes on a separate sync port (4781), authenticated with a token derived from the CRM key,
+  and applies them: the newest version of a row wins, rows wait for their parents, a delete that
+  would orphan someone else's new record is undone, and duplicate pipeline entries or accounts
+  collapse to one.
+- Each computer creates ids in its own range (computer 2 from 2,000,000,001), so new records never
+  collide.
+- Encrypted fields travel encrypted; every computer shares the same key.
+- The same app still deploys as a server (below); a server could later join the group as one more
+  computer.
+
 ## Run it locally
 
 You need Java 21, Node 22 and PostgreSQL 16 (or Docker).
