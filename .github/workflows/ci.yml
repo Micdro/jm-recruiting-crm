@@ -241,3 +241,153 @@ jobs:
           docker logs crm > container.log 2>&1 || true
           message=$(grep -E ' ERROR |Exception|Caused by' container.log | head -30 | cut -c1-400 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Container log::${message:-$(tail -30 container.log | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')}"
+
+  sync:
+    name: Two desktop copies stay in sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Build the desktop app (Linux database files)
+        working-directory: backend
+        run: ./mvnw -B -q -DskipTests -Pdesktop-linux package
+
+      # Two copies, each with its own database and ports, set up, joined and synced both ways.
+      - name: Sync two desktop copies
+        working-directory: e2e
+        run: |
+          jar=$(ls ../backend/target/jm-recruiting-crm-*.jar | grep -v original | head -1)
+          node sync/two-computers.mjs "$jar" 2>&1 | tee sync.log
+          test "${PIPESTATUS[0]}" = 0
+
+      - name: Report sync failures
+        if: failure()
+        working-directory: e2e
+        run: |
+          message=$(grep -E 'Failed|Timed out|ERROR|Exception|Caused by' sync.log | head -40 | cut -c1-400 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Sync test::${message:-$(tail -40 sync.log | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')}"
+
+  windows:
+    name: Windows app builds, starts and sets up
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      # A folder name with a space, like most Windows user folders.
+      JMCRM_HOME: ${{ runner.temp }}\JM CRM test
+      JMCRM_NO_BROWSER: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the React app
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build the desktop jar (Windows database files)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force backend/src/main/resources/static | Out-Null
+          Copy-Item -Recurse -Force frontend/dist/* backend/src/main/resources/static/
+          Push-Location backend
+          ./mvnw.cmd -B -q -DskipTests -Pdesktop-windows package
+          if ($LASTEXITCODE -ne 0) { throw "Maven build failed" }
+          New-Item -ItemType Directory -Force target/desktop | Out-Null
+          $jar = Get-ChildItem target/jm-recruiting-crm-*.jar | Where-Object { $_.Name -notlike '*original*' } | Select-Object -First 1
+          Copy-Item $jar.FullName target/desktop/app.jar
+          Pop-Location
+
+      - name: Package JM CRM.exe
+        shell: pwsh
+        run: |
+          jpackage --type app-image --name "JM CRM" --input backend/target/desktop --main-jar app.jar `
+            --dest dist --icon packaging/windows/jm-crm.ico --app-version "1.0.${{ github.run_number }}" `
+            --vendor "Jane Michael LLC" --description "Jane Michael recruiting CRM" `
+            --java-options "-Djmcrm.desktop=true" --java-options "-Xmx768m"
+          if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }
+          Compress-Archive -Path "dist/JM CRM" -DestinationPath JM-CRM-Windows.zip
+          "{0:N0} MB" -f ((Get-Item JM-CRM-Windows.zip).Length / 1MB)
+
+      - name: Start the app and set it up
+        shell: pwsh
+        run: |
+          $app = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
+          $base = 'http://127.0.0.1:4780'
+          $up = $false
+          for ($i = 0; $i -lt 120; $i++) {
+            try { if ((Invoke-WebRequest -UseBasicParsing "$base/api/health").StatusCode -eq 200) { $up = $true; break } } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $up) { throw "The app did not start" }
+
+          $status = Invoke-RestMethod "$base/api/setup/status"
+          if (-not ($status.desktop -and $status.needsSetup)) { throw "Expected the setup screen, got $($status | ConvertTo-Json)" }
+
+          Invoke-WebRequest -UseBasicParsing "$base/api/auth/csrf" -SessionVariable session | Out-Null
+          $token = ($session.Cookies.GetCookies($base) | Where-Object Name -eq 'XSRF-TOKEN').Value
+          $body = @{ computerName = 'CI'; name = 'CI Admin'; email = 'ci@jane-michael.test'; password = 'ci-password-123' } | ConvertTo-Json
+          $result = Invoke-RestMethod -Method Post -Uri "$base/api/setup/start" -WebSession $session `
+            -ContentType 'application/json' -Headers @{ 'X-XSRF-TOKEN' = $token } -Body $body
+          if ($result.key.Length -ne 44) { throw "Setup did not return a key" }
+
+          $page = Invoke-WebRequest -UseBasicParsing "$base/"
+          if ($page.Content -notmatch 'id="root"') { throw "The app page did not load" }
+          if (-not (Test-Path "$env:JMCRM_HOME\settings.properties")) { throw "The key was not saved" }
+
+          # Opening it again while it runs just opens the browser.
+          $second = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
+          if (-not $second.WaitForExit(60000)) { throw "A second copy kept running" }
+
+          Stop-Process -Id $app.Id -Force
+          Write-Output "The Windows app starts its database, serves the CRM and completes setup"
+
+      - name: Show the app log
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse "$env:JMCRM_HOME\logs" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Output "--- $($_.Name)"
+            Get-Content $_.FullName -Tail 150
+          }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: JM-CRM-Windows
+          path: JM-CRM-Windows.zip
+
+      # A stable download link for the newest build of main.
+      - name: Publish the download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete windows-latest --yes --cleanup-tag 2>$null
+          gh release create windows-latest JM-CRM-Windows.zip --target "${{ github.sha }}" `
+            --title "JM CRM for Windows" `
+            --notes "Download JM-CRM-Windows.zip, unzip it, and open JM CRM.exe. Setup steps: docs/WINDOWS.md."
