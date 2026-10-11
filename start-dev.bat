@@ -17,7 +17,7 @@ echo Starting backend...
 start "JM CRM Backend" cmd /k "cd /d %~dp0backend && mvnw spring-boot:run"
 
 echo Starting frontend...
-start "JM CRM Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
+start "JM CRM Frontend" cmd /k "cd /d %~dp0frontend && npm install && npm run dev"
 
 echo.
 echo Services are starting in separate terminal windows.

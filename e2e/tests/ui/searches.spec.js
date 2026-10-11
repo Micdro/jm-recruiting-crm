@@ -24,7 +24,7 @@ test.describe('Searches', () => {
       await dialog.getByRole('button', { name: 'Save and move to Shortlisted' }).click();
 
       const shortlisted = page.getByRole('region', { name: 'Shortlisted, 1' });
-      await expect(shortlisted.getByText(candidate.name)).toBeVisible();
+      await expect(shortlisted.getByRole('link', { name: candidate.name })).toBeVisible();
     });
 
     await test.step('the shortlist shows the rationale and evidence', async () => {
