@@ -6,6 +6,7 @@ import com.janemichael.jmrecruitingcrm.auth.AppUserRepository;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.EncryptionBackfill;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
+import com.janemichael.jmrecruitingcrm.common.KeyWrap;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -140,7 +141,38 @@ class ApiIntegrationTest {
         mockMvc.perform(get("/api/auth/me").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(EMAIL))
-                .andExpect(jsonPath("$.role").value("ADMIN"));
+                .andExpect(jsonPath("$.role").value("ADMIN"))
+                .andExpect(jsonPath("$.crmLocked").value(false));
+    }
+
+    @Test
+    void signingInSavesTheAccountsOwnLockedCopyOfTheKeyAndUnlocksALockedCrm() throws Exception {
+        String key = encryptor.exportKey();
+        mockMvc.perform(login(EMAIL, PASSWORD, "198.51.100.30")).andExpect(status().isNoContent());
+
+        String wrapped = userRepository.findByEmailIgnoreCase(EMAIL).orElseThrow().getKeyWrap();
+        assertThat(wrapped).startsWith("kw1:").doesNotContain(key.substring(0, 20));
+        assertThat(KeyWrap.unwrap(wrapped, PASSWORD)).isEqualTo(key);
+
+        encryptor.lock();
+        try {
+            mockMvc.perform(signedIn(get("/api/companies")))
+                    .andExpect(status().isLocked())
+                    .andExpect(jsonPath("$.error").value("Locked"));
+            mockMvc.perform(signedIn(get("/api/auth/me")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.crmLocked").value(true));
+            mockMvc.perform(get("/api/health")).andExpect(status().isOk());
+
+            // The password opens this person's copy, which unlocks the CRM.
+            mockMvc.perform(login(EMAIL, PASSWORD, "198.51.100.30")).andExpect(status().isNoContent());
+            assertThat(encryptor.isConfigured()).isTrue();
+            mockMvc.perform(signedIn(get("/api/companies"))).andExpect(status().isOk());
+        } finally {
+            if (!encryptor.isConfigured()) {
+                encryptor.configure(key);
+            }
+        }
     }
 
     @Test
@@ -228,6 +260,7 @@ class ApiIntegrationTest {
 
         long contactId = id(mockMvc.perform(send(post("/api/contacts"), body(
                         "name", "Morgan Lee",
+                        "title", "Platform Lead",
                         "email", "morgan@ciphertest.test",
                         "phone", "+1 212 555 0101",
                         "notes", "Prefers LinkedIn",
@@ -247,6 +280,40 @@ class ApiIntegrationTest {
 
         String companyNotes = jdbc.queryForObject("select notes from company where id = ?", String.class, companyId);
         assertThat(companyNotes).startsWith("enc:v1:").doesNotContain("Budget");
+
+        // Names, titles and money too: nothing that identifies anyone is stored readable.
+        Map<String, Object> company = jdbc.queryForMap("select name, name_hash from company where id = ?", companyId);
+        assertThat((String) company.get("name")).startsWith("enc:v1:").doesNotContain("Cipher");
+        assertThat(company.get("name_hash")).isEqualTo(encryptor.blindIndex("cipher test co"));
+        Map<String, Object> person = jdbc.queryForMap("select name, title from contact where id = ?", contactId);
+        assertThat((String) person.get("name")).startsWith("enc:v1:").doesNotContain("Morgan");
+        assertThat((String) person.get("title")).startsWith("enc:v1:").doesNotContain("Platform");
+
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", companyId,
+                        "title", "Head of Applied AI",
+                        "track", "PRODUCTION_AI_ENGINEERING",
+                        "location", "New York",
+                        "baseMin", 210000,
+                        "baseMax", 260000)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        entityManager.flush();
+        Map<String, Object> search = jdbc.queryForMap(
+                "select title, location, base_min, base_max from job_search where id = ?", searchId);
+        assertThat((String) search.get("title")).startsWith("enc:v1:").doesNotContain("Applied");
+        assertThat((String) search.get("location")).startsWith("enc:v1:").doesNotContain("York");
+        assertThat((String) search.get("base_min")).startsWith("enc:v1:").doesNotContain("210");
+        assertThat((String) search.get("base_max")).startsWith("enc:v1:").doesNotContain("260");
+        mockMvc.perform(signedIn(get("/api/searches/" + searchId)))
+                .andExpect(jsonPath("$.title").value("Head of Applied AI"))
+                .andExpect(jsonPath("$.baseMin").value(210000));
+
+        // Companies are still matched by name, ignoring case.
+        mockMvc.perform(send(post("/api/companies"), body("name", "CIPHER TEST CO")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(signedIn(get("/api/companies").param("q", "cipher")))
+                .andExpect(jsonPath("$[0].name").value("Cipher Test Co"));
 
         // Reading back through the app decrypts, and duplicates are still caught.
         mockMvc.perform(signedIn(get("/api/contacts/" + contactId)))
@@ -300,6 +367,18 @@ class ApiIntegrationTest {
         mockMvc.perform(signedIn(get("/api/users")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.email == 'jane@jane-michael.test')]").exists());
+
+        // Their own copy of the key, locked with the password they were given.
+        String wrapped = userRepository.findByEmailIgnoreCase("jane@jane-michael.test").orElseThrow().getKeyWrap();
+        assertThat(KeyWrap.unwrap(wrapped, "a-long-password")).isEqualTo(encryptor.exportKey());
+
+        mockMvc.perform(send(post("/api/users"), body(
+                        "email", "short@jane-michael.test",
+                        "displayName", "Short",
+                        "role", "MEMBER",
+                        "password", "elevenchars")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("Password must be at least 12 characters"));
     }
 
     // Recruiting flow -----------------------------------------------------------

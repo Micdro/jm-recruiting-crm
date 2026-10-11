@@ -2,6 +2,7 @@ package com.janemichael.jmrecruitingcrm;
 
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor.CrmLockedException;
 import com.janemichael.jmrecruitingcrm.common.ForbiddenException;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -60,6 +61,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiErrorResponse> handleForbidden(ForbiddenException exception) {
         return respond(HttpStatus.FORBIDDEN, "Forbidden", List.of(exception.getMessage()));
+    }
+
+    /** Encrypted data was needed while the desktop CRM is locked (normally caught earlier by LockedFilter). */
+    @ExceptionHandler(CrmLockedException.class)
+    public ResponseEntity<ApiErrorResponse> handleLocked(CrmLockedException exception) {
+        return respond(HttpStatus.LOCKED, "Locked", List.of(exception.getMessage()));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

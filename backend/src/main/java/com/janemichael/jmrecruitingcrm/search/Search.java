@@ -2,6 +2,7 @@ package com.janemichael.jmrecruitingcrm.search;
 
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
+import com.janemichael.jmrecruitingcrm.common.EncryptedInteger;
 import com.janemichael.jmrecruitingcrm.common.EncryptedString;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.contact.Contact;
@@ -39,6 +40,7 @@ public class Search extends Auditable {
     private Contact hiringManager;
 
     @Column(nullable = false)
+    @Convert(converter = EncryptedString.class)
     private String title;
 
     @Enumerated(EnumType.STRING)
@@ -57,11 +59,14 @@ public class Search extends Auditable {
     private BigDecimal feePercent;
 
     @Column(name = "base_min")
+    @Convert(converter = EncryptedInteger.class)
     private Integer baseMin;
 
     @Column(name = "base_max")
+    @Convert(converter = EncryptedInteger.class)
     private Integer baseMax;
 
+    @Convert(converter = EncryptedString.class)
     private String location;
 
     @Enumerated(EnumType.STRING)

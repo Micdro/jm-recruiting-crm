@@ -33,11 +33,12 @@ the desktop, and starts with Windows from then on so sync keeps running.
 
 ## 3. The first computer: start the CRM
 
-1. Choose **Start a new CRM**. Enter your name, email and a password (10 characters or more).
+1. Choose **Start a new CRM**. Enter your name, email and a password (12 characters or more).
 2. Windows asks twice about network access, so your computers can sync. Click **Allow access**,
    then **Yes**.
-3. The app shows your **CRM key**. Copy it into your password manager now. You need it to add
-   the other computers, and it's the only way to read the data on a replacement computer.
+3. The app shows your **CRM key**. Copy it into your password manager now. You need it to add or
+   replace a computer, and to set a new password if one is forgotten. It isn't saved on the
+   computer and isn't shown again.
 4. Sign in.
 5. On the **Team** page, add an account for everyone else, with their full names (for example
    Dimitrios Drougas). Give each person their password privately.
@@ -66,11 +67,27 @@ A computer can join through any computer that's already set up, not only the fir
 - Two people can work at the same time. If two people change the same record before their
   computers sync, the later change wins. Logged touches and notes are always kept.
 
+## Locked until you sign in
+
+Everything that identifies a client or candidate is encrypted in the database, and the key that
+reads it isn't stored on the computer. Your password unlocks it: signing in opens the CRM, and it
+locks again when everyone on that computer has signed out, after 12 hours without use, or when the
+app closes or the computer restarts. While it's locked, nobody can read the data, even with the
+database files in hand. Sync keeps running, so changes still arrive.
+
+- **Forgot your password?** Ask an admin to set a new one on the Team page. Or, on the sign-in
+  page, click **Forgot your password?** and use the CRM key from your password manager.
+- **"Unlock the CRM" after signing in**: your account can't open the CRM on this computer yet
+  (for example, it was set up with an older version). Paste the CRM key once. After that, your
+  password does it.
+
 ## Backups and the key
 
 - Every computer holds a full copy, so losing one computer loses nothing as long as another has
   synced.
 - The CRM key is the one thing that can't be replaced. Keep it in your password manager.
+- Use a password of 12 characters or more that you don't use anywhere else. It protects the data
+  on every computer.
 - Each computer's data is in `%LOCALAPPDATA%\JMCRM` (the database, settings and logs). Turn on
   disk encryption on every computer, since each one carries the full client and candidate list:
   search Settings for "Device encryption" (Windows Home) or "BitLocker" (Windows Pro).
@@ -79,9 +96,11 @@ A computer can join through any computer that's already set up, not only the fir
 
 1. On each computer, open **This computer** and click **Close**.
 2. Replace the JM CRM folder with the one from the new zip (same location).
-3. Open JM CRM.exe.
+3. Open JM CRM.exe and sign in.
 
-Update all computers on the same day.
+Update all computers on the same day. Computers set up before the CRM locked itself kept the key
+in the settings file; after the update, the first sign-in on each computer moves it into your
+account and removes it from the file.
 
 ## If something isn't syncing
 

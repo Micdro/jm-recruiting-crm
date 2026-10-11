@@ -31,8 +31,10 @@ public class Contact extends Auditable {
     private Long id;
 
     @Column(nullable = false)
+    @Convert(converter = EncryptedString.class)
     private String name;
 
+    @Convert(converter = EncryptedString.class)
     private String title;
 
     @Convert(converter = EncryptedString.class)
@@ -50,6 +52,7 @@ public class Contact extends Auditable {
     private BuyingRole buyingRole;
 
     @Column(name = "linkedin_url")
+    @Convert(converter = EncryptedString.class)
     private String linkedinUrl;
 
     @Enumerated(EnumType.STRING)

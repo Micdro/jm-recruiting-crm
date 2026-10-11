@@ -19,6 +19,7 @@ const ImportPage = lazy(() => import('./pages/ImportPage.jsx'));
 import TeamPage from './pages/TeamPage.jsx';
 import ThisComputerPage from './pages/ThisComputerPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
+import UnlockPage from './pages/UnlockPage.jsx';
 
 function RequireAuth({ children }) {
   const { user, ready } = useAuth();
@@ -33,6 +34,9 @@ function RequireAuth({ children }) {
   }
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  }
+  if (user.crmLocked) {
+    return <UnlockPage />;
   }
   return children;
 }

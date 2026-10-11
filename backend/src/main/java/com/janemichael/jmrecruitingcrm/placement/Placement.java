@@ -2,6 +2,7 @@ package com.janemichael.jmrecruitingcrm.placement;
 
 import com.janemichael.jmrecruitingcrm.candidate.Candidate;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
+import com.janemichael.jmrecruitingcrm.common.EncryptedDecimal;
 import com.janemichael.jmrecruitingcrm.common.EncryptedInteger;
 import com.janemichael.jmrecruitingcrm.common.EncryptedString;
 import com.janemichael.jmrecruitingcrm.search.Search;
@@ -53,6 +54,7 @@ public class Placement extends Auditable {
     private BigDecimal feePercent;
 
     @Column(name = "fee_amount")
+    @Convert(converter = EncryptedDecimal.class)
     private BigDecimal feeAmount;
 
     @Enumerated(EnumType.STRING)

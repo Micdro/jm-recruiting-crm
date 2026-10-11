@@ -2,11 +2,14 @@ package com.janemichael.jmrecruitingcrm.desktop;
 
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.auth.AppUserRepository;
+import com.janemichael.jmrecruitingcrm.auth.CrmLock;
+import com.janemichael.jmrecruitingcrm.auth.LoginThrottle;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.EncryptionBackfill;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
+import com.janemichael.jmrecruitingcrm.common.KeyWrap;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.sync.SyncClient;
 import com.janemichael.jmrecruitingcrm.sync.SyncClient.SyncException;
@@ -18,6 +21,7 @@ import com.janemichael.jmrecruitingcrm.sync.SyncService.Peer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,13 +33,21 @@ import java.nio.file.Path;
 /**
  * First run on a computer: either start a new CRM (this becomes computer 1 and gets a new key) or
  * join one that already runs on another computer (copying everything from it).
+ *
+ * <p>Only the sync token is saved on this computer. The CRM key is shown once to be kept in a
+ * password manager, and each account keeps its own copy locked with its password, so the data on
+ * this computer can only be read after someone signs in.
  */
 @Service
 public class SetupService {
 
     private static final Logger log = LoggerFactory.getLogger(SetupService.class);
 
-    public record Status(boolean desktop, boolean needsSetup, String suggestedName) {
+    /**
+     * @param needsSetup this desktop copy hasn't been started or joined yet
+     * @param locked     set up, but nobody has unlocked it since the app started
+     */
+    public record Status(boolean desktop, boolean needsSetup, boolean locked, String suggestedName) {
     }
 
     public record StartResult(String key) {
@@ -54,6 +66,8 @@ public class SetupService {
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final EncryptionBackfill backfill;
+    private final CrmLock crmLock;
+    private final LoginThrottle loginThrottle;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
@@ -68,6 +82,8 @@ public class SetupService {
             AppUserRepository users,
             PasswordEncoder passwordEncoder,
             EncryptionBackfill backfill,
+            CrmLock crmLock,
+            LoginThrottle loginThrottle,
             JdbcTemplate jdbc,
             TransactionTemplate transaction
     ) {
@@ -81,16 +97,20 @@ public class SetupService {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.backfill = backfill;
+        this.crmLock = crmLock;
+        this.loginThrottle = loginThrottle;
         this.jdbc = jdbc;
         this.transaction = transaction;
     }
 
     public Status status() {
-        return new Status(desktop, needsSetup(), desktop ? computerName() : null);
+        boolean needsSetup = needsSetup();
+        return new Status(desktop, needsSetup, desktop && !needsSetup && crmLock.isLocked(),
+                desktop ? computerName() : null);
     }
 
     private boolean needsSetup() {
-        return desktop && !encryptor.isConfigured();
+        return desktop && !encryptor.hasSyncToken();
     }
 
     /** Starts a brand-new CRM on this computer. Returns the new key, shown once to be saved. */
@@ -107,10 +127,11 @@ public class SetupService {
             admin.setRole(UserRole.ADMIN);
             admin.setActive(true);
             admin.setPasswordHash(passwordEncoder.encode(password));
+            crmLock.lockKeyFor(admin, password);
             users.save(admin);
         });
 
-        settings().saveEncryptionKey(key);
+        settings().saveSyncToken(encryptor.syncToken());
         finishSetup();
         log.info("Started a new CRM on this computer");
         return new StartResult(key);
@@ -125,7 +146,7 @@ public class SetupService {
         }
         String token;
         try {
-            token = new FieldEncryptor(key.trim()).syncToken();
+            token = FieldEncryptor.syncTokenFor(key.trim());
         } catch (IllegalStateException invalid) {
             throw new BadRequestException("That isn't a CRM key. Paste the whole key, exactly as saved.");
         }
@@ -139,7 +160,7 @@ public class SetupService {
 
         encryptor.configure(key.trim());
         identity.become((int) joined.nodeId(), clean(computerName, computerName()), false);
-        settings().saveEncryptionKey(key.trim());
+        settings().saveSyncToken(token);
 
         Peer peer = new Peer(joined.node().id(), joined.node().name(), address);
         String problem = sync.syncWith(peer);
@@ -157,9 +178,33 @@ public class SetupService {
                         + " It will keep trying in the background.");
     }
 
+    /**
+     * A forgotten password: the CRM key from the password manager sets a new one. Whoever has the key
+     * can read everything anyway, so it is allowed to do this; nobody else is.
+     */
+    public synchronized void resetPasswordWithKey(String email, String key, String newPassword) {
+        if (!desktop || !encryptor.hasSyncToken()) {
+            throw new NotFoundException("Not found");
+        }
+        String cleanKey = key == null ? "" : key.trim();
+        if (!encryptor.isThisCrmsKey(cleanKey)) {
+            throw new BadRequestException("That isn't this CRM's key. Paste the whole key, exactly as saved.");
+        }
+        AppUser user = users.findByEmailIgnoreCase(email == null ? "" : email.trim())
+                .filter(AppUser::isActive)
+                .orElseThrow(() -> new BadRequestException("There's no active account with that email"));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setKeyWrap(KeyWrap.wrap(cleanKey, newPassword));
+        users.save(user);
+        loginThrottle.recordSuccess(user.getEmail());
+        log.info("Set a new password for {} with the CRM key", user.getEmail());
+    }
+
+    /** Opens the sync port, then locks the CRM until someone signs in. */
     private void finishSetup() {
         server.open();
         backfill.run(null);
+        crmLock.lockIfNobodySignedIn();
         DesktopOs.setStartsWithWindows(true);
         DesktopOs.allowSyncThroughFirewall(sync.syncPort());
     }
@@ -168,8 +213,24 @@ public class SetupService {
         if (!desktop) {
             throw new NotFoundException("Not found");
         }
-        if (encryptor.isConfigured()) {
+        if (encryptor.hasSyncToken()) {
             throw new ConflictException("This computer is already set up.");
+        }
+    }
+
+    /**
+     * Older versions kept the CRM key in settings.properties. Once someone has signed in and their
+     * own locked copy is saved, the key is no longer needed on disk.
+     */
+    @EventListener
+    public void accountCanUnlock(CrmLock.AccountCanUnlock event) {
+        if (!desktop) {
+            return;
+        }
+        DesktopSettings settings = settings();
+        if (settings.legacyEncryptionKey() != null) {
+            settings.forgetLegacyEncryptionKey();
+            log.info("Removed the CRM key from settings.properties; signing in unlocks the CRM from now on");
         }
     }
 

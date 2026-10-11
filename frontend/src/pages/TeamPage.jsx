@@ -140,9 +140,9 @@ function AddUserForm({ onCancel, onSaved }) {
         value={form.password}
         onChange={set('password')}
         required
-        minLength={10}
+        minLength={12}
         autoComplete="off"
-        hint="At least 10 characters. Share it privately and ask them to change it after signing in."
+        hint="At least 12 characters. Share it privately and ask them to change it after signing in."
       />
       <ErrorNote>{error}</ErrorNote>
       <div className="form-actions">
@@ -197,9 +197,9 @@ function ResetPasswordForm({ member, onCancel, onSaved }) {
         value={password}
         onChange={setPassword}
         required
-        minLength={10}
+        minLength={12}
         autoComplete="off"
-        hint={`At least 10 characters. Share it with ${member.displayName} privately.`}
+        hint={`At least 12 characters. Share it with ${member.displayName} privately.`}
         autoFocus
       />
       <ErrorNote>{error}</ErrorNote>
@@ -243,9 +243,9 @@ function ChangePasswordForm({ onDone }) {
         value={next}
         onChange={setNext}
         required
-        minLength={10}
+        minLength={12}
         autoComplete="new-password"
-        hint="At least 10 characters."
+        hint="At least 12 characters."
       />
       <ErrorNote>{error}</ErrorNote>
       <div className="form-actions">

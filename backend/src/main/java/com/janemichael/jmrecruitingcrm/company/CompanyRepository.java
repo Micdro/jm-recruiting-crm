@@ -10,15 +10,16 @@ import java.util.Optional;
 
 public interface CompanyRepository extends JpaRepository<Company, Long> {
 
-    @Query("select c from Company c left join fetch c.owner order by lower(c.name)")
+    /** Names are encrypted, so callers sort by name themselves. */
+    @Query("select c from Company c left join fetch c.owner")
     List<Company> findAllWithOwner();
 
     @Query("select c from Company c left join fetch c.owner where c.id = :id")
     Optional<Company> findWithOwnerById(@Param("id") Long id);
 
-    boolean existsByNameIgnoreCase(String name);
+    boolean existsByNameHash(String nameHash);
 
-    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
+    boolean existsByNameHashAndIdNot(String nameHash, Long id);
 
     @Modifying
     @Query("DELETE FROM Company c WHERE c.id = :id")

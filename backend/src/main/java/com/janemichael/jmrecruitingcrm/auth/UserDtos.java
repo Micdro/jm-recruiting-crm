@@ -8,7 +8,10 @@ import jakarta.validation.constraints.Size;
 /** Request and response shapes for users and passwords. */
 public final class UserDtos {
 
-    public static final int MIN_PASSWORD_LENGTH = 10;
+    /** Long enough that a stolen database can't be cracked to unlock the CRM key (see KeyWrap). */
+    public static final int MIN_PASSWORD_LENGTH = 12;
+
+    public static final String PASSWORD_TOO_SHORT = "Password must be at least " + MIN_PASSWORD_LENGTH + " characters";
 
     private UserDtos() {
     }
@@ -26,6 +29,16 @@ public final class UserDtos {
         }
     }
 
+    /** The signed-in person, and whether this computer's CRM is still locked for them. */
+    public record SignedInUser(
+            Long id, String email, String displayName, UserRole role, boolean active, boolean crmLocked) {
+
+        public static SignedInUser from(AppUser user, boolean crmLocked) {
+            return new SignedInUser(user.getId(), user.getEmail(), user.getDisplayName(), user.getRole(),
+                    user.isActive(), crmLocked);
+        }
+    }
+
     public record CreateUserRequest(
             @NotBlank(message = "Email is required")
             @Email(message = "Email must be valid")
@@ -40,7 +53,7 @@ public final class UserDtos {
             UserRole role,
 
             @NotBlank(message = "Password is required")
-            @Size(min = MIN_PASSWORD_LENGTH, max = 200, message = "Password must be at least 10 characters")
+            @Size(min = MIN_PASSWORD_LENGTH, max = 200, message = PASSWORD_TOO_SHORT)
             String password
     ) {
     }
@@ -60,7 +73,7 @@ public final class UserDtos {
 
     public record ResetPasswordRequest(
             @NotBlank(message = "Password is required")
-            @Size(min = MIN_PASSWORD_LENGTH, max = 200, message = "Password must be at least 10 characters")
+            @Size(min = MIN_PASSWORD_LENGTH, max = 200, message = PASSWORD_TOO_SHORT)
             String password
     ) {
     }
@@ -70,7 +83,7 @@ public final class UserDtos {
             String currentPassword,
 
             @NotBlank(message = "New password is required")
-            @Size(min = MIN_PASSWORD_LENGTH, max = 200, message = "New password must be at least 10 characters")
+            @Size(min = MIN_PASSWORD_LENGTH, max = 200, message = "New password must be at least " + MIN_PASSWORD_LENGTH + " characters")
             String newPassword
     ) {
     }

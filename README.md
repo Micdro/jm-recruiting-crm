@@ -46,6 +46,13 @@ How it works:
 - Each computer creates ids in its own range (computer 2 from 2,000,000,001), so new records never
   collide.
 - Encrypted fields travel encrypted; every computer shares the same key.
+- **Locked until someone signs in.** The CRM key is never written to disk. Each account holds its
+  own copy of the key, locked with that person's password (Argon2id, 64 MiB, then AES-256-GCM),
+  stored with the account and synced like any other row. Signing in opens it in memory; the CRM
+  locks again when the last person on that computer signs out, their session expires, or the app
+  closes. While locked, data requests get 423 and only sync (which copies scrambled rows) runs.
+  The CRM key from the password manager can unlock an account that has no copy yet, or set a new
+  password when one is forgotten.
 - The same app still deploys as a server (below); a server could later join the group as one more
   computer.
 
@@ -111,7 +118,7 @@ Build with `docker build -t jm-recruiting-crm .` and set:
 | --- | --- |
 | `DATABASE_URL` | `postgresql://user:password@host:5432/dbname` (or set `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`) |
 | `APP_ENCRYPTION_KEY` | **Required.** 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts sensitive fields. Keep a copy in your password manager; losing it loses that data. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | First admin account, created when no users exist. Password at least 10 characters. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | First admin account, created when no users exist. Password at least 12 characters. |
 | `DB_SSLMODE` | TLS to the database. Defaults to `prefer` (TLS whenever offered). Use `verify-full` for a database reached over the public internet. |
 | `COOKIE_SECURE` | `true` when served over HTTPS (always in production) |
 | `APP_TIMEZONE` | Time zone for "today" and daily touch counts. Defaults to `America/New_York`. |
@@ -119,13 +126,19 @@ Build with `docker build -t jm-recruiting-crm .` and set:
 
 ## Security
 
-- **Encryption at rest.** Emails, phone numbers, notes, compensation, salaries, production
-  evidence, search briefs, shortlist rationales and activity notes are encrypted with
-  AES-256-GCM before they reach the database. A stolen database or backup is unreadable without
-  `APP_ENCRYPTION_KEY`. Emails also get a keyed fingerprint (HMAC-SHA256) so duplicates are
-  still caught. Existing plain-text rows are encrypted automatically on the first start.
-- **Passwords** are hashed with Argon2id (19 MiB memory, 2 iterations, the OWASP setting).
-  Older bcrypt hashes are upgraded the next time that person signs in.
+- **Encryption at rest.** Everything that identifies a person or company is encrypted with
+  AES-256-GCM before it reaches the database: names, titles, employers, emails, phone numbers,
+  LinkedIn pages, locations, websites, notes, compensation, salaries, fees, search titles and
+  briefs, shortlist rationales and activity notes. A stolen database or backup is unreadable
+  without the key. Emails and company names also get a keyed fingerprint (HMAC-SHA256) so
+  duplicates are still caught. Existing plain-text rows are encrypted automatically the next time
+  the CRM starts (server) or is unlocked (Windows app). Teammates' own names and emails stay
+  readable, since signing in needs them.
+- **No key on disk (Windows app).** See "Locked until someone signs in" above. A server reads its
+  key from `APP_ENCRYPTION_KEY` instead.
+- **Passwords** are at least 12 characters and hashed with Argon2id (19 MiB memory, 2
+  iterations, the OWASP setting). Older bcrypt hashes are upgraded the next time that person
+  signs in.
 - **Sign-in throttling.** Five wrong passwords for one account, or twenty from one address,
   within 15 minutes block further attempts for the rest of that window.
 - **Sessions** last 12 hours. Deactivating someone ends their session on their next request.

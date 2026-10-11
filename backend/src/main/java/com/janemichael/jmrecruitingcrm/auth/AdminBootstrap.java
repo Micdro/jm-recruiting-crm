@@ -20,6 +20,7 @@ public class AdminBootstrap implements ApplicationRunner {
 
     private final AppUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CrmLock crmLock;
     private final String email;
     private final String password;
     private final String name;
@@ -28,6 +29,7 @@ public class AdminBootstrap implements ApplicationRunner {
     public AdminBootstrap(
             AppUserRepository userRepository,
             PasswordEncoder passwordEncoder,
+            CrmLock crmLock,
             @Value("${app.bootstrap.admin-email:}") String email,
             @Value("${app.bootstrap.admin-password:}") String password,
             @Value("${app.bootstrap.admin-name:Admin}") String name,
@@ -35,6 +37,7 @@ public class AdminBootstrap implements ApplicationRunner {
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.crmLock = crmLock;
         this.email = email;
         this.password = password;
         this.name = name;
@@ -65,6 +68,7 @@ public class AdminBootstrap implements ApplicationRunner {
         admin.setRole(UserRole.ADMIN);
         admin.setActive(true);
         admin.setPasswordHash(passwordEncoder.encode(password));
+        crmLock.lockKeyFor(admin, password);
         userRepository.save(admin);
 
         log.info("Created the first admin account for {}", admin.getEmail());

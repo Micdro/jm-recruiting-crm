@@ -75,4 +75,41 @@ class FieldEncryptorTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("32");
     }
+
+    @Test
+    void aLockedCopyKnowsItsSyncTokenButCannotReadOrWriteUntilUnlocked() {
+        FieldEncryptor locked = new FieldEncryptor("", true, FieldEncryptor.syncTokenFor(TEST_KEY));
+        String stored = encryptor.encrypt("Dana Reyes");
+
+        assertThat(locked.isConfigured()).isFalse();
+        assertThat(locked.hasSyncToken()).isTrue();
+        assertThat(locked.syncToken()).isEqualTo(encryptor.syncToken());
+        assertThatThrownBy(() -> locked.decrypt(stored)).isInstanceOf(FieldEncryptor.CrmLockedException.class);
+        assertThatThrownBy(() -> locked.encrypt("x")).isInstanceOf(FieldEncryptor.CrmLockedException.class);
+        assertThatThrownBy(() -> locked.blindIndex("x")).isInstanceOf(FieldEncryptor.CrmLockedException.class);
+
+        assertThat(locked.isThisCrmsKey(OTHER_KEY)).isFalse();
+        assertThat(locked.isThisCrmsKey("not a key")).isFalse();
+        assertThat(locked.isThisCrmsKey(TEST_KEY)).isTrue();
+        assertThatThrownBy(() -> locked.configure(OTHER_KEY)).hasMessage("That isn't this CRM's key.");
+        assertThat(locked.isConfigured()).isFalse();
+
+        locked.configure(TEST_KEY);
+        assertThat(locked.decrypt(stored)).isEqualTo("Dana Reyes");
+        assertThat(locked.exportKey()).isEqualTo(TEST_KEY);
+
+        locked.lock();
+        assertThat(locked.isConfigured()).isFalse();
+        assertThat(locked.hasSyncToken()).isTrue();
+        assertThatThrownBy(() -> locked.decrypt(stored)).isInstanceOf(FieldEncryptor.CrmLockedException.class);
+    }
+
+    @Test
+    void aDesktopCopyThatWasNeverSetUpHasNoSyncToken() {
+        FieldEncryptor fresh = new FieldEncryptor(null, true, null);
+
+        assertThat(fresh.isConfigured()).isFalse();
+        assertThat(fresh.hasSyncToken()).isFalse();
+        assertThat(fresh.isThisCrmsKey(TEST_KEY)).isFalse();
+    }
 }

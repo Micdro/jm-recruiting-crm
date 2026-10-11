@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.desktop;
 
 import com.janemichael.jmrecruitingcrm.JmRecruitingCrmApplication;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,8 +99,18 @@ public final class DesktopLauncher {
         System.setProperty("app.desktop.home", home.toString());
         System.setProperty("app.sync.port", String.valueOf(syncPort));
         System.setProperty("logging.file.name", home.resolve("logs").resolve("jm-crm.log").toString());
-        if (settings.encryptionKey() != null) {
-            System.setProperty("app.encryption.key", settings.encryptionKey());
+        // Only the sync token is kept on disk. The app starts locked and is unlocked by signing in.
+        String legacyKey = settings.legacyEncryptionKey();
+        if (settings.syncToken() == null && legacyKey != null) {
+            settings.saveSyncToken(FieldEncryptor.syncTokenFor(legacyKey));
+        }
+        if (settings.syncToken() != null) {
+            System.setProperty("app.sync.token", settings.syncToken());
+        }
+        if (legacyKey != null) {
+            // Set up by an older version, which kept the key on disk. Start unlocked this once, so each
+            // person's sign-in can save their own locked copy; then the key is removed from the file.
+            System.setProperty("app.encryption.key", legacyKey);
         }
 
         SpringApplication application = new SpringApplication(JmRecruitingCrmApplication.class);

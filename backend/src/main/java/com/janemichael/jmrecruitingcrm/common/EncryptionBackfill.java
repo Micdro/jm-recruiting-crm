@@ -14,8 +14,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * On startup, encrypts any sensitive values still stored as plain text (for example rows saved before
- * encryption was switched on) and fills in missing email fingerprints. Safe to run every time.
+ * Encrypts any sensitive values still stored as plain text (rows saved before a field was encrypted,
+ * or copied in from an older version) and fills in missing fingerprints. Runs at startup on a server
+ * and whenever a desktop copy is unlocked. Safe to run every time.
  */
 @Component
 @Order(0)
@@ -27,14 +28,14 @@ public class EncryptionBackfill implements ApplicationRunner {
     static final Map<String, List<String>> ENCRYPTED_COLUMNS = new LinkedHashMap<>();
 
     static {
-        ENCRYPTED_COLUMNS.put("company", List.of("notes"));
-        ENCRYPTED_COLUMNS.put("contact", List.of("email", "phone", "notes"));
-        ENCRYPTED_COLUMNS.put("candidate",
-                List.of("email", "phone", "comp_expectation", "resume_url", "production_evidence", "notes"));
-        ENCRYPTED_COLUMNS.put("job_search",
-                List.of("production_outcome", "technical_scope", "accountability", "regulatory_constraints", "notes"));
+        ENCRYPTED_COLUMNS.put("company", List.of("name", "website", "location", "focus", "linkedin_profile", "notes"));
+        ENCRYPTED_COLUMNS.put("contact", List.of("name", "title", "email", "phone", "linkedin_url", "notes"));
+        ENCRYPTED_COLUMNS.put("candidate", List.of("name", "email", "phone", "linkedin_url", "location",
+                "current_title", "current_company", "comp_expectation", "resume_url", "production_evidence", "notes"));
+        ENCRYPTED_COLUMNS.put("job_search", List.of("title", "location", "base_min", "base_max",
+                "production_outcome", "technical_scope", "accountability", "regulatory_constraints", "notes"));
         ENCRYPTED_COLUMNS.put("pipeline_entry", List.of("rationale"));
-        ENCRYPTED_COLUMNS.put("placement", List.of("base_salary", "notes"));
+        ENCRYPTED_COLUMNS.put("placement", List.of("base_salary", "fee_amount", "notes"));
         ENCRYPTED_COLUMNS.put("activity", List.of("summary"));
     }
 
@@ -49,7 +50,7 @@ public class EncryptionBackfill implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (!encryptor.isConfigured()) {
-            // A desktop copy that hasn't been set up yet. Runs again when setup finishes.
+            // A desktop copy that is locked or not set up yet. Runs again when it is unlocked.
             return;
         }
         int encrypted = 0;
@@ -59,10 +60,11 @@ public class EncryptionBackfill implements ApplicationRunner {
             }
         }
 
-        int indexed = indexEmails("contact") + indexEmails("candidate");
+        int indexed = index("contact", "email", "email_hash") + index("candidate", "email", "email_hash")
+                + index("company", "name", "name_hash");
 
         if (encrypted > 0 || indexed > 0) {
-            log.info("Encrypted {} stored values and indexed {} emails", encrypted, indexed);
+            log.info("Encrypted {} stored values and fingerprinted {} emails and names", encrypted, indexed);
         }
     }
 
@@ -82,19 +84,21 @@ public class EncryptionBackfill implements ApplicationRunner {
         return updates.size();
     }
 
-    private int indexEmails(String table) {
+    /** Fills in missing fingerprints (for finding duplicates) from the decrypted values. */
+    private int index(String table, String column, String hashColumn) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT id, email FROM " + table + " WHERE email IS NOT NULL AND email_hash IS NULL");
+                "SELECT id, " + column + " AS value FROM " + table
+                        + " WHERE " + column + " IS NOT NULL AND " + hashColumn + " IS NULL");
         if (rows.isEmpty()) {
             return 0;
         }
 
         List<Object[]> updates = new ArrayList<>();
         for (Map<String, Object> row : rows) {
-            String email = encryptor.decrypt((String) row.get("email"));
-            updates.add(new Object[]{encryptor.blindIndex(email), row.get("id")});
+            String value = encryptor.decrypt((String) row.get("value"));
+            updates.add(new Object[]{encryptor.blindIndex(value), row.get("id")});
         }
-        jdbc.batchUpdate("UPDATE " + table + " SET email_hash = ? WHERE id = ?", updates);
+        jdbc.batchUpdate("UPDATE " + table + " SET " + hashColumn + " = ? WHERE id = ?", updates);
         return updates.size();
     }
 }

@@ -113,7 +113,7 @@ public class SyncServer implements SmartLifecycle {
 
     private void handle(HttpExchange exchange) throws IOException {
         try {
-            if (!encryptor.isConfigured() || !identity.isEnabled()) {
+            if (!encryptor.hasSyncToken() || !identity.isEnabled()) {
                 send(exchange, 404, new ErrorResponse("The CRM on that computer isn't set up yet."));
                 return;
             }

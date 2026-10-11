@@ -1,11 +1,16 @@
 package com.janemichael.jmrecruitingcrm.desktop;
 
+import com.janemichael.jmrecruitingcrm.auth.CrmLock;
 import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ForbiddenException;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity;
 import com.janemichael.jmrecruitingcrm.sync.SyncService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
@@ -21,7 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The "This computer" page: sync status, start with Windows, the firewall and quitting. */
+/** The "This computer" page (sync status, start with Windows, the firewall and quitting) and unlocking. */
 @RestController
 @RequestMapping("/api/desktop")
 @ConditionalOnProperty(name = "app.desktop.enabled", havingValue = "true")
@@ -42,24 +47,48 @@ public class DesktopController {
     public record FirewallStatus(boolean allowed) {
     }
 
+    public record UnlockRequest(
+            @NotBlank(message = "Paste the CRM key")
+            @Size(max = 200, message = "That key is too long")
+            String key,
+
+            @NotBlank(message = "Enter your password")
+            @Size(max = 200, message = "That password is too long")
+            String password
+    ) {
+    }
+
     private final SyncService sync;
     private final SyncIdentity identity;
     private final CurrentUserService currentUser;
     private final JdbcTemplate jdbc;
     private final ApplicationContext context;
+    private final CrmLock crmLock;
 
     public DesktopController(
             SyncService sync,
             SyncIdentity identity,
             CurrentUserService currentUser,
             JdbcTemplate jdbc,
-            ApplicationContext context
+            ApplicationContext context,
+            CrmLock crmLock
     ) {
         this.sync = sync;
         this.identity = identity;
         this.currentUser = currentUser;
         this.jdbc = jdbc;
         this.context = context;
+        this.crmLock = crmLock;
+    }
+
+    /**
+     * For someone signed in whose account has no copy of the key that opens on this computer yet:
+     * the CRM key from the password manager unlocks it once, and their password does from then on.
+     */
+    @PostMapping("/unlock")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unlock(@Valid @RequestBody UnlockRequest request, HttpServletRequest http) {
+        crmLock.unlockWithKey(http.getSession().getId(), currentUser.get(), request.key(), request.password());
     }
 
     @GetMapping("/status")

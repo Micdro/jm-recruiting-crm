@@ -107,7 +107,8 @@ public class SyncService {
 
     @Scheduled(initialDelayString = "${app.sync.initial-delay-ms:3000}", fixedDelayString = "${app.sync.interval-ms:5000}")
     public void syncAll() {
-        if (!identity.isEnabled() || !encryptor.isConfigured()) {
+        // Runs while the CRM is locked too: it copies scrambled data without reading it.
+        if (!identity.isEnabled() || !encryptor.hasSyncToken()) {
             return;
         }
         for (Peer peer : peers()) {

@@ -3,6 +3,7 @@ package com.janemichael.jmrecruitingcrm.company;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.common.Auditable;
 import com.janemichael.jmrecruitingcrm.common.EncryptedString;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -15,6 +16,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 
 import java.time.LocalDate;
 
@@ -27,10 +30,17 @@ public class Company extends Auditable {
     private Long id;
 
     @Column(nullable = false)
+    @Convert(converter = EncryptedString.class)
     private String name;
 
+    /** A keyed fingerprint of the name, so duplicate names are caught without decrypting. */
+    @Column(name = "name_hash")
+    private String nameHash;
+
+    @Convert(converter = EncryptedString.class)
     private String website;
 
+    @Convert(converter = EncryptedString.class)
     private String location;
 
     @Column(name = "company_size")
@@ -41,6 +51,7 @@ public class Company extends Auditable {
     private CompanyStatus status = CompanyStatus.LEAD;
 
     /** What the company sells and to whom, for example "AI fraud detection for banks". */
+    @Convert(converter = EncryptedString.class)
     private String focus;
 
     @Enumerated(EnumType.STRING)
@@ -77,6 +88,7 @@ public class Company extends Auditable {
     private LocalDate followUpDate;
 
     @Column(name = "linkedin_profile")
+    @Convert(converter = EncryptedString.class)
     private String linkedinProfile;
 
     @Convert(converter = EncryptedString.class)
@@ -95,6 +107,12 @@ public class Company extends Auditable {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    @PrePersist
+    @PreUpdate
+    void indexName() {
+        nameHash = FieldEncryptor.current().blindIndex(name);
     }
 
     public String getName() {

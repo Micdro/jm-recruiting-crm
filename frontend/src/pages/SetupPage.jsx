@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, errorMessage } from '../api.js';
-import { ErrorNote } from '../components/Bits.jsx';
+import { ErrorNote, LoginBrand } from '../components/Bits.jsx';
 import { CheckboxField, TextField } from '../components/Fields.jsx';
 import { useTitle } from '../hooks.js';
 
@@ -16,19 +16,7 @@ export default function SetupPage({ status, onDone }) {
   return (
     <div className="login">
       <div className="login-panel setup-panel">
-        <div className="login-brand">
-          <svg viewBox="0 0 32 32" width="40" height="40" aria-hidden="true">
-            <rect width="32" height="32" rx="6" fill="currentColor" />
-            <g stroke="#6FC3A6" strokeWidth="2.4" strokeLinecap="round">
-              <path d="M9 9v14M13.5 9v14M18 9v14M22.5 9v14" />
-              <path d="M6.5 20.5 25 11.5" stroke="#F4F6F5" />
-            </g>
-          </svg>
-          <div>
-            <p className="login-firm">Jane Michael</p>
-            <h1>Set up this computer</h1>
-          </div>
-        </div>
+        <LoginBrand title="Set up this computer" />
 
         {result?.key && <SaveKey value={result.key} onDone={onDone} />}
         {result?.joined && <Joined result={result.joined} onDone={onDone} />}
@@ -147,8 +135,8 @@ function StartForm({ status, onStarted }) {
         value={form.password}
         onChange={set('password')}
         autoComplete="new-password"
-        minLength={10}
-        hint="At least 10 characters."
+        minLength={12}
+        hint="At least 12 characters."
         required
       />
       <TextField label="Name for this computer" value={form.computerName} onChange={set('computerName')} maxLength={100} />
@@ -172,8 +160,8 @@ function SaveKey({ value, onDone }) {
     <div className="form">
       <h2>Save your CRM key</h2>
       <p>
-        Put this key in your password manager now. You’ll need it to add the other computers, and it’s the only way to read
-        the data if this computer is ever replaced. It won’t be shown again.
+        Put this key in your password manager now. You’ll need it to add or replace a computer, and it’s the only way into the
+        data if every password is forgotten. It isn’t saved on this computer and won’t be shown again.
       </p>
       <div className="key-box">
         <code>{value}</code>

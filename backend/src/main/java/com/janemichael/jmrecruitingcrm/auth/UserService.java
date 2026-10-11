@@ -3,6 +3,7 @@ package com.janemichael.jmrecruitingcrm.auth;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.ChangePasswordRequest;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.CreateUserRequest;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.ResetPasswordRequest;
+import com.janemichael.jmrecruitingcrm.auth.UserDtos.SignedInUser;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.UpdateUserRequest;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.UserResponse;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
@@ -21,19 +22,22 @@ public class UserService {
     private final AppUserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final PasswordEncoder passwordEncoder;
+    private final CrmLock crmLock;
 
     public UserService(
             AppUserRepository userRepository,
             CurrentUserService currentUserService,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            CrmLock crmLock
     ) {
         this.userRepository = userRepository;
         this.currentUserService = currentUserService;
         this.passwordEncoder = passwordEncoder;
+        this.crmLock = crmLock;
     }
 
-    public UserResponse me() {
-        return UserResponse.from(currentUserService.get());
+    public SignedInUser me() {
+        return SignedInUser.from(currentUserService.get(), crmLock.isLocked());
     }
 
     public List<UserResponse> list() {
@@ -58,6 +62,7 @@ public class UserService {
         user.setRole(request.role());
         user.setActive(true);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        crmLock.lockKeyFor(user, request.password());
 
         return UserResponse.from(userRepository.save(user));
     }
@@ -88,6 +93,7 @@ public class UserService {
         currentUserService.requireAdmin();
         AppUser user = find(id);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        crmLock.lockKeyFor(user, request.password());
     }
 
     @Transactional
@@ -99,6 +105,7 @@ public class UserService {
         }
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        crmLock.lockKeyFor(user, request.newPassword());
         userRepository.save(user);
     }
 

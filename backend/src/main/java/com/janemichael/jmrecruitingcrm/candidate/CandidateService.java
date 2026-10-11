@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,7 @@ public class CandidateService {
                         || (candidate.getOwner() != null && candidate.getOwner().getId().equals(ownerId)))
                 .filter(candidate -> !dueOnly || isDue(candidate, today))
                 .filter(candidate -> query == null || matches(candidate, query))
+                .sorted(Comparator.comparing((Candidate candidate) -> candidate.getName().toLowerCase()))
                 .map(candidate -> CandidateResponse.summary(candidate,
                         activeCounts.getOrDefault(candidate.getId(), 0L)))
                 .toList();

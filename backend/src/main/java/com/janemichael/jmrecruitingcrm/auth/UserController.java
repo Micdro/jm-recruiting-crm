@@ -3,6 +3,7 @@ package com.janemichael.jmrecruitingcrm.auth;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.ChangePasswordRequest;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.CreateUserRequest;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.ResetPasswordRequest;
+import com.janemichael.jmrecruitingcrm.auth.UserDtos.SignedInUser;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.UpdateUserRequest;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.UserResponse;
 import jakarta.validation.Valid;
@@ -30,7 +31,7 @@ public class UserController {
 
     /** Who is signed in. Returns 401 when nobody is. */
     @GetMapping("/auth/me")
-    public UserResponse me() {
+    public SignedInUser me() {
         return userService.me();
     }
 

@@ -54,7 +54,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             LoginThrottle loginThrottle,
-            AppUserRepository userRepository
+            AppUserRepository userRepository,
+            CrmLock crmLock
     ) throws Exception {
         http
                 .csrf(csrf -> csrf.spa())
@@ -62,6 +63,8 @@ public class SecurityConfig {
                 .addFilterBefore(new SecurityFilters.LoginThrottleFilter(loginThrottle),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new SecurityFilters.ActiveUserFilter(userRepository), AuthorizationFilter.class)
+                // After sign-in is checked, so someone who isn't signed in gets 401 and the sign-in page.
+                .addFilterAfter(new SecurityFilters.LockedFilter(crmLock), AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         // Setup only works on a desktop copy that hasn't been set up; SetupService checks.
                         .requestMatchers("/api/auth/csrf", "/api/health", "/api/setup/**").permitAll()
@@ -75,6 +78,9 @@ public class SecurityConfig {
                         .passwordParameter("password")
                         .successHandler((request, response, authentication) -> {
                             loginThrottle.recordSuccess(request.getParameter("email"));
+                            // The password opens this person's copy of the CRM key (desktop only).
+                            crmLock.signedIn(request.getSession().getId(), authentication.getName(),
+                                    request.getParameter("password"));
                             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
                         })
                         .failureHandler((request, response, exception) -> {
@@ -85,6 +91,13 @@ public class SecurityConfig {
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
+                        // Locks a desktop copy when the last person signs out.
+                        .addLogoutHandler((request, response, authentication) -> {
+                            var session = request.getSession(false);
+                            if (session != null) {
+                                crmLock.sessionEnded(session.getId());
+                            }
+                        })
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))

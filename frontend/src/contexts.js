@@ -5,6 +5,7 @@ export const AuthContext = createContext({
   ready: false,
   login: async () => {},
   logout: async () => {},
+  unlocked: async () => {},
 });
 
 export const ToastContext = createContext(() => {});

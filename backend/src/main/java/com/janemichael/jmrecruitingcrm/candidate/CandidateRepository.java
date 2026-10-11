@@ -10,7 +10,8 @@ import java.util.Optional;
 
 public interface CandidateRepository extends JpaRepository<Candidate, Long> {
 
-    @Query("select c from Candidate c left join fetch c.owner order by lower(c.name)")
+    /** Names are encrypted, so callers sort by name themselves. */
+    @Query("select c from Candidate c left join fetch c.owner")
     List<Candidate> findAllWithOwner();
 
     @Query("select c from Candidate c left join fetch c.owner where c.id = :id")

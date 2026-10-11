@@ -10,12 +10,16 @@ import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 
 /**
- * settings.properties in the desktop home folder: the CRM key and a few one-time flags.
- * The folder belongs to the Windows user, so other accounts on the computer can't read it.
+ * settings.properties in the desktop home folder: the sync token and a few one-time flags.
+ *
+ * <p>The CRM key itself is not kept here. Each account holds a copy locked with its password, in the
+ * database. Versions before that stored the key here ({@code encryption.key}); it is removed once
+ * someone has signed in and their locked copy exists.
  */
 public class DesktopSettings {
 
-    private static final String KEY = "encryption.key";
+    private static final String LEGACY_KEY = "encryption.key";
+    private static final String SYNC_TOKEN = "sync.token";
     private static final String SHORTCUTS = "shortcuts.created";
 
     private final Path file;
@@ -32,14 +36,25 @@ public class DesktopSettings {
         }
     }
 
-    public String encryptionKey() {
-        String key = values.getProperty(KEY);
-        return key == null || key.isBlank() ? null : key.trim();
+    /** The secret this computer shares with the others for syncing. Doesn't unlock any data. */
+    public String syncToken() {
+        return value(SYNC_TOKEN);
     }
 
-    public void saveEncryptionKey(String key) {
-        values.setProperty(KEY, key);
+    public void saveSyncToken(String token) {
+        values.setProperty(SYNC_TOKEN, token);
         save();
+    }
+
+    /** The CRM key saved by an older version, or null. */
+    public String legacyEncryptionKey() {
+        return value(LEGACY_KEY);
+    }
+
+    public void forgetLegacyEncryptionKey() {
+        if (values.remove(LEGACY_KEY) != null) {
+            save();
+        }
     }
 
     public boolean shortcutsCreated() {
@@ -51,12 +66,17 @@ public class DesktopSettings {
         save();
     }
 
+    private String value(String name) {
+        String value = values.getProperty(name);
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
     private synchronized void save() {
         try {
             Files.createDirectories(file.getParent());
             Path temporary = file.resolveSibling("settings.properties.tmp");
             try (OutputStream out = Files.newOutputStream(temporary)) {
-                values.store(out, "JM CRM settings. Keep a copy of encryption.key in your password manager.");
+                values.store(out, "JM CRM settings");
             }
             Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException exception) {

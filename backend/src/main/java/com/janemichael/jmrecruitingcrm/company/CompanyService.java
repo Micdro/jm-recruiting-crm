@@ -6,6 +6,7 @@ import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.EnumCsv;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.Labels;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,19 +36,22 @@ public class CompanyService {
     private final SearchRepository searchRepository;
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
+    private final FieldEncryptor encryptor;
 
     public CompanyService(
             CompanyRepository companyRepository,
             ContactRepository contactRepository,
             SearchRepository searchRepository,
             CurrentUserService currentUserService,
-            ActivityLogger activityLogger
+            ActivityLogger activityLogger,
+            FieldEncryptor encryptor
     ) {
         this.companyRepository = companyRepository;
         this.contactRepository = contactRepository;
         this.searchRepository = searchRepository;
         this.currentUserService = currentUserService;
         this.activityLogger = activityLogger;
+        this.encryptor = encryptor;
     }
 
     public List<CompanyResponse> list(String q, CompanyStatus status) {
@@ -58,6 +63,8 @@ public class CompanyService {
                 .stream()
                 .filter(company -> status == null || company.getStatus() == status)
                 .filter(company -> query == null || matches(company, query))
+                // Names are encrypted in the database, so they're sorted here.
+                .sorted(Comparator.comparing((Company company) -> company.getName().toLowerCase()))
                 .map(company -> CompanyResponse.summary(company,
                         contactCounts.getOrDefault(company.getId(), 0L),
                         openSearchCounts.getOrDefault(company.getId(), 0L)))
@@ -76,7 +83,7 @@ public class CompanyService {
         AppUser user = currentUserService.get();
         String name = request.name().trim();
 
-        if (companyRepository.existsByNameIgnoreCase(name)) {
+        if (companyRepository.existsByNameHash(encryptor.blindIndex(name))) {
             throw new ConflictException("A company with this name already exists");
         }
 
@@ -93,7 +100,7 @@ public class CompanyService {
         Company company = find(id);
         String name = request.name().trim();
 
-        if (companyRepository.existsByNameIgnoreCaseAndIdNot(name, id)) {
+        if (companyRepository.existsByNameHashAndIdNot(encryptor.blindIndex(name), id)) {
             throw new ConflictException("A company with this name already exists");
         }
 

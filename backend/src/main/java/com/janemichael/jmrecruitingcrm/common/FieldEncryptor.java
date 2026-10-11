@@ -13,12 +13,14 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 
 /**
- * Encrypts sensitive fields (contact details, notes, compensation) before they reach the database,
- * so a stolen database or backup is unreadable without the app's key.
+ * Encrypts everything that identifies a person or company (names, titles, contact details, notes,
+ * money) before it reaches the database, so a stolen database or backup is unreadable without the key.
  *
  * <ul>
  *   <li>AES-256-GCM with a random 96-bit IV per value. GCM also detects tampering.</li>
@@ -38,42 +40,87 @@ public class FieldEncryptor implements InitializingBean {
     private static volatile FieldEncryptor current;
 
     private final SecureRandom random = new SecureRandom();
+    /** Null while locked: on the desktop, until someone signs in. */
     private volatile Keys keys;
+    /** Known even while locked, so this computer can keep syncing scrambled data. */
+    private volatile String syncToken;
 
     /** Keys derived from the master key, swapped in together. */
-    private record Keys(SecretKey encryption, SecretKey index, String syncToken) {
+    private record Keys(byte[] master, SecretKey encryption, SecretKey index) {
     }
 
-    public FieldEncryptor(@Value("${app.encryption.key:}") String base64Key) {
-        this(base64Key, false);
+    public FieldEncryptor(String base64Key) {
+        this(base64Key, false, null);
     }
 
     /**
-     * On the desktop the key is chosen during first-run setup, so the app may start without one and
-     * receive it through {@link #configure(String)}. A server must always start with its key.
+     * A server starts with its key and stays unlocked. On the desktop the key isn't stored on disk:
+     * the app starts locked, knowing only the sync token, and is unlocked when someone signs in
+     * (see {@link #configure(String)} and {@link #lock()}).
      */
     @Autowired
     public FieldEncryptor(
             @Value("${app.encryption.key:}") String base64Key,
-            @Value("${app.desktop.enabled:false}") boolean desktop
+            @Value("${app.desktop.enabled:false}") boolean desktop,
+            @Value("${app.sync.token:}") String syncToken
     ) {
+        if (syncToken != null && !syncToken.isBlank()) {
+            this.syncToken = syncToken.trim();
+        }
         if (desktop && (base64Key == null || base64Key.isBlank())) {
             return;
         }
         configure(base64Key);
     }
 
-    /** Sets the master key. Used at startup and when desktop setup finishes. */
+    /**
+     * Unlocks with the master key. If this copy already knows its sync token, the key must be the one
+     * that token came from, so a wrong key can never be used to write data.
+     */
     public void configure(String base64Key) {
         byte[] master = decodeKey(base64Key);
-        this.keys = new Keys(
+        String token = token(master);
+        String known = syncToken;
+        if (known != null && !MessageDigest.isEqual(known.getBytes(StandardCharsets.UTF_8),
+                token.getBytes(StandardCharsets.UTF_8))) {
+            throw new IllegalStateException("That isn't this CRM's key.");
+        }
+        this.keys = new Keys(master,
                 new SecretKeySpec(derive(master, "jmcrm field encryption v1"), "AES"),
-                new SecretKeySpec(derive(master, "jmcrm blind index v1"), "HmacSHA256"),
-                Base64.getUrlEncoder().withoutPadding().encodeToString(derive(master, "jmcrm sync token v1")));
+                new SecretKeySpec(derive(master, "jmcrm blind index v1"), "HmacSHA256"));
+        this.syncToken = token;
     }
 
+    /** Forgets the key. Encrypted fields can't be read or written until {@link #configure(String)} again. */
+    public void lock() {
+        Keys current = keys;
+        keys = null;
+        if (current != null) {
+            Arrays.fill(current.master(), (byte) 0);
+        }
+    }
+
+    /** True when the key is loaded: always on a server, and on the desktop while someone is signed in. */
     public boolean isConfigured() {
         return keys != null;
+    }
+
+    public boolean hasSyncToken() {
+        return syncToken != null;
+    }
+
+    /** Whether a key belongs to this CRM, checked without unlocking. */
+    public boolean isThisCrmsKey(String base64Key) {
+        String known = syncToken;
+        if (known == null) {
+            return false;
+        }
+        try {
+            return MessageDigest.isEqual(known.getBytes(StandardCharsets.UTF_8),
+                    syncTokenFor(base64Key).getBytes(StandardCharsets.UTF_8));
+        } catch (IllegalStateException invalid) {
+            return false;
+        }
     }
 
     /**
@@ -81,7 +128,21 @@ public class FieldEncryptor implements InitializingBean {
      * so every computer with the same key accepts the others and nobody else.
      */
     public String syncToken() {
-        return keys().syncToken();
+        String token = syncToken;
+        if (token == null) {
+            throw new IllegalStateException("Encryption is not set up yet. Finish setup first.");
+        }
+        return token;
+    }
+
+    /** The sync token a key produces, for setup and for checking a key someone typed in. */
+    public static String syncTokenFor(String base64Key) {
+        return token(decodeKey(base64Key));
+    }
+
+    /** The master key, base64 encoded, for locking it with a person's password. Unlocked only. */
+    public String exportKey() {
+        return Base64.getEncoder().encodeToString(keys().master());
     }
 
     /** Generates a new random master key, base64 encoded. */
@@ -91,12 +152,23 @@ public class FieldEncryptor implements InitializingBean {
         return Base64.getEncoder().encodeToString(key);
     }
 
+    private static String token(byte[] master) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(derive(master, "jmcrm sync token v1"));
+    }
+
     private Keys keys() {
         Keys current = keys;
         if (current == null) {
-            throw new IllegalStateException("Encryption is not set up yet. Finish setup first.");
+            throw new CrmLockedException();
         }
         return current;
+    }
+
+    /** Thrown when encrypted data is needed while the CRM is locked. */
+    public static class CrmLockedException extends IllegalStateException {
+        public CrmLockedException() {
+            super("The CRM is locked. Sign in to unlock it.");
+        }
     }
 
     /** Called by Spring once the bean is ready. Instances made with {@code new} (in tests) stay local. */

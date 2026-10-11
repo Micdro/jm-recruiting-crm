@@ -1,12 +1,13 @@
 // Runs two desktop copies of the CRM side by side (as two computers would) and checks that they
-// set up, join, sync both ways, and keep their data across a restart.
+// set up, join, sync both ways, keep their data across a restart, and stay locked (no key on disk,
+// nothing readable in the database files) until someone signs in.
 //
 //   node sync/two-computers.mjs <path to desktop jar>
 //
 // Each copy gets its own home folder, database and ports. Exit code 0 means everything synced.
 
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -105,10 +106,43 @@ async function csrf(pc) {
   await request(pc, 'GET', '/api/auth/csrf');
 }
 
-async function signIn(pc) {
+async function signIn(pc, password = PASSWORD) {
   await csrf(pc);
-  await request(pc, 'POST', '/api/auth/login', { email: EMAIL, password: PASSWORD }, { form: true });
+  await request(pc, 'POST', '/api/auth/login', { email: EMAIL, password }, { form: true });
   await csrf(pc);
+}
+
+async function signOut(pc) {
+  await request(pc, 'POST', '/api/auth/logout');
+  pc.cookies.delete('JSESSIONID');
+  await csrf(pc);
+}
+
+const locked = async (pc) => (await request(pc, 'GET', '/api/setup/status')).locked;
+
+/** Every file in a folder (recursively) that contains any of the given strings. */
+function filesContaining(folder, needles) {
+  const found = [];
+  const buffers = needles.map((needle) => Buffer.from(needle, 'utf8'));
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      const info = statSync(path, { throwIfNoEntry: false });
+      if (!info) continue;
+      if (info.isDirectory()) walk(path);
+      else if (info.isFile()) {
+        let content;
+        try {
+          content = readFileSync(path);
+        } catch {
+          continue; // Held open by the database on some systems.
+        }
+        if (buffers.some((needle) => content.includes(needle))) found.push(path);
+      }
+    }
+  };
+  walk(folder);
+  return found;
 }
 
 async function waitForHealth(pc, seconds = 180) {
@@ -166,9 +200,13 @@ async function main() {
     password: PASSWORD,
   });
   check(typeof key === 'string' && key.length === 44, 'starting a CRM returns a new key');
-  check(existsSync(join(first.home, 'settings.properties')), 'the key is saved in the settings file');
+  const settings = readFileSync(join(first.home, 'settings.properties'), 'utf8');
+  check(settings.includes('sync.token') && !settings.includes(key.slice(0, 40)), 'only the sync token is saved, not the key');
+  check(await locked(first), 'the CRM is locked until someone signs in');
 
   await signIn(first);
+  check(!(await locked(first)), 'signing in unlocks it');
+  check((await request(first, 'GET', '/api/auth/me')).crmLocked === false, 'the app is told it is unlocked');
   const acme = await request(first, 'POST', '/api/companies', { name: 'Acme AI', status: 'LEAD', notes: 'Secret notes' });
   const contact = await request(first, 'POST', '/api/contacts', {
     name: 'Dana Reyes',
@@ -198,8 +236,11 @@ async function main() {
     computerName: 'Second PC',
   });
   check(joined.nodeId === 2 && joined.joinedThrough === 'First PC' && !joined.warning, 'the second computer joins as computer 2');
+  check(await locked(second), 'the joined computer is locked until someone signs in');
+  check(!readFileSync(join(second.home, 'settings.properties'), 'utf8').includes(key.slice(0, 40)), 'the joined computer does not save the key');
 
   await signIn(second);
+  check(!(await locked(second)), 'the password unlocks the joined computer (its copy of the key came with the account)');
   check((await companyNames(second)).includes('Acme AI'), 'the second computer has the first computer\'s companies');
   const copied = await request(second, 'GET', `/api/contacts/${contact.id}`);
   check(copied.email === 'dana@acme.test', 'encrypted fields arrive readable with the shared key');
@@ -229,15 +270,58 @@ async function main() {
     return peer.secondsSinceSuccess !== null && peer.secondsSinceSuccess < 30 && !peer.lastError;
   });
 
+  // The unlock screen's endpoint checks the key and the password.
+  let wrongKey = false;
+  try {
+    await request(second, 'POST', '/api/desktop/unlock', { key: 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=', password: PASSWORD });
+  } catch (error) {
+    wrongKey = error.message.includes('400');
+  }
+  check(wrongKey, 'unlocking with another CRM\'s key is refused');
+  await request(second, 'POST', '/api/desktop/unlock', { key, password: PASSWORD });
+  check(!(await locked(second)), 'the CRM key and password unlock it');
+
+  // Signing out locks it again; sync keeps running while locked.
+  await signOut(first);
+  check(await locked(first), 'signing out locks the CRM');
+  await request(second, 'POST', '/api/companies', { name: 'Added While Locked', status: 'LEAD' });
+  await new Promise((resolve) => setTimeout(resolve, 4000));
+  await signIn(first);
+  await eventually('changes sync to a computer while it is locked', async () =>
+    (await companyNames(first)).includes('Added While Locked'));
+
+  // Nothing readable in the database files: names, emails and notes are all scrambled.
+  const readable = filesContaining(join(first.home, 'database'), ['Dana Reyes', 'dana@acme.test', 'Secret notes', 'Acme AI']);
+  check(readable.length === 0, `no names, emails or notes are readable in the database files${readable.length ? `: ${readable.join(', ')}` : ''}`);
+
   // Work done while one computer is off arrives when it comes back.
   await stop(second);
   await request(first, 'POST', '/api/companies', { name: 'Made While Off', status: 'LEAD' });
   start(second);
   await waitForHealth(second);
+  check(await locked(second), 'a restarted computer starts locked');
   await signIn(second);
   await eventually('changes made while a computer was off arrive when it is back', async () =>
     (await companyNames(second)).includes('Made While Off'));
   check((await companyNames(second)).includes('Acme AI'), 'a restarted computer keeps its own copy');
+
+  // A forgotten password: the CRM key sets a new one, which then unlocks the CRM.
+  await signOut(second);
+  let resetRefused = false;
+  try {
+    await request(second, 'POST', '/api/setup/reset-password', {
+      email: EMAIL,
+      key: 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=',
+      password: 'a-brand-new-password',
+    });
+  } catch (error) {
+    resetRefused = error.message.includes('400');
+  }
+  check(resetRefused, 'resetting a password needs this CRM\'s key');
+  await request(second, 'POST', '/api/setup/reset-password', { email: EMAIL, key, password: 'a-brand-new-password' });
+  check(await locked(second), 'resetting a password does not unlock the CRM by itself');
+  await signIn(second, 'a-brand-new-password');
+  check(!(await locked(second)), 'the new password unlocks the CRM');
 
   console.log('All sync checks passed');
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, onUnauthorized } from '../api.js';
+import { api, onLocked, onUnauthorized } from '../api.js';
 import { AuthContext } from '../contexts.js';
 import { clearCache, prefetch, refreshUsers } from '../hooks.js';
 
@@ -21,6 +21,11 @@ export default function AuthProvider({ children }) {
       clearCache();
       setState({ user: null, ready: true });
     });
+    // Signed in, but the CRM on this computer is locked: the app shows the unlock screen.
+    onLocked(() => {
+      clearCache();
+      setState((current) => (current.user ? { ...current, user: { ...current.user, crmLocked: true } } : current));
+    });
 
     api.auth.me().then(
       (user) => setState({ user, ready: true }),
@@ -29,9 +34,10 @@ export default function AuthProvider({ children }) {
   }, []);
 
   const userId = state.user?.id;
+  const crmLocked = Boolean(state.user?.crmLocked);
   useEffect(() => {
-    if (userId) prefetch(PREFETCH);
-  }, [userId]);
+    if (userId && !crmLocked) prefetch(PREFETCH);
+  }, [userId, crmLocked]);
 
   const login = useCallback(async (email, password) => {
     clearCache();
@@ -41,6 +47,12 @@ export default function AuthProvider({ children }) {
     const user = await api.auth.me();
     setState({ user, ready: true });
     return user;
+  }, []);
+
+  /** After the unlock screen opened the CRM. */
+  const unlocked = useCallback(async () => {
+    const user = await api.auth.me();
+    setState({ user, ready: true });
   }, []);
 
   const logout = useCallback(async () => {
@@ -53,7 +65,7 @@ export default function AuthProvider({ children }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ ...state, login, logout }), [state, login, logout]);
+  const value = useMemo(() => ({ ...state, login, logout, unlocked }), [state, login, logout, unlocked]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

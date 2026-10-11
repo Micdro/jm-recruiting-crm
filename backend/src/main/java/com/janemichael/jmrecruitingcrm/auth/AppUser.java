@@ -40,11 +40,23 @@ public class AppUser {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** The CRM key, locked with this person's password (see KeyWrap). Opens the CRM when they sign in. */
+    @Column(name = "key_wrap")
+    private String keyWrap;
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) {
             createdAt = Instant.now();
         }
+    }
+
+    public String getKeyWrap() {
+        return keyWrap;
+    }
+
+    public void setKeyWrap(String keyWrap) {
+        this.keyWrap = keyWrap;
     }
 
     public boolean isAdmin() {

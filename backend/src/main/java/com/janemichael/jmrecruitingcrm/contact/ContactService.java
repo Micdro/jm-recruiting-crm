@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -84,6 +85,7 @@ public class ContactService {
                         || (contact.getOwner() != null && contact.getOwner().getId().equals(ownerId)))
                 .filter(contact -> !dueOnly || isDue(contact, today))
                 .filter(contact -> query == null || matches(contact, query))
+                .sorted(Comparator.comparing((Contact contact) -> contact.getName().toLowerCase()))
                 .map(ContactResponse::summary)
                 .toList();
     }

@@ -31,6 +31,7 @@ public class Candidate extends Auditable {
     private Long id;
 
     @Column(nullable = false)
+    @Convert(converter = EncryptedString.class)
     private String name;
 
     @Convert(converter = EncryptedString.class)
@@ -43,14 +44,18 @@ public class Candidate extends Auditable {
     private String phone;
 
     @Column(name = "linkedin_url")
+    @Convert(converter = EncryptedString.class)
     private String linkedinUrl;
 
+    @Convert(converter = EncryptedString.class)
     private String location;
 
     @Column(name = "current_title")
+    @Convert(converter = EncryptedString.class)
     private String currentTitle;
 
     @Column(name = "current_company")
+    @Convert(converter = EncryptedString.class)
     private String currentCompany;
 
     @Enumerated(EnumType.STRING)

@@ -10,9 +10,15 @@ const client = axios.create({
 });
 
 let unauthorizedHandler = () => {};
+let lockedHandler = () => {};
 
 export function onUnauthorized(handler) {
   unauthorizedHandler = handler;
+}
+
+/** Called when the desktop CRM answers 423: signed in, but the CRM is locked on this computer. */
+export function onLocked(handler) {
+  lockedHandler = handler;
 }
 
 client.interceptors.response.use(
@@ -22,6 +28,9 @@ client.interceptors.response.use(
 
     if (response?.status === 401 && !config.url.startsWith('/api/auth/')) {
       unauthorizedHandler();
+    }
+    if (response?.status === 423) {
+      lockedHandler();
     }
 
     // A missing or stale CSRF token: fetch a fresh one and retry once.
@@ -93,6 +102,7 @@ export const api = {
     status: () => get('/api/setup/status'),
     start: (body) => post('/api/setup/start', body),
     join: (body) => post('/api/setup/join', body),
+    resetPassword: (body) => post('/api/setup/reset-password', body),
   },
   desktop: {
     status: () => get('/api/desktop/status'),
@@ -102,6 +112,7 @@ export const api = {
     allowFirewall: () => post('/api/desktop/firewall'),
     removeComputer: (id) => del(`/api/desktop/computers/${id}`),
     quit: () => post('/api/desktop/quit'),
+    unlock: (key, password) => post('/api/desktop/unlock', { key, password }),
   },
   dashboard: (scope) => get('/api/dashboard', { scope }),
   companies: crud('/api/companies'),
