@@ -108,6 +108,9 @@ public final class DesktopLauncher {
         }
         Files.createDirectories(home.resolve("postgres"));
         Path logs = Files.createDirectories(home.resolve("logs"));
+        if (!Files.exists(data)) {
+            DesktopOs.grantCurrentUserFullControl(home);
+        }
         ProcessBuilder.Redirect databaseLog = ProcessBuilder.Redirect.appendTo(logs.resolve("database.log").toFile());
         return EmbeddedPostgres.builder()
                 .setOutputRedirector(databaseLog)

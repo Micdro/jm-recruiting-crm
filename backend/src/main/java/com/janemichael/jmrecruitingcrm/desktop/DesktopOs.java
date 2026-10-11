@@ -114,6 +114,30 @@ public final class DesktopOs {
         }
     }
 
+    /**
+     * PostgreSQL drops administrator rights when started from an elevated process ("Run as
+     * administrator"), and then may not be allowed to set up a folder that the elevated process
+     * created. Granting the signed-in user full control of the app folder, inherited by everything
+     * in it, avoids that. A normal start already has these rights, so this changes nothing there.
+     */
+    public static void grantCurrentUserFullControl(Path folder) {
+        String user = System.getenv("USERNAME");
+        if (!isWindows() || user == null || user.isBlank()) {
+            return;
+        }
+        String domain = System.getenv("USERDOMAIN");
+        String account = domain == null || domain.isBlank() ? user : domain + "\\" + user;
+        try {
+            Process process = new ProcessBuilder("icacls", folder.toString(), "/grant", account + ":(OI)(CI)F", "/Q")
+                    .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            waitFor(process);
+        } catch (IOException exception) {
+            log.warn("Could not set permissions on {}", folder, exception);
+        }
+    }
+
     private static Path startupShortcut() {
         String appData = System.getenv("APPDATA");
         return Path.of(appData == null ? "" : appData,
