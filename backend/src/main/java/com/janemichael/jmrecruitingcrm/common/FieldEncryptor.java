@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.common;
 
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -36,14 +37,66 @@ public class FieldEncryptor implements InitializingBean {
 
     private static volatile FieldEncryptor current;
 
-    private final SecretKey encryptionKey;
-    private final SecretKey indexKey;
     private final SecureRandom random = new SecureRandom();
+    private volatile Keys keys;
+
+    /** Keys derived from the master key, swapped in together. */
+    private record Keys(SecretKey encryption, SecretKey index, String syncToken) {
+    }
 
     public FieldEncryptor(@Value("${app.encryption.key:}") String base64Key) {
+        this(base64Key, false);
+    }
+
+    /**
+     * On the desktop the key is chosen during first-run setup, so the app may start without one and
+     * receive it through {@link #configure(String)}. A server must always start with its key.
+     */
+    @Autowired
+    public FieldEncryptor(
+            @Value("${app.encryption.key:}") String base64Key,
+            @Value("${app.desktop.enabled:false}") boolean desktop
+    ) {
+        if (desktop && (base64Key == null || base64Key.isBlank())) {
+            return;
+        }
+        configure(base64Key);
+    }
+
+    /** Sets the master key. Used at startup and when desktop setup finishes. */
+    public void configure(String base64Key) {
         byte[] master = decodeKey(base64Key);
-        this.encryptionKey = new SecretKeySpec(derive(master, "jmcrm field encryption v1"), "AES");
-        this.indexKey = new SecretKeySpec(derive(master, "jmcrm blind index v1"), "HmacSHA256");
+        this.keys = new Keys(
+                new SecretKeySpec(derive(master, "jmcrm field encryption v1"), "AES"),
+                new SecretKeySpec(derive(master, "jmcrm blind index v1"), "HmacSHA256"),
+                Base64.getUrlEncoder().withoutPadding().encodeToString(derive(master, "jmcrm sync token v1")));
+    }
+
+    public boolean isConfigured() {
+        return keys != null;
+    }
+
+    /**
+     * The shared secret computers present to each other when syncing. Derived from the master key,
+     * so every computer with the same key accepts the others and nobody else.
+     */
+    public String syncToken() {
+        return keys().syncToken();
+    }
+
+    /** Generates a new random master key, base64 encoded. */
+    public static String newKey() {
+        byte[] key = new byte[KEY_BYTES];
+        new SecureRandom().nextBytes(key);
+        return Base64.getEncoder().encodeToString(key);
+    }
+
+    private Keys keys() {
+        Keys current = keys;
+        if (current == null) {
+            throw new IllegalStateException("Encryption is not set up yet. Finish setup first.");
+        }
+        return current;
     }
 
     /** Called by Spring once the bean is ready. Instances made with {@code new} (in tests) stay local. */
@@ -70,7 +123,7 @@ public class FieldEncryptor implements InitializingBean {
             random.nextBytes(iv);
 
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, new GCMParameterSpec(TAG_BITS, iv));
+            cipher.init(Cipher.ENCRYPT_MODE, keys().encryption(), new GCMParameterSpec(TAG_BITS, iv));
             byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
             byte[] stored = ByteBuffer.allocate(IV_BYTES + ciphertext.length).put(iv).put(ciphertext).array();
@@ -94,7 +147,7 @@ public class FieldEncryptor implements InitializingBean {
         try {
             byte[] data = Base64.getDecoder().decode(stored.substring(PREFIX.length()));
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, encryptionKey, new GCMParameterSpec(TAG_BITS, data, 0, IV_BYTES));
+            cipher.init(Cipher.DECRYPT_MODE, keys().encryption(), new GCMParameterSpec(TAG_BITS, data, 0, IV_BYTES));
             byte[] plaintext = cipher.doFinal(data, IV_BYTES, data.length - IV_BYTES);
             return new String(plaintext, StandardCharsets.UTF_8);
         } catch (GeneralSecurityException | IllegalArgumentException exception) {
@@ -116,7 +169,7 @@ public class FieldEncryptor implements InitializingBean {
         }
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(indexKey);
+            mac.init(keys().index());
             byte[] digest = mac.doFinal(normalized.getBytes(StandardCharsets.UTF_8));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
         } catch (GeneralSecurityException exception) {

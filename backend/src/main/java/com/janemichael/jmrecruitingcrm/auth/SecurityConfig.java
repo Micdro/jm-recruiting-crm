@@ -63,7 +63,8 @@ public class SecurityConfig {
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new SecurityFilters.ActiveUserFilter(userRepository), AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/csrf", "/api/health").permitAll()
+                        // Setup only works on a desktop copy that hasn't been set up; SetupService checks.
+                        .requestMatchers("/api/auth/csrf", "/api/health", "/api/setup/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .formLogin(form -> form

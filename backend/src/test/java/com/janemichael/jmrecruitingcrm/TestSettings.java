@@ -6,6 +6,9 @@ public final class TestSettings {
     /** A fixed key for tests only. Real deployments generate their own with openssl rand -base64 32. */
     public static final String ENCRYPTION_KEY = "app.encryption.key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
 
+    /** Keeps the sync timer from running during tests that drive sync by hand. */
+    public static final String NO_SYNC_TIMER = "app.sync.initial-delay-ms=86400000";
+
     private TestSettings() {
     }
 }

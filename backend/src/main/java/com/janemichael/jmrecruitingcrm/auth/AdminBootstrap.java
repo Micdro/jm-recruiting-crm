@@ -23,24 +23,28 @@ public class AdminBootstrap implements ApplicationRunner {
     private final String email;
     private final String password;
     private final String name;
+    private final boolean desktop;
 
     public AdminBootstrap(
             AppUserRepository userRepository,
             PasswordEncoder passwordEncoder,
             @Value("${app.bootstrap.admin-email:}") String email,
             @Value("${app.bootstrap.admin-password:}") String password,
-            @Value("${app.bootstrap.admin-name:Admin}") String name
+            @Value("${app.bootstrap.admin-name:Admin}") String name,
+            @Value("${app.desktop.enabled:false}") boolean desktop
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.email = email;
         this.password = password;
         this.name = name;
+        this.desktop = desktop;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        if (userRepository.count() > 0) {
+        // On the desktop, the first account is created in the setup screen.
+        if (desktop || userRepository.count() > 0) {
             return;
         }
 

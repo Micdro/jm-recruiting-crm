@@ -48,6 +48,10 @@ public class EncryptionBackfill implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!encryptor.isConfigured()) {
+            // A desktop copy that hasn't been set up yet. Runs again when setup finishes.
+            return;
+        }
         int encrypted = 0;
         for (Map.Entry<String, List<String>> table : ENCRYPTED_COLUMNS.entrySet()) {
             for (String column : table.getValue()) {

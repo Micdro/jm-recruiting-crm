@@ -1,0 +1,158 @@
+package com.janemichael.jmrecruitingcrm.desktop;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+/** The few things the desktop copy asks of the operating system: a browser, shortcuts, the firewall. */
+public final class DesktopOs {
+
+    private static final Logger log = LoggerFactory.getLogger(DesktopOs.class);
+
+    public static final String APP_NAME = "JM CRM";
+    public static final String FIREWALL_RULE = "JM CRM sync";
+    /** Tailscale gives every device an address in this range. Only those may reach the sync port. */
+    public static final String TAILSCALE_RANGE = "100.64.0.0/10";
+
+    private DesktopOs() {
+    }
+
+    public static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().startsWith("windows");
+    }
+
+    public static void openBrowser(String url) {
+        List<String> command;
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (isWindows()) {
+            command = List.of("rundll32", "url.dll,FileProtocolHandler", url);
+        } else if (os.contains("mac")) {
+            command = List.of("open", url);
+        } else {
+            command = List.of("xdg-open", url);
+        }
+        try {
+            new ProcessBuilder(command).start();
+        } catch (IOException exception) {
+            log.info("Open {} in your browser", url);
+        }
+    }
+
+    /** The installed app's .exe, set by the Windows launcher. Null when run another way. */
+    public static String executable() {
+        String path = System.getProperty("jpackage.app-path");
+        return path == null || path.isBlank() ? null : path;
+    }
+
+    /** Start menu and desktop shortcuts, made once after install. */
+    public static void createShortcuts() {
+        String exe = executable();
+        if (!isWindows() || exe == null) {
+            return;
+        }
+        waitFor(runPowerShell(shortcutScript("Programs", exe, "") + shortcutScript("Desktop", exe, ""), false));
+    }
+
+    public static boolean startsWithWindows() {
+        return isWindows() && Files.exists(startupShortcut());
+    }
+
+    /** Starts the CRM quietly when the person signs in to Windows, so sync runs all day. */
+    public static void setStartsWithWindows(boolean enabled) {
+        String exe = executable();
+        if (!isWindows() || exe == null) {
+            return;
+        }
+        if (enabled) {
+            waitFor(runPowerShell(shortcutScript("Startup", exe, "--background"), false));
+        } else {
+            try {
+                Files.deleteIfExists(startupShortcut());
+            } catch (IOException exception) {
+                log.warn("Could not remove the startup shortcut", exception);
+            }
+        }
+    }
+
+    /** Asks Windows (with its usual permission prompt) to let Tailscale devices reach the sync port. */
+    public static void allowSyncThroughFirewall(int port) {
+        if (!isWindows()) {
+            return;
+        }
+        String rule = "Remove-NetFirewallRule -DisplayName '" + FIREWALL_RULE + "' -ErrorAction SilentlyContinue; "
+                + "New-NetFirewallRule -DisplayName '" + FIREWALL_RULE + "' -Direction Inbound -Protocol TCP "
+                + "-LocalPort " + port + " -RemoteAddress " + TAILSCALE_RANGE + " -Action Allow -Profile Any";
+        runPowerShell(rule, true);
+    }
+
+    public static boolean firewallAllowsSync() {
+        if (!isWindows()) {
+            return true;
+        }
+        Process process = runPowerShell(
+                "if (Get-NetFirewallRule -DisplayName '" + FIREWALL_RULE + "' -ErrorAction SilentlyContinue) "
+                        + "{ exit 0 } else { exit 1 }", false);
+        return waitFor(process) && process.exitValue() == 0;
+    }
+
+    private static boolean waitFor(Process process) {
+        if (process == null) {
+            return false;
+        }
+        try {
+            return process.waitFor(20, TimeUnit.SECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private static Path startupShortcut() {
+        String appData = System.getenv("APPDATA");
+        return Path.of(appData == null ? "" : appData,
+                "Microsoft", "Windows", "Start Menu", "Programs", "Startup", APP_NAME + ".lnk");
+    }
+
+    private static String shortcutScript(String folder, String exe, String arguments) {
+        String directory = Path.of(exe).getParent() == null ? "" : Path.of(exe).getParent().toString();
+        return "$s = (New-Object -ComObject WScript.Shell).CreateShortcut("
+                + "(Join-Path ([Environment]::GetFolderPath('" + folder + "')) '" + APP_NAME + ".lnk')); "
+                + "$s.TargetPath = '" + quote(exe) + "'; "
+                + "$s.Arguments = '" + quote(arguments) + "'; "
+                + "$s.WorkingDirectory = '" + quote(directory) + "'; "
+                + "$s.IconLocation = '" + quote(exe) + "'; "
+                + "$s.Save(); ";
+    }
+
+    private static String quote(String value) {
+        return value.replace("'", "''");
+    }
+
+    /**
+     * Runs a PowerShell script passed as -EncodedCommand, so paths with spaces or quotes can't break
+     * it. Elevated scripts show Windows' permission prompt.
+     */
+    private static Process runPowerShell(String script, boolean elevated) {
+        String encoded = Base64.getEncoder().encodeToString(script.getBytes(StandardCharsets.UTF_16LE));
+        List<String> command = elevated
+                ? List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                        "Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden "
+                                + "-ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','" + encoded + "'")
+                : List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                        "-EncodedCommand", encoded);
+        try {
+            return new ProcessBuilder(command).redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+        } catch (IOException exception) {
+            log.warn("Could not run PowerShell", exception);
+            return null;
+        }
+    }
+}
