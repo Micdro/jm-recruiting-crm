@@ -337,6 +337,7 @@ jobs:
           # A folder name with a space, like most Windows user folders.
           JMCRM_HOME: ${{ runner.temp }}\JM CRM test
         run: |
+          trap { Write-Output "::error title=Windows smoke test::$($_.Exception.Message)"; break }
           $app = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
           $base = 'http://127.0.0.1:4780'
           $up = $false
