@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.auth.AppUserRepository;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
+import com.janemichael.jmrecruitingcrm.common.EncryptionBackfill;
+import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -66,6 +68,12 @@ class ApiIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private EncryptionBackfill encryptionBackfill;
+
+    @Autowired
+    private FieldEncryptor encryptor;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -249,6 +257,34 @@ class ApiIntegrationTest {
                         "email", "MORGAN@ciphertest.test",
                         "companyId", companyId)))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void plainTextRowsFromBeforeEncryptionAreEncryptedAtStartup() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Legacy Rows Co")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        long contactId = id(mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Riley Legacy", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        entityManager.flush();
+
+        // As an older version of the app would have stored them.
+        jdbc.update("update contact set email = ?, notes = ?, email_hash = null where id = ?",
+                "riley@legacy.test", "Plain notes", contactId);
+        entityManager.clear();
+
+        encryptionBackfill.run(null);
+
+        Map<String, Object> row = jdbc.queryForMap("select email, notes, email_hash from contact where id = ?", contactId);
+        assertThat((String) row.get("email")).startsWith("enc:v1:");
+        assertThat((String) row.get("notes")).startsWith("enc:v1:");
+        assertThat(row.get("email_hash")).isEqualTo(encryptor.blindIndex("riley@legacy.test"));
+
+        mockMvc.perform(signedIn(get("/api/contacts/" + contactId)))
+                .andExpect(jsonPath("$.email").value("riley@legacy.test"))
+                .andExpect(jsonPath("$.notes").value("Plain notes"));
     }
 
     @Test
