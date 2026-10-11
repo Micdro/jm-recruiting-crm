@@ -1,8 +1,19 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
+import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
+import com.janemichael.jmrecruitingcrm.contact.ContactService.FillQueueResponse;
 import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -17,42 +28,54 @@ public class ContactController {
     }
 
     @GetMapping
-    public List<ContactResponse> getAllContacts() {
-        return contactService.getAllContacts();
-    }
-
-    @PostMapping
-    public ResponseEntity<ContactResponse> createContact(@Valid @RequestBody ContactRequest request) {
-        return contactService.createContact(request)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public List<ContactResponse> list(
+            @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) OutreachStatus status,
+            @RequestParam(required = false) Long ownerId,
+            @RequestParam(defaultValue = "false") boolean due,
+            @RequestParam(required = false) String q
+    ) {
+        return contactService.list(companyId, status, ownerId, due, q);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ContactResponse> getContactById(@PathVariable Long id) {
-        return contactService.getContactById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ContactResponse get(@PathVariable Long id) {
+        return contactService.get(id);
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ContactResponse create(@Valid @RequestBody ContactRequest request) {
+        return contactService.create(request);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ContactResponse> updateContact(
-            @PathVariable Long id,
-            @Valid @RequestBody ContactRequest request
-    ) {
-        return contactService.updateContact(id, request)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ContactResponse update(@PathVariable Long id, @Valid @RequestBody ContactRequest request) {
+        return contactService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteContact(@PathVariable Long id) {
-        boolean deleted = contactService.deleteContact(id);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) {
+        contactService.delete(id);
+    }
 
-        if (!deleted) {
-            return ResponseEntity.notFound().build();
-        }
+    /** Logs a touch, reply, meeting or note and returns the updated contact. */
+    @PostMapping("/{id}/activities")
+    public ContactResponse logActivity(@PathVariable Long id, @Valid @RequestBody LogActivityRequest request) {
+        return contactService.logActivity(id, request);
+    }
 
-        return ResponseEntity.noContent().build();
+    @PostMapping("/{id}/restart-sequence")
+    public ContactResponse restartSequence(@PathVariable Long id) {
+        return contactService.restartSequence(id);
+    }
+
+    @PostMapping("/fill-queue")
+    public FillQueueResponse fillQueue(@RequestBody FillQueueRequest request) {
+        return contactService.fillQueue(request.count());
+    }
+
+    public record FillQueueRequest(int count) {
     }
 }

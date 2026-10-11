@@ -1,37 +1,26 @@
 package com.janemichael.jmrecruitingcrm.company;
 
-public class CompanyResponse {
+import java.time.Instant;
 
-    private Long id;
-    private String name;
-    private String website;
-    private String location;
-    private String companySize;
-    private String status;
-    private String linkedinProfile;
-    private String notes;
+public record CompanyResponse(
+        Long id,
+        String name,
+        String website,
+        String location,
+        String companySize,
+        CompanyStatus status,
+        String focus,
+        String linkedinProfile,
+        String notes,
+        Long ownerId,
+        String ownerName,
+        long contactCount,
+        long openSearchCount,
+        Instant createdAt,
+        Instant updatedAt
+) {
 
-    public CompanyResponse(
-            Long id,
-            String name,
-            String website,
-            String location,
-            String companySize,
-            String status,
-            String linkedinProfile,
-            String notes
-    ) {
-        this.id = id;
-        this.name = name;
-        this.website = website;
-        this.location = location;
-        this.companySize = companySize;
-        this.status = status;
-        this.linkedinProfile = linkedinProfile;
-        this.notes = notes;
-    }
-
-    public static CompanyResponse fromEntity(Company company) {
+    public static CompanyResponse from(Company company, long contactCount, long openSearchCount) {
         return new CompanyResponse(
                 company.getId(),
                 company.getName(),
@@ -39,40 +28,15 @@ public class CompanyResponse {
                 company.getLocation(),
                 company.getCompanySize(),
                 company.getStatus(),
+                company.getFocus(),
                 company.getLinkedinProfile(),
-                company.getNotes()
+                company.getNotes(),
+                company.getOwner() == null ? null : company.getOwner().getId(),
+                company.getOwner() == null ? null : company.getOwner().getDisplayName(),
+                contactCount,
+                openSearchCount,
+                company.getCreatedAt(),
+                company.getUpdatedAt()
         );
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getWebsite() {
-        return website;
-    }
-
-    public String getLocation() {
-        return location;
-    }
-
-    public String getCompanySize() {
-        return companySize;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public String getLinkedinProfile() {
-        return linkedinProfile;
-    }
-
-    public String getNotes() {
-        return notes;
     }
 }

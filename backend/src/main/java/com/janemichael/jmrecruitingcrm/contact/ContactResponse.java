@@ -1,104 +1,53 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
+import com.janemichael.jmrecruitingcrm.common.ActionType;
+
+import java.time.Instant;
 import java.time.LocalDate;
 
-public class ContactResponse {
+public record ContactResponse(
+        Long id,
+        String name,
+        String title,
+        String email,
+        String phone,
+        String linkedinUrl,
+        OutreachStatus status,
+        int touchCount,
+        int maxTouches,
+        LocalDate lastContactedDate,
+        LocalDate nextActionDate,
+        ActionType nextActionType,
+        String notes,
+        Long companyId,
+        String companyName,
+        Long ownerId,
+        String ownerName,
+        Instant createdAt,
+        Instant updatedAt
+) {
 
-    private Long id;
-    private String name;
-    private String title;
-    private String email;
-    private String linkedinUrl;
-    private String relationshipStatus;
-    private LocalDate lastContactedDate;
-    private LocalDate nextFollowUpDate;
-    private String notes;
-    private Long companyId;
-    private String companyName;
-
-    public ContactResponse(
-            Long id,
-            String name,
-            String title,
-            String email,
-            String linkedinUrl,
-            String relationshipStatus,
-            LocalDate lastContactedDate,
-            LocalDate nextFollowUpDate,
-            String notes,
-            Long companyId,
-            String companyName
-    ) {
-        this.id = id;
-        this.name = name;
-        this.title = title;
-        this.email = email;
-        this.linkedinUrl = linkedinUrl;
-        this.relationshipStatus = relationshipStatus;
-        this.lastContactedDate = lastContactedDate;
-        this.nextFollowUpDate = nextFollowUpDate;
-        this.notes = notes;
-        this.companyId = companyId;
-        this.companyName = companyName;
-    }
-
-    public static ContactResponse fromEntity(Contact contact) {
+    public static ContactResponse from(Contact contact) {
         return new ContactResponse(
                 contact.getId(),
                 contact.getName(),
                 contact.getTitle(),
                 contact.getEmail(),
+                contact.getPhone(),
                 contact.getLinkedinUrl(),
-                contact.getRelationshipStatus(),
+                contact.getStatus(),
+                contact.getTouchCount(),
+                ContactService.MAX_SEQUENCE_TOUCHES,
                 contact.getLastContactedDate(),
-                contact.getNextFollowUpDate(),
+                contact.getNextActionDate(),
+                contact.getNextActionType(),
                 contact.getNotes(),
                 contact.getCompany().getId(),
-                contact.getCompany().getName()
+                contact.getCompany().getName(),
+                contact.getOwner() == null ? null : contact.getOwner().getId(),
+                contact.getOwner() == null ? null : contact.getOwner().getDisplayName(),
+                contact.getCreatedAt(),
+                contact.getUpdatedAt()
         );
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getLinkedinUrl() {
-        return linkedinUrl;
-    }
-
-    public String getRelationshipStatus() {
-        return relationshipStatus;
-    }
-
-    public LocalDate getLastContactedDate() {
-        return lastContactedDate;
-    }
-
-    public LocalDate getNextFollowUpDate() {
-        return nextFollowUpDate;
-    }
-
-    public String getNotes() {
-        return notes;
-    }
-
-    public Long getCompanyId() {
-        return companyId;
-    }
-
-    public String getCompanyName() {
-        return companyName;
     }
 }

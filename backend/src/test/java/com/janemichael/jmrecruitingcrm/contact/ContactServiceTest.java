@@ -1,245 +1,221 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
+import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
+import com.janemichael.jmrecruitingcrm.activity.ActivityType;
+import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
+import com.janemichael.jmrecruitingcrm.auth.AppUser;
+import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
+import com.janemichael.jmrecruitingcrm.auth.UserRole;
+import com.janemichael.jmrecruitingcrm.common.ActionType;
+import com.janemichael.jmrecruitingcrm.common.BadRequestException;
+import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
+/** The outbound rules: four touches per sequence, next touch three business days out. */
 class ContactServiceTest {
+
+    /** Wednesday, October 14, 2026 in New York. */
+    private static final LocalDate TODAY = LocalDate.of(2026, 10, 14);
 
     private final ContactRepository contactRepository = mock(ContactRepository.class);
     private final CompanyRepository companyRepository = mock(CompanyRepository.class);
-    private final ContactService contactService = new ContactService(contactRepository, companyRepository);
+    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final ActivityLogger activityLogger = mock(ActivityLogger.class);
+    private final Clock clock = Clock.fixed(Instant.parse("2026-10-14T14:00:00Z"), ZoneId.of("America/New_York"));
+
+    private final ContactService contactService = new ContactService(
+            contactRepository, companyRepository, currentUserService, activityLogger, clock);
+
+    private final AppUser user = new AppUser();
+
+    @BeforeEach
+    void setUp() {
+        user.setId(7L);
+        user.setEmail("michael@jane-michael.com");
+        user.setDisplayName("Michael");
+        user.setRole(UserRole.ADMIN);
+        when(currentUserService.get()).thenReturn(user);
+    }
 
     @Test
-    void getAllContactsReturnsContactResponses() {
-        Company company = createCompany();
+    void firstTouchStartsTheSequenceAndSchedulesTheNextTouchThreeBusinessDaysOut() {
+        Contact contact = contact(OutreachStatus.NEW, 0);
 
+        ContactResponse response = contactService.logActivity(1L, request(ActivityType.EMAIL));
+
+        assertThat(response.status()).isEqualTo(OutreachStatus.IN_SEQUENCE);
+        assertThat(response.touchCount()).isEqualTo(1);
+        assertThat(response.lastContactedDate()).isEqualTo(TODAY);
+        // Thursday, Friday, then Monday: weekends are skipped.
+        assertThat(response.nextActionDate()).isEqualTo(LocalDate.of(2026, 10, 19));
+        assertThat(response.nextActionType()).isEqualTo(ActionType.EMAIL);
+        verify(activityLogger).forContact(contact, ActivityType.EMAIL, true, "Touch 1 of 4", user);
+    }
+
+    @Test
+    void notesAreAddedToTheTouchSummary() {
+        Contact contact = contact(OutreachStatus.IN_SEQUENCE, 1);
+
+        contactService.logActivity(1L, new LogActivityRequest(
+                ActivityType.LINKEDIN, "Sent connection note", null, null, false, null));
+
+        verify(activityLogger).forContact(contact, ActivityType.LINKEDIN, true,
+                "Touch 2 of 4: Sent connection note", user);
+    }
+
+    @Test
+    void fourthTouchEndsTheSequence() {
+        contact(OutreachStatus.IN_SEQUENCE, 3);
+
+        ContactResponse response = contactService.logActivity(1L, request(ActivityType.CALL));
+
+        assertThat(response.touchCount()).isEqualTo(4);
+        assertThat(response.status()).isEqualTo(OutreachStatus.NO_RESPONSE);
+        assertThat(response.nextActionDate()).isNull();
+        assertThat(response.nextActionType()).isNull();
+    }
+
+    @Test
+    void fifthTouchIsRejected() {
+        contact(OutreachStatus.IN_SEQUENCE, 4);
+
+        assertThatThrownBy(() -> contactService.logActivity(1L, request(ActivityType.EMAIL)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("4 touches");
+
+        verifyNoInteractions(activityLogger);
+    }
+
+    @Test
+    void doNotContactBlocksOutreach() {
+        contact(OutreachStatus.DO_NOT_CONTACT, 0);
+
+        assertThatThrownBy(() -> contactService.logActivity(1L, request(ActivityType.EMAIL)))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void replyMovesTheContactToRepliedAndPutsAResponseOnTodaysList() {
+        Contact contact = contact(OutreachStatus.IN_SEQUENCE, 2);
+
+        ContactResponse response = contactService.logActivity(1L, request(ActivityType.REPLY));
+
+        assertThat(response.status()).isEqualTo(OutreachStatus.REPLIED);
+        assertThat(response.touchCount()).isEqualTo(2);
+        assertThat(response.nextActionDate()).isEqualTo(TODAY);
+        assertThat(response.nextActionType()).isEqualTo(ActionType.EMAIL);
+        verify(activityLogger).forContact(eq(contact), eq(ActivityType.REPLY), eq(false), isNull(), eq(user));
+    }
+
+    @Test
+    void outreachToAnEngagedContactCompletesTheDueActionWithoutCountingTowardTheSequence() {
+        Contact contact = contact(OutreachStatus.ENGAGED, 0);
+        contact.setNextActionDate(TODAY);
+        contact.setNextActionType(ActionType.CALL);
+
+        ContactResponse response = contactService.logActivity(1L, request(ActivityType.CALL));
+
+        assertThat(response.status()).isEqualTo(OutreachStatus.ENGAGED);
+        assertThat(response.touchCount()).isZero();
+        assertThat(response.nextActionDate()).isNull();
+        verify(activityLogger).forContact(eq(contact), eq(ActivityType.CALL), eq(true), isNull(), eq(user));
+    }
+
+    @Test
+    void anExplicitNextActionOverridesTheDefault() {
+        contact(OutreachStatus.NEW, 0);
+
+        ContactResponse response = contactService.logActivity(1L, new LogActivityRequest(
+                ActivityType.LINKEDIN, null, LocalDate.of(2026, 10, 20), ActionType.CALL, false, null));
+
+        assertThat(response.nextActionDate()).isEqualTo(LocalDate.of(2026, 10, 20));
+        assertThat(response.nextActionType()).isEqualTo(ActionType.CALL);
+    }
+
+    @Test
+    void restartingTheSequenceResetsTouchesAndSchedulesToday() {
+        contact(OutreachStatus.NO_RESPONSE, 4);
+
+        ContactResponse response = contactService.restartSequence(1L);
+
+        assertThat(response.status()).isEqualTo(OutreachStatus.NEW);
+        assertThat(response.touchCount()).isZero();
+        assertThat(response.nextActionDate()).isEqualTo(TODAY);
+        assertThat(response.nextActionType()).isEqualTo(ActionType.EMAIL);
+    }
+
+    @Test
+    void systemActivityTypesCannotBeLoggedByHand() {
+        contact(OutreachStatus.NEW, 0);
+
+        assertThatThrownBy(() -> contactService.logActivity(1L, request(ActivityType.STATUS_CHANGE)))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void creatingAContactDefaultsToNewAndTheSignedInOwner() {
+        Company company = company();
+        when(companyRepository.findById(10L)).thenReturn(Optional.of(company));
+        when(contactRepository.save(any(Contact.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ContactResponse response = contactService.create(new ContactRequest(
+                "Priya Shah", "Head of ML Platform", "priya@acme.ai", null, null, null,
+                null, null, null, null, 10L, null));
+
+        assertThat(response.status()).isEqualTo(OutreachStatus.NEW);
+        assertThat(response.ownerId()).isEqualTo(7L);
+        assertThat(response.companyName()).isEqualTo("Acme AI");
+    }
+
+    @Test
+    void duplicateEmailsAreRejected() {
+        when(companyRepository.findById(10L)).thenReturn(Optional.of(company()));
+        when(contactRepository.existsByEmailIgnoreCase("priya@acme.ai")).thenReturn(true);
+
+        assertThatThrownBy(() -> contactService.create(new ContactRequest(
+                "Priya Shah", null, "priya@acme.ai", null, null, null,
+                null, null, null, null, 10L, null)))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    private Contact contact(OutreachStatus status, int touches) {
         Contact contact = new Contact();
         contact.setId(1L);
         contact.setName("Jane Doe");
-        contact.setTitle("VP Engineering");
-        contact.setEmail("jane@example.com");
-        contact.setCompany(company);
-
-        when(contactRepository.findAll()).thenReturn(List.of(contact));
-
-        List<ContactResponse> result = contactService.getAllContacts();
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getId()).isEqualTo(1L);
-        assertThat(result.get(0).getName()).isEqualTo("Jane Doe");
-        assertThat(result.get(0).getTitle()).isEqualTo("VP Engineering");
-        assertThat(result.get(0).getEmail()).isEqualTo("jane@example.com");
-        assertThat(result.get(0).getCompanyId()).isEqualTo(10L);
-        assertThat(result.get(0).getCompanyName()).isEqualTo("Jane Michael LLC");
-
-        verify(contactRepository).findAll();
+        contact.setCompany(company());
+        contact.setStatus(status);
+        contact.setTouchCount(touches);
+        when(contactRepository.findWithDetailsById(1L)).thenReturn(Optional.of(contact));
+        return contact;
     }
 
-    @Test
-    void getContactByIdReturnsContactResponseWhenContactExists() {
-        Company company = createCompany();
-
-        Contact contact = new Contact();
-        contact.setId(1L);
-        contact.setName("Jane Doe");
-        contact.setCompany(company);
-
-        when(contactRepository.findById(1L)).thenReturn(Optional.of(contact));
-
-        Optional<ContactResponse> result = contactService.getContactById(1L);
-
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isEqualTo(1L);
-        assertThat(result.get().getName()).isEqualTo("Jane Doe");
-        assertThat(result.get().getCompanyId()).isEqualTo(10L);
-
-        verify(contactRepository).findById(1L);
-    }
-
-    @Test
-    void getContactByIdReturnsEmptyWhenContactDoesNotExist() {
-        when(contactRepository.findById(99L)).thenReturn(Optional.empty());
-
-        Optional<ContactResponse> result = contactService.getContactById(99L);
-
-        assertThat(result).isEmpty();
-
-        verify(contactRepository).findById(99L);
-    }
-
-    @Test
-    void createContactSavesContactWhenCompanyExists() {
-        Company company = createCompany();
-        ContactRequest request = createRequest();
-
-        Contact savedContact = createSavedContact(company);
-
-        when(companyRepository.findById(10L)).thenReturn(Optional.of(company));
-        when(contactRepository.save(any(Contact.class))).thenReturn(savedContact);
-
-        Optional<ContactResponse> result = contactService.createContact(request);
-
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isEqualTo(1L);
-        assertThat(result.get().getName()).isEqualTo("Jane Doe");
-        assertThat(result.get().getCompanyId()).isEqualTo(10L);
-        assertThat(result.get().getCompanyName()).isEqualTo("Jane Michael LLC");
-
-        ArgumentCaptor<Contact> contactCaptor = ArgumentCaptor.forClass(Contact.class);
-        verify(contactRepository).save(contactCaptor.capture());
-
-        Contact contactPassedToRepository = contactCaptor.getValue();
-
-        assertThat(contactPassedToRepository.getName()).isEqualTo("Jane Doe");
-        assertThat(contactPassedToRepository.getTitle()).isEqualTo("VP Engineering");
-        assertThat(contactPassedToRepository.getEmail()).isEqualTo("jane@example.com");
-        assertThat(contactPassedToRepository.getLinkedinUrl()).isEqualTo("https://linkedin.com/in/janedoe");
-        assertThat(contactPassedToRepository.getRelationshipStatus()).isEqualTo("Warm");
-        assertThat(contactPassedToRepository.getLastContactedDate()).isEqualTo(LocalDate.of(2026, 5, 23));
-        assertThat(contactPassedToRepository.getNextFollowUpDate()).isEqualTo(LocalDate.of(2026, 5, 30));
-        assertThat(contactPassedToRepository.getNotes()).isEqualTo("Interested in AI platform engineers");
-        assertThat(contactPassedToRepository.getCompany()).isEqualTo(company);
-
-        verify(companyRepository).findById(10L);
-    }
-
-    @Test
-    void createContactReturnsEmptyWhenCompanyDoesNotExist() {
-        ContactRequest request = createRequest();
-
-        when(companyRepository.findById(10L)).thenReturn(Optional.empty());
-
-        Optional<ContactResponse> result = contactService.createContact(request);
-
-        assertThat(result).isEmpty();
-
-        verify(companyRepository).findById(10L);
-        verify(contactRepository, never()).save(any(Contact.class));
-    }
-
-    @Test
-    void updateContactUpdatesExistingContactWhenCompanyExists() {
-        Company company = createCompany();
-        ContactRequest request = createRequest();
-
-        Contact existingContact = new Contact();
-        existingContact.setId(1L);
-        existingContact.setName("Old Name");
-        existingContact.setCompany(company);
-
-        when(companyRepository.findById(10L)).thenReturn(Optional.of(company));
-        when(contactRepository.findById(1L)).thenReturn(Optional.of(existingContact));
-        when(contactRepository.save(existingContact)).thenReturn(existingContact);
-
-        Optional<ContactResponse> result = contactService.updateContact(1L, request);
-
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isEqualTo(1L);
-        assertThat(result.get().getName()).isEqualTo("Jane Doe");
-        assertThat(result.get().getTitle()).isEqualTo("VP Engineering");
-        assertThat(result.get().getCompanyId()).isEqualTo(10L);
-
-        verify(companyRepository).findById(10L);
-        verify(contactRepository).findById(1L);
-        verify(contactRepository).save(existingContact);
-    }
-
-    @Test
-    void updateContactReturnsEmptyWhenCompanyDoesNotExist() {
-        ContactRequest request = createRequest();
-
-        when(companyRepository.findById(10L)).thenReturn(Optional.empty());
-
-        Optional<ContactResponse> result = contactService.updateContact(1L, request);
-
-        assertThat(result).isEmpty();
-
-        verify(companyRepository).findById(10L);
-        verify(contactRepository, never()).findById(anyLong());
-        verify(contactRepository, never()).save(any(Contact.class));
-    }
-
-    @Test
-    void updateContactReturnsEmptyWhenContactDoesNotExist() {
-        Company company = createCompany();
-        ContactRequest request = createRequest();
-
-        when(companyRepository.findById(10L)).thenReturn(Optional.of(company));
-        when(contactRepository.findById(99L)).thenReturn(Optional.empty());
-
-        Optional<ContactResponse> result = contactService.updateContact(99L, request);
-
-        assertThat(result).isEmpty();
-
-        verify(companyRepository).findById(10L);
-        verify(contactRepository).findById(99L);
-        verify(contactRepository, never()).save(any(Contact.class));
-    }
-
-    @Test
-    void deleteContactReturnsTrueWhenRowWasDeleted() {
-        when(contactRepository.deleteContactById(1L)).thenReturn(1);
-
-        boolean result = contactService.deleteContact(1L);
-
-        assertThat(result).isTrue();
-
-        verify(contactRepository).deleteContactById(1L);
-    }
-
-    @Test
-    void deleteContactReturnsFalseWhenNoRowWasDeleted() {
-        when(contactRepository.deleteContactById(99L)).thenReturn(0);
-
-        boolean result = contactService.deleteContact(99L);
-
-        assertThat(result).isFalse();
-
-        verify(contactRepository).deleteContactById(99L);
-    }
-
-    private Company createCompany() {
+    private static Company company() {
         Company company = new Company();
         company.setId(10L);
-        company.setName("Jane Michael LLC");
+        company.setName("Acme AI");
         return company;
     }
 
-    private ContactRequest createRequest() {
-        ContactRequest request = new ContactRequest();
-        request.setName("Jane Doe");
-        request.setTitle("VP Engineering");
-        request.setEmail("jane@example.com");
-        request.setLinkedinUrl("https://linkedin.com/in/janedoe");
-        request.setRelationshipStatus("Warm");
-        request.setLastContactedDate(LocalDate.of(2026, 5, 23));
-        request.setNextFollowUpDate(LocalDate.of(2026, 5, 30));
-        request.setNotes("Interested in AI platform engineers");
-        request.setCompanyId(10L);
-        return request;
-    }
-
-    private Contact createSavedContact(Company company) {
-        Contact contact = new Contact();
-        contact.setId(1L);
-        contact.setName("Jane Doe");
-        contact.setTitle("VP Engineering");
-        contact.setEmail("jane@example.com");
-        contact.setLinkedinUrl("https://linkedin.com/in/janedoe");
-        contact.setRelationshipStatus("Warm");
-        contact.setLastContactedDate(LocalDate.of(2026, 5, 23));
-        contact.setNextFollowUpDate(LocalDate.of(2026, 5, 30));
-        contact.setNotes("Interested in AI platform engineers");
-        contact.setCompany(company);
-        return contact;
+    private static LogActivityRequest request(ActivityType type) {
+        return new LogActivityRequest(type, null, null, null, false, null);
     }
 }

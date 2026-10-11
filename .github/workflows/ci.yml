@@ -2,16 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
   pull_request:
 
 # Shared database settings. application.properties is gitignored, so CI
-# configures Spring through environment variables instead.
+# configures Spring through environment variables instead. Flyway builds the schema.
 env:
   SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/jmcrm
   SPRING_DATASOURCE_USERNAME: postgres
   SPRING_DATASOURCE_PASSWORD: postgres
-  SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
 jobs:
   backend:
@@ -44,7 +43,25 @@ jobs:
           cache: maven
 
       - name: Run unit and integration tests
-        run: ./mvnw -B verify
+        run: |
+          set -o pipefail
+          ./mvnw -B verify 2>&1 | tee mvn.log
+
+      # Surfaces compiler and test errors as annotations on the pull request.
+      - name: Report failures
+        if: failure()
+        run: |
+          annotate() {
+            local title="$1" file="$2"
+            [ -s "$file" ] || return 0
+            local message
+            message=$(cut -c1-400 "$file" | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=${title}::${message}"
+          }
+          grep -E '^\[ERROR\]' mvn.log | grep -vE '^\[ERROR\] *$|Re-run Maven|full stack trace|-e switch|-X switch|Help 1|^\[ERROR\] *->' | head -60 > maven-errors.txt || true
+          grep -E 'Caused by:|Exception:|SQL Error|ERROR [0-9]+ ---' mvn.log | sort | uniq | head -40 > causes.txt || true
+          annotate "Maven errors" maven-errors.txt
+          annotate "Exceptions" causes.txt
 
   frontend:
     name: Frontend lint and build
@@ -68,7 +85,14 @@ jobs:
   e2e:
     name: Playwright end-to-end tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      # The first admin account, created on startup. Playwright signs in with it.
+      ADMIN_EMAIL: e2e-admin@jane-michael.com
+      ADMIN_PASSWORD: e2e-admin-password
+      ADMIN_NAME: E2E Admin
+      # Put exception messages in error responses so failures are readable in the report.
+      SERVER_ERROR_INCLUDE_MESSAGE: always
     services:
       postgres:
         image: postgres:16
@@ -128,3 +152,12 @@ jobs:
           name: playwright-report
           path: e2e/playwright-report/
           retention-days: 14
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the production image
+        run: docker build -t jm-recruiting-crm:ci .

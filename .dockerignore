@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.vscode
+**/node_modules
+**/dist
+**/target
+e2e
+backend/src/main/resources/application.properties
+*.md
