@@ -9,15 +9,18 @@ import '@fontsource/ibm-plex-sans/latin-600.css';
 import './styles.css';
 import App from './App.jsx';
 import AuthProvider from './components/AuthProvider.jsx';
+import SetupGate from './components/SetupGate.jsx';
 import ToastProvider from './components/ToastProvider.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <ToastProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <SetupGate>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </SetupGate>
       </ToastProvider>
     </BrowserRouter>
   </StrictMode>,

@@ -233,6 +233,14 @@ textarea {
   color: #9fb2ab;
 }
 
+.nav-user .sync-badge {
+  color: #9fb2ab;
+}
+
+.nav-user .sync-badge:hover {
+  color: #ffffff;
+}
+
 .main {
   padding: 26px 32px 64px;
   max-width: 1320px;
@@ -594,6 +602,11 @@ textarea {
 
 .plain-list li + li {
   margin-top: 6px;
+}
+
+.plain-list.numbered {
+  padding-left: 20px;
+  list-style: decimal;
 }
 
 /* Today ---------------------------------------------------------------------- */
@@ -1849,6 +1862,142 @@ a.cell-title:hover {
   margin-top: 16px;
   font-size: 13px;
   color: var(--ink-3);
+}
+
+/* Desktop setup ------------------------------------------------------------------ */
+
+.setup-panel {
+  width: min(460px, 100%);
+}
+
+.setup-panel h2 {
+  font-size: 17px;
+}
+
+.setup-choice {
+  display: flex;
+  margin-bottom: 18px;
+}
+
+.setup-choice .segment {
+  flex: 1;
+  text-align: center;
+}
+
+.setup-note {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 14px;
+}
+
+.key-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.key-box code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+/* This computer --------------------------------------------------------------------- */
+
+.computers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.computers li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.computers li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.computer-name {
+  font-weight: 600;
+}
+
+.computer-state {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.computer-state-ok {
+  color: var(--green);
+}
+
+.computer-state-problem {
+  color: var(--amber);
+}
+
+.setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.setting-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.setting-row p {
+  max-width: 60ch;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.setting-row strong {
+  display: block;
+  color: var(--ink);
+}
+
+.sync-badge {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+
+.sync-badge-ok::before,
+.sync-badge-problem::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.sync-badge-ok::before {
+  background: var(--green-mark);
+}
+
+.sync-badge-problem::before {
+  background: var(--amber);
 }
 
 /* Toast ------------------------------------------------------------------------- */

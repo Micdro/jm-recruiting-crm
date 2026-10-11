@@ -8,3 +8,6 @@ export const AuthContext = createContext({
 });
 
 export const ToastContext = createContext(() => {});
+
+/** True when this is the desktop app (its own database, synced with the team's other computers). */
+export const DesktopContext = createContext(false);

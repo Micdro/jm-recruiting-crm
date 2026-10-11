@@ -37,7 +37,9 @@ public class SyncService {
             String address,
             Instant lastSuccess,
             Instant lastAttempt,
-            String lastError
+            String lastError,
+            /** Measured by this computer's clock, so the page needn't compare clocks. */
+            Long secondsSinceSuccess
     ) {
     }
 
@@ -163,7 +165,8 @@ public class SyncService {
         }
         Self self = identity.self().orElseThrow();
         List<PeerStatus> peers = jdbc.query("""
-                SELECT n.id, n.name, n.address, s.last_success, s.last_attempt, s.last_error
+                SELECT n.id, n.name, n.address, s.last_success, s.last_attempt, s.last_error,
+                       extract(epoch FROM now() - s.last_success)::bigint AS seconds_since_success
                 FROM sync_node n LEFT JOIN sync_peer_state s ON s.node_id = n.id
                 WHERE n.id <> ?
                 ORDER BY n.id
@@ -173,7 +176,9 @@ public class SyncService {
                 resultSet.getString("address"),
                 instant(resultSet.getTimestamp("last_success")),
                 instant(resultSet.getTimestamp("last_attempt")),
-                resultSet.getString("last_error")), self.nodeId());
+                resultSet.getString("last_error"),
+                resultSet.getObject("seconds_since_success") == null ? null : resultSet.getLong("seconds_since_success")),
+                self.nodeId());
         Integer waiting = jdbc.queryForObject("SELECT count(*) FROM sync_pending", Integer.class);
         return new Status(true, self.nodeId(), self.name(), peers, waiting == null ? 0 : waiting);
     }

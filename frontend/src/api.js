@@ -89,6 +89,20 @@ export const api = {
     changeOwnPassword: (currentPassword, newPassword) =>
       post('/api/users/me/password', { currentPassword, newPassword }),
   },
+  setup: {
+    status: () => get('/api/setup/status'),
+    start: (body) => post('/api/setup/start', body),
+    join: (body) => post('/api/setup/join', body),
+  },
+  desktop: {
+    status: () => get('/api/desktop/status'),
+    syncNow: () => post('/api/desktop/sync-now'),
+    setStartup: (enabled) => put('/api/desktop/startup', { enabled }),
+    firewall: () => get('/api/desktop/firewall'),
+    allowFirewall: () => post('/api/desktop/firewall'),
+    removeComputer: (id) => del(`/api/desktop/computers/${id}`),
+    quit: () => post('/api/desktop/quit'),
+  },
   dashboard: (scope) => get('/api/dashboard', { scope }),
   companies: crud('/api/companies'),
   contacts: {

@@ -84,6 +84,16 @@ export function addBusinessDays(iso, count) {
   return toIsoDate(date);
 }
 
+/** "just now", "40 seconds ago", "5 minutes ago", or the date and time, from an age the server measured. */
+export function timeAgo(seconds, instant) {
+  if (seconds === null || seconds === undefined) return 'never';
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds} seconds ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+  return formatTimestamp(instant);
+}
+
 export function money(value) {
   if (value === null || value === undefined || value === '') return '';
   return MONEY.format(Number(value));

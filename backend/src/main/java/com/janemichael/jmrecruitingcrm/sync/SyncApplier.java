@@ -169,16 +169,16 @@ public class SyncApplier {
             Outcome outcome = step.run();
             jdbc.execute("RELEASE SAVEPOINT sync_change");
             return outcome;
-        } catch (DataAccessException | IllegalArgumentException exception) {
+        } catch (DataAccessException exception) {
             jdbc.execute("ROLLBACK TO SAVEPOINT sync_change");
-            String message = exception.getMostSpecificCause() == null
-                    ? exception.getMessage()
-                    : exception.getMostSpecificCause().getMessage();
-            if (exception instanceof IllegalArgumentException) {
-                message = exception.getMessage();
-            }
-            log.warn("Could not apply synced change {}: {}", change.key(), message);
-            reason[0] = truncate(message);
+            Throwable cause = exception.getMostSpecificCause();
+            reason[0] = truncate(cause == null ? exception.getMessage() : cause.getMessage());
+            log.warn("Could not apply synced change {}: {}", change.key(), reason[0]);
+            return Outcome.WAITING;
+        } catch (IllegalArgumentException exception) {
+            jdbc.execute("ROLLBACK TO SAVEPOINT sync_change");
+            reason[0] = truncate(exception.getMessage());
+            log.warn("Could not apply synced change {}: {}", change.key(), reason[0]);
             return Outcome.WAITING;
         }
     }

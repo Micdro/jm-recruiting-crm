@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { useAuth } from '../hooks.js';
+import { useAuth, useDesktop } from '../hooks.js';
+import SyncBadge from './SyncBadge.jsx';
 
 const NAV = [
   { to: '/', label: 'Today', end: true },
@@ -18,6 +19,8 @@ const TOOLS = [
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const desktop = useDesktop();
+  const tools = desktop ? [...TOOLS, { to: '/computer', label: 'This computer' }] : TOOLS;
   const [openPath, setOpenPath] = useState(null);
   const location = useLocation();
   // The mobile menu closes itself whenever the page changes.
@@ -57,7 +60,7 @@ export default function Layout() {
             ))}
           </ul>
           <ul className="nav-tools">
-            {TOOLS.map((item) => (
+            {tools.map((item) => (
               <li key={item.to}>
                 <NavLink to={item.to}>{item.label}</NavLink>
               </li>
@@ -65,6 +68,7 @@ export default function Layout() {
           </ul>
           <div className="nav-user">
             <span className="nav-user-name">{user?.displayName}</span>
+            {desktop && <SyncBadge />}
             <button type="button" className="link-button" onClick={logout}>
               Sign out
             </button>

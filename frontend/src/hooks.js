@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { api } from './api.js';
-import { AuthContext, ToastContext } from './contexts.js';
+import { AuthContext, DesktopContext, ToastContext } from './contexts.js';
 
 // Records the app has already loaded, kept in memory for this tab only. Pages show them
 // instantly and refresh in the background, so moving around the CRM doesn't wait on the
@@ -111,6 +111,18 @@ export function useAuth() {
 
 export function useToast() {
   return useContext(ToastContext);
+}
+
+export function useDesktop() {
+  return useContext(DesktopContext);
+}
+
+/** Calls `callback` every `ms` milliseconds while the component is shown. */
+export function useInterval(callback, ms) {
+  useEffect(() => {
+    const timer = setInterval(callback, ms);
+    return () => clearInterval(timer);
+  }, [callback, ms]);
 }
 
 /** Keeps the browser tab title in step with the page. */
