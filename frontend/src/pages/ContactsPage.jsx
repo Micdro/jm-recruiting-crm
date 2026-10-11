@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
-import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, TouchPips } from '../components/Bits.jsx';
+import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore, TouchPips } from '../components/Bits.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
@@ -11,6 +11,8 @@ import { matchesQuery, useAuth, useFilterParams, useLoader, useTitle, useToast, 
 
 const CLOSED = ['NOT_INTERESTED', 'DO_NOT_CONTACT'];
 
+
+const PAGE_SIZE = 200;
 export default function ContactsPage() {
   useTitle('Contacts');
   const navigate = useNavigate();
@@ -20,6 +22,7 @@ export default function ContactsPage() {
   const contacts = useLoader(() => api.contacts.list(), []);
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
   const q = filters.get('q');
   const status = filters.get('status');
@@ -87,7 +90,7 @@ export default function ContactsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((contact) => (
+              {rows.slice(0, limit).map((contact) => (
                 <tr key={contact.id} className="row-link" onClick={() => navigate(`/contacts/${contact.id}`)}>
                   <td>
                     <Link to={`/contacts/${contact.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
@@ -118,7 +121,9 @@ export default function ContactsPage() {
             </tbody>
           </table>
           <p className="table-count">
-            {rows.length} of {contacts.data.length}
+            Showing {Math.min(limit, rows.length)} of {rows.length}
+            {rows.length < contacts.data.length ? `, filtered from ${contacts.data.length}` : ''}
+            <ShowMore shown={limit} total={rows.length} onMore={() => setLimit((value) => value + PAGE_SIZE)} />
           </p>
         </div>
       )}

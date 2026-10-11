@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
-import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
+import { Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
 import { FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import CompanyForm from '../forms/CompanyForm.jsx';
 import { COMPANY_STATUS, options } from '../labels.js';
 import { matchesQuery, useFilterParams, useLoader, useTitle, useToast } from '../hooks.js';
 
+
+const PAGE_SIZE = 200;
 export default function CompaniesPage() {
   useTitle('Companies');
   const navigate = useNavigate();
@@ -15,6 +17,7 @@ export default function CompaniesPage() {
   const companies = useLoader(() => api.companies.list(), []);
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
   const q = filters.get('q');
   const status = filters.get('status');
@@ -62,7 +65,7 @@ export default function CompaniesPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((company) => (
+              {rows.slice(0, limit).map((company) => (
                 <tr key={company.id} className="row-link" onClick={() => navigate(`/companies/${company.id}`)}>
                   <td>
                     <Link to={`/companies/${company.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
@@ -82,7 +85,9 @@ export default function CompaniesPage() {
             </tbody>
           </table>
           <p className="table-count">
-            {rows.length} of {companies.data.length}
+            Showing {Math.min(limit, rows.length)} of {rows.length}
+            {rows.length < companies.data.length ? `, filtered from ${companies.data.length}` : ''}
+            <ShowMore shown={limit} total={rows.length} onMore={() => setLimit((value) => value + PAGE_SIZE)} />
           </p>
         </div>
       )}

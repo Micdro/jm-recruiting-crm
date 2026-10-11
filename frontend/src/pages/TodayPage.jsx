@@ -192,7 +192,7 @@ function ContactQueue({ data, scope, onChanged, onLog }) {
               id="fill-count"
               type="number"
               min="1"
-              max={Math.min(100, data.unscheduledNewContacts)}
+              max="100"
               value={fillCount}
               onChange={(event) => setFillCount(event.target.value)}
             />

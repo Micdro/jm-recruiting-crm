@@ -1087,6 +1087,10 @@ a.cell-title:hover {
   margin-left: 6px;
 }
 
+.show-more {
+  margin-left: 12px;
+}
+
 .table-count {
   padding: 8px 14px;
   border-top: 1px solid var(--rule);

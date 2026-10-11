@@ -120,3 +120,13 @@ export function ExternalLink({ href, children }) {
     </a>
   );
 }
+
+/** Reveals the next page of a long list. */
+export function ShowMore({ shown, total, onMore }) {
+  if (shown >= total) return null;
+  return (
+    <button type="button" className="link-button show-more" onClick={onMore}>
+      Show more
+    </button>
+  );
+}

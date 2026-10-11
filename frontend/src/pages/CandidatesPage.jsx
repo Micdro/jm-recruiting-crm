@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
-import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
+import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
@@ -9,6 +9,8 @@ import { CANDIDATE_STATUS, TRACK, options } from '../labels.js';
 import { todayIso } from '../format.js';
 import { matchesQuery, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
 
+
+const PAGE_SIZE = 200;
 export default function CandidatesPage() {
   useTitle('Candidates');
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ export default function CandidatesPage() {
   const candidates = useLoader(() => api.candidates.list(), []);
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
   const q = filters.get('q');
   const status = filters.get('status');
@@ -92,7 +95,7 @@ export default function CandidatesPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((candidate) => (
+              {rows.slice(0, limit).map((candidate) => (
                 <tr key={candidate.id} className="row-link" onClick={() => navigate(`/candidates/${candidate.id}`)}>
                   <td>
                     <Link to={`/candidates/${candidate.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
@@ -117,7 +120,9 @@ export default function CandidatesPage() {
             </tbody>
           </table>
           <p className="table-count">
-            {rows.length} of {candidates.data.length}
+            Showing {Math.min(limit, rows.length)} of {rows.length}
+            {rows.length < candidates.data.length ? `, filtered from ${candidates.data.length}` : ''}
+            <ShowMore shown={limit} total={rows.length} onMore={() => setLimit((value) => value + PAGE_SIZE)} />
           </p>
         </div>
       )}

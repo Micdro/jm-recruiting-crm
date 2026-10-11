@@ -184,10 +184,50 @@ jobs:
           retention-days: 14
 
   docker:
-    name: Docker image builds
+    name: Docker image builds and serves the app
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: jmcrm
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
       - name: Build the production image
         run: docker build -t jm-recruiting-crm:ci .
+
+      # The same way a host runs it: one DATABASE_URL, then check the app, its routes and the API.
+      - name: Smoke test the image
+        run: |
+          docker run -d --name crm --network host \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/jmcrm \
+            -e ADMIN_EMAIL=smoke@jane-michael.com -e ADMIN_PASSWORD=smoke-test-password \
+            jm-recruiting-crm:ci
+          for attempt in $(seq 1 60); do
+            curl -sf http://localhost:8080/api/health > /dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:8080/api/health
+          curl -sf http://localhost:8080/ | grep -q '<div id="root">'
+          curl -sf http://localhost:8080/contacts/42 | grep -q '<div id="root">'
+          curl -sf -o /dev/null http://localhost:8080/favicon.svg
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/companies)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/assets/missing.js)" = 404
+          echo "The image serves the app and protects the API"
+
+      - name: Report the container log
+        if: failure()
+        run: |
+          docker logs crm > container.log 2>&1 || true
+          message=$(grep -E ' ERROR |Exception|Caused by' container.log | head -30 | cut -c1-400 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Container log::${message:-$(tail -30 container.log | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')}"
