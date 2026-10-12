@@ -11,6 +11,7 @@ const NAV = [
   { to: '/searches', label: 'Searches' },
   { to: '/candidates', label: 'Candidates' },
   { to: '/placements', label: 'Placements' },
+  { to: '/numbers', label: 'Numbers' },
 ];
 
 const TOOLS = [

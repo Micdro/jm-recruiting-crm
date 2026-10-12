@@ -121,6 +121,9 @@ export const api = {
     unlock: (key, password) => post('/api/desktop/unlock', { key, password }),
   },
   dashboard: (scope) => get('/api/dashboard', { scope }),
+  reports: {
+    weekly: (scope) => get('/api/reports/weekly', { scope }),
+  },
   companies: crud('/api/companies'),
   contacts: {
     ...crud('/api/contacts'),

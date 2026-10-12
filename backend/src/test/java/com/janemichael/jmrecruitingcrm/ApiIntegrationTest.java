@@ -423,6 +423,50 @@ class ApiIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void weeklyNumbersCountTouchesRepliesAndWhichTouchGotThem() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Northwind Robotics")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        long dana = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Dana Reyes", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        long sam = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Sam Ortiz", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+
+        // Dana gets touches 1 and 2, replies to the email, and takes a meeting. Sam gets touch 1.
+        for (String type : List.of("LINKEDIN", "EMAIL", "REPLY", "MEETING")) {
+            mockMvc.perform(send(post("/api/contacts/" + dana + "/activities"), body("type", type)))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(send(post("/api/contacts/" + sam + "/activities"), body("type", "LINKEDIN")))
+                .andExpect(status().isOk());
+        entityManager.flush();
+
+        mockMvc.perform(signedIn(get("/api/reports/weekly")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.weeklyTarget").value(150))
+                .andExpect(jsonPath("$.weeks.length()").value(12))
+                .andExpect(jsonPath("$.weeks[11].linkedin").value(2))
+                .andExpect(jsonPath("$.weeks[11].email").value(1))
+                .andExpect(jsonPath("$.weeks[11].replies").value(1))
+                .andExpect(jsonPath("$.weeks[11].meetings").value(1))
+                .andExpect(jsonPath("$.weeks[11].started").value(2))
+                .andExpect(jsonPath("$.byTouch[0].touches").value(2))
+                .andExpect(jsonPath("$.byTouch[0].replies").value(0))
+                .andExpect(jsonPath("$.byTouch[1].touches").value(1))
+                .andExpect(jsonPath("$.byTouch[1].replies").value(1))
+                .andExpect(jsonPath("$.byChannel[?(@.channel == 'EMAIL')].replies").value(1))
+                .andExpect(jsonPath("$.people").isEmpty());
+
+        mockMvc.perform(signedIn(get("/api/reports/weekly").param("scope", "team")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.weeklyTarget").value(nullValue()))
+                .andExpect(jsonPath("$.people[?(@.name == 'Integration Admin')].touches").value(3))
+                .andExpect(jsonPath("$.people[?(@.name == 'Integration Admin')].replies").value(1));
+    }
+
     // Recruiting flow -----------------------------------------------------------
 
     @Test
