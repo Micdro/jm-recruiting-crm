@@ -145,12 +145,25 @@ public class SyncServer {
             Long node = parseLong(exchange.getRequestHeaders().getFirst(SyncProtocol.NODE_HEADER));
             Long time = parseLong(exchange.getRequestHeaders().getFirst(SyncProtocol.TIME_HEADER));
             String signature = exchange.getRequestHeaders().getFirst(SyncProtocol.SIGNATURE_HEADER);
-            byte[] body = readBody(exchange);
+            // The cheap checks first, so a stranger can't make this computer read a large body.
+            if (node == null || time == null || signature == null
+                    || Math.abs(System.currentTimeMillis() - time) > SyncProtocol.MAX_CLOCK_SKEW_MS) {
+                recordFailure(remote);
+                sendError(exchange, 401, "Not signed with this CRM's key.");
+                return;
+            }
+            Long declared = parseLong(exchange.getRequestHeaders().getFirst("Content-Length"));
+            byte[] body = "POST".equals(method) && (declared == null || declared <= SyncProtocol.MAX_BODY_BYTES)
+                    ? readBody(exchange)
+                    : "POST".equals(method) ? null : new byte[0];
+            if (body == null) {
+                recordFailure(remote);
+                sendError(exchange, 413, "Too much at once.");
+                return;
+            }
 
             SyncCipher cipher = SyncCipher.forDirect(encryptor.syncToken());
-            if (node == null || time == null || body == null
-                    || Math.abs(System.currentTimeMillis() - time) > SyncProtocol.MAX_CLOCK_SKEW_MS
-                    || !cipher.verify(SyncProtocol.signed(method, pathAndQuery, node, time, body), signature)) {
+            if (!cipher.verify(SyncProtocol.signed(method, pathAndQuery, node, time, body), signature)) {
                 recordFailure(remote);
                 sendError(exchange, 401, "Not signed with this CRM's key.");
                 return;

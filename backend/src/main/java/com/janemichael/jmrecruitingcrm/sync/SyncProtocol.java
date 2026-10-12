@@ -19,8 +19,8 @@ public final class SyncProtocol {
 
     /** How far apart two computers' clocks may be before their requests are refused. */
     public static final long MAX_CLOCK_SKEW_MS = 10 * 60 * 1000L;
-    /** The largest request body accepted (a push of many changes). */
-    public static final int MAX_BODY_BYTES = 64 * 1024 * 1024;
+    /** The largest request body accepted (a push of many changes, compressed). */
+    public static final int MAX_BODY_BYTES = 16 * 1024 * 1024;
     /** The most changes sent in one push. */
     public static final int CHANGES_PER_PUSH = 2000;
 
