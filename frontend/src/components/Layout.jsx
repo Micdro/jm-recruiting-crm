@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth, useDesktop } from '../hooks.js';
+import { shortcutLabel } from '../quickSearch.js';
+import QuickSearch from './QuickSearch.jsx';
 import SyncBadge from './SyncBadge.jsx';
 import UpdateBanner from './UpdateBanner.jsx';
 
@@ -29,6 +31,19 @@ export default function Layout() {
   const location = useLocation();
   // The mobile menu closes itself whenever the page changes.
   const menuOpen = openPath === location.pathname;
+  const [searching, setSearching] = useState(false);
+
+  // Ctrl+K (⌘K on a Mac) opens the quick search from anywhere.
+  useEffect(() => {
+    function onKeyDown(event) {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearching(true);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <div className="shell">
@@ -52,6 +67,15 @@ export default function Layout() {
             {menuOpen ? 'Close' : 'Menu'}
           </button>
         </div>
+
+        <button type="button" className="search-trigger" onClick={() => setSearching(true)} aria-keyshortcuts="Control+K Meta+K">
+          <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">
+            <circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M13 13l4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+          <span>Search</span>
+          <kbd>{shortcutLabel()}</kbd>
+        </button>
 
         <nav id="primary-nav" className={`nav ${menuOpen ? 'nav-open' : ''}`} aria-label="Main">
           <ul>
@@ -84,6 +108,8 @@ export default function Layout() {
         {desktop && <UpdateBanner />}
         <Outlet />
       </main>
+
+      {searching && <QuickSearch onClose={() => setSearching(false)} />}
     </div>
   );
 }

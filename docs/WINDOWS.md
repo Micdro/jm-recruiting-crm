@@ -66,6 +66,8 @@ The first computer doesn't need to be on for this.
   everything that has reached the folder is in.
 - Install it as an app for its own window: in Edge or Chrome, click the install icon at the right
   end of the address bar.
+- Press **Ctrl+K** anywhere in the CRM to find a contact, company, candidate or search by name, email,
+  title or company.
 - JM CRM's icon sits by the clock (under the ^ arrow on Windows 11). Double-click it to open the CRM.
 - **Morning reminder**: each weekday at 8:30 a Windows notification lists what's due today (touches,
   replies to answer, follow-ups) for the last person to sign in on that computer. Click it to open
