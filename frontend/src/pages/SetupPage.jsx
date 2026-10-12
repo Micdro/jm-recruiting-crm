@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { ErrorNote, LoginBrand } from '../components/Bits.jsx';
 import { CheckboxField, TextField } from '../components/Fields.jsx';
+import FolderField from '../components/FolderField.jsx';
 import { useTitle } from '../hooks.js';
 
 /**
@@ -49,7 +50,7 @@ export default function SetupPage({ status, onDone }) {
 }
 
 function JoinForm({ status, onJoined }) {
-  const [address, setAddress] = useState('');
+  const [syncFolder, setSyncFolder] = useState('');
   const [key, setKey] = useState('');
   const [computerName, setComputerName] = useState(status.suggestedName ?? '');
   const [busy, setBusy] = useState(false);
@@ -60,7 +61,7 @@ function JoinForm({ status, onJoined }) {
     setBusy(true);
     setError('');
     try {
-      onJoined(await api.setup.join({ address, key, computerName }));
+      onJoined(await api.setup.join({ syncFolder, key: key.trim(), computerName }));
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
@@ -70,14 +71,15 @@ function JoinForm({ status, onJoined }) {
   return (
     <form className="form" onSubmit={submit}>
       <p className="form-intro">
-        For every computer after the first. This computer gets its own copy of the CRM and keeps it in step with the others.
+        For every computer after the first. This computer gets its own copy of the CRM and stays in step with the others
+        through the shared Google Drive folder.
       </p>
-      <TextField
-        label="The other computer"
-        value={address}
-        onChange={setAddress}
-        placeholder="michael-pc"
-        hint="Its name in Tailscale, or its Tailscale address (100.x.x.x). The CRM must be open there."
+      <FolderField
+        value={syncFolder}
+        onChange={setSyncFolder}
+        joining
+        label="Shared sync folder"
+        hint="The JM CRM Sync folder shared with you in Google Drive. Add it to your My Drive first so it appears here."
         required
         autoFocus
       />
@@ -91,10 +93,6 @@ function JoinForm({ status, onJoined }) {
         required
       />
       <TextField label="Name for this computer" value={computerName} onChange={setComputerName} maxLength={100} />
-      <p className="setup-note">
-        Next, Windows asks twice about network access so your computers can sync. Click <strong>Allow access</strong>, then{' '}
-        <strong>Yes</strong>.
-      </p>
       <ErrorNote>{error}</ErrorNote>
       <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
         {busy ? 'Copying the CRM to this computer…' : 'Join and copy the CRM'}
@@ -104,7 +102,13 @@ function JoinForm({ status, onJoined }) {
 }
 
 function StartForm({ status, onStarted }) {
-  const [form, setForm] = useState({ computerName: status.suggestedName ?? '', name: '', email: '', password: '' });
+  const [form, setForm] = useState({
+    computerName: status.suggestedName ?? '',
+    name: '',
+    email: '',
+    password: '',
+    syncFolder: '',
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (field) => (value) => setForm((current) => ({ ...current, [field]: value }));
@@ -139,11 +143,12 @@ function StartForm({ status, onStarted }) {
         hint="At least 12 characters."
         required
       />
+      <FolderField
+        value={form.syncFolder}
+        onChange={set('syncFolder')}
+        hint="A new folder in Google Drive that you’ll share with the team. You can also choose it later on the This computer page."
+      />
       <TextField label="Name for this computer" value={form.computerName} onChange={set('computerName')} maxLength={100} />
-      <p className="setup-note">
-        Next, Windows asks twice about network access so your computers can sync. Click <strong>Allow access</strong>, then{' '}
-        <strong>Yes</strong>.
-      </p>
       <ErrorNote>{error}</ErrorNote>
       <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
         {busy ? 'Starting…' : 'Start the CRM'}
@@ -189,12 +194,14 @@ function SaveKey({ value, onDone }) {
 }
 
 function Joined({ result, onDone }) {
+  const copied = result.copied === 1 ? '1 record' : `${result.copied.toLocaleString()} records`;
   return (
     <div className="form">
       <h2>This computer is connected</h2>
       <p>
-        Everything was copied from {result.joinedThrough}, and changes on either computer now reach the other within a few seconds
-        while both are on. Sign in with your usual email and password.
+        {result.computers > 0 ? `Copied ${copied} from the shared folder. ` : ''}
+        From now on, changes on any computer reach the others through the folder, usually within a minute. Sign in with your
+        usual email and password.
       </p>
       {result.warning && <p className="warn-note">{result.warning}</p>}
       <button type="button" className="btn btn-primary btn-block" onClick={onDone}>

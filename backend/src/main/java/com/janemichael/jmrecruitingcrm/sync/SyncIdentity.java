@@ -40,23 +40,12 @@ public class SyncIdentity {
         return self().map(Self::nodeId).orElse(0);
     }
 
-    /**
-     * Makes this copy computer {@code nodeId}. The founding computer also lists itself in the
-     * shared directory; a joining computer's entry comes from the computer it joined through.
-     */
+    /** Makes this copy computer {@code nodeId}, listed in the shared directory of computers. */
     @Transactional
-    public void become(int nodeId, String name, boolean founding) {
+    public void become(int nodeId, String name) {
         jdbc.update("DELETE FROM sync_self");
         jdbc.update("INSERT INTO sync_self (node_id, name) VALUES (?, ?)", nodeId, name);
-        if (founding) {
-            jdbc.update("INSERT INTO sync_node (id, name) VALUES (?, ?) ON CONFLICT (id) DO NOTHING", nodeId, name);
-        }
+        jdbc.update("INSERT INTO sync_node (id, name) VALUES (?, ?) ON CONFLICT (id) DO NOTHING", nodeId, name);
         idRanges.apply(nodeId);
-    }
-
-    /** The next free computer number, for a computer joining through this one. */
-    public int nextNodeId() {
-        Integer highest = jdbc.queryForObject("SELECT coalesce(max(id), 0) FROM sync_node", Integer.class);
-        return Math.max(highest == null ? 0 : highest, nodeId()) + 1;
     }
 }

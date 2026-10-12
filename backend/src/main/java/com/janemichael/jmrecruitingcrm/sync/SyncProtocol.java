@@ -16,12 +16,6 @@ public final class SyncProtocol {
     public record NodeInfo(long id, String name) {
     }
 
-    public record JoinRequest(String name, int port) {
-    }
-
-    public record JoinResponse(int protocol, long nodeId, NodeInfo node) {
-    }
-
     public record ChangesResponse(int protocol, NodeInfo node, long cursor, List<SyncChange> changes) {
     }
 

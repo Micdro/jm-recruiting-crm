@@ -103,6 +103,7 @@ export const api = {
     start: (body) => post('/api/setup/start', body),
     join: (body) => post('/api/setup/join', body),
     resetPassword: (body) => post('/api/setup/reset-password', body),
+    folders: () => get('/api/setup/folders'),
   },
   desktop: {
     status: () => get('/api/desktop/status'),
@@ -111,6 +112,7 @@ export const api = {
     firewall: () => get('/api/desktop/firewall'),
     allowFirewall: () => post('/api/desktop/firewall'),
     removeComputer: (id) => del(`/api/desktop/computers/${id}`),
+    useFolder: (path) => put('/api/desktop/folder', { path }),
     quit: () => post('/api/desktop/quit'),
     unlock: (key, password) => post('/api/desktop/unlock', { key, password }),
   },

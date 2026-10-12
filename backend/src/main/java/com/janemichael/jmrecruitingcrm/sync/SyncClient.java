@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.ChangesResponse;
 import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.ErrorResponse;
-import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.JoinRequest;
-import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.JoinResponse;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -46,21 +44,6 @@ public class SyncClient {
         return send(request, ChangesResponse.class);
     }
 
-    public JoinResponse join(String address, String token, String name, int selfPort) throws SyncException {
-        byte[] body;
-        try {
-            body = json.writeValueAsBytes(new JoinRequest(name, selfPort));
-        } catch (IOException exception) {
-            throw new SyncException("Could not prepare the request");
-        }
-        HttpRequest request = base(address, "/api/sync/join", token, 0, selfPort)
-                .timeout(Duration.ofSeconds(30))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-                .build();
-        return send(request, JoinResponse.class);
-    }
-
     private HttpRequest.Builder base(String address, String path, String token, int selfNode, int selfPort) {
         return HttpRequest.newBuilder(URI.create("http://" + address + path))
                 .header(SyncProtocol.TOKEN_HEADER, "Bearer " + token)
@@ -75,7 +58,7 @@ public class SyncClient {
             response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
         } catch (HttpConnectTimeoutException | ConnectException exception) {
             throw new SyncException("Can't reach " + request.uri().getAuthority()
-                    + ". Check that the computer is on, the CRM is running there, and both are connected to Tailscale.");
+                    + ". Check that the computer is on and the CRM is running there.");
         } catch (HttpTimeoutException exception) {
             throw new SyncException(request.uri().getAuthority() + " took too long to answer.");
         } catch (IOException exception) {

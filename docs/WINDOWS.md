@@ -1,26 +1,25 @@
 # JM CRM on Windows
 
 Each computer runs its own copy of the CRM with its own database, so everything opens and saves
-instantly. The copies stay in step with each other over Tailscale, a private network between your
-computers. Changes reach the other computers within a few seconds while they're on. A computer
-that was off catches up as soon as it's back.
+instantly. The copies stay in step through a shared Google Drive folder: each computer leaves its
+changes there as encrypted files and picks up the others'. Changes usually reach the other
+computers within a minute. The computers never connect to each other and don't need to be on at
+the same time. A computer that was off catches up as soon as it's back.
 
 Set up the first computer completely before the others.
 
-## 1. Install Tailscale on every computer
+## 1. Install Google Drive on every computer
 
-1. Download Tailscale for Windows from https://tailscale.com/download/windows and install it.
-2. Sign in. Every computer must be on the same Tailscale network: either sign in with the same
-   account, or invite the others from the Tailscale admin console.
-3. Note each computer's Tailscale name. Click the Tailscale icon in the taskbar, or see the
-   Machines page in the admin console. For example: `michael-pc`.
+1. Download Google Drive for desktop from https://www.google.com/drive/download/ and install it.
+2. Sign in with that person's Google account.
 
-Tailscale only connects your own devices to each other. The CRM is never exposed to the internet.
+Google Drive then shows up in File Explorer, usually as `G:\My Drive`. It's free. OneDrive works
+the same way if you'd rather use it.
 
 ## 2. Install JM CRM
 
 1. Download **JM-CRM-Windows.zip** from the repository's Releases page (the `windows-latest`
-   release). Share the file with the others however you like (Drive, OneDrive, a USB stick).
+   release). Share the file with the others however you like (Drive, email, a USB stick).
 2. Unzip it somewhere permanent, such as `Documents\JM CRM`. Don't run it from the Downloads
    preview: the shortcuts point at wherever it is when you first open it.
 3. Open **JM CRM.exe** in that folder. A small "Starting" window shows while it loads (the first
@@ -34,38 +33,42 @@ the desktop, and starts with Windows from then on so sync keeps running.
 ## 3. The first computer: start the CRM
 
 1. Choose **Start a new CRM**. Enter your name, email and a password (12 characters or more).
-2. Windows asks twice about network access, so your computers can sync. Click **Allow access**,
-   then **Yes**.
+2. **Sync folder**: keep the suggested `G:\My Drive\JM CRM Sync`. The CRM creates the folder.
 3. The app shows your **CRM key**. Copy it into your password manager now. You need it to add or
    replace a computer, and to set a new password if one is forgotten. It isn't saved on the
    computer and isn't shown again.
 4. Sign in.
 5. On the **Team** page, add an account for everyone else, with their full names (for example
    Dimitrios Drougas). Give each person their password privately.
-6. Import your ClickUp lists on the **Import** page.
+6. Share the sync folder: at https://drive.google.com, right-click **JM CRM Sync**, choose
+   **Share**, and add each person's Google account as an **Editor**.
+7. Import your ClickUp lists on the **Import** page.
 
 ## 4. Every other computer: join
 
-1. Make sure the first computer is on, with the CRM open (it starts with Windows) and Tailscale
-   connected.
-2. Choose **Join the team's CRM**.
-3. Enter the first computer's Tailscale name (for example `michael-pc`) and paste the CRM key.
-4. Windows asks twice about network access. Click **Allow access**, then **Yes**.
-5. The CRM copies everything over. This takes a few seconds, or longer the first time on a large
-   list. Then sign in with your own account.
+1. At https://drive.google.com (signed in as that person), open **Shared with me**, right-click
+   **JM CRM Sync**, and choose **Organize**, then **Add shortcut**, then **My Drive**. Give it a
+   minute to appear in File Explorer under `G:\My Drive`.
+2. Open JM CRM and choose **Join the team's CRM**. It finds the folder; check that the path ends in
+   `JM CRM Sync`.
+3. Paste the CRM key. Share it through your password manager or read it out on a call, not by
+   email or text.
+4. The CRM copies everything from the folder. Then sign in with your own account.
 
-A computer can join through any computer that's already set up, not only the first one.
+The first computer doesn't need to be on for this.
 
 ## Day to day
 
 - Open JM CRM from the Start menu or the desktop shortcut. If it's already running, that just opens
   the browser.
-- **This computer** (in the sidebar) shows each other computer and when it last synced. The line
-  under your name in the sidebar says "Synced" when everything is in step.
+- **This computer** (in the sidebar) shows the sync folder, each other computer, when it last ran
+  and whether you have its changes. The line under your name in the sidebar says "Synced" when
+  everything that has reached the folder is in.
 - Install it as an app for its own window: in Edge or Chrome, click the install icon at the right
   end of the address bar.
 - Two people can work at the same time. If two people change the same record before their
   computers sync, the later change wins. Logged touches and notes are always kept.
+- Leave the files in **JM CRM Sync** alone. The CRM tidies them up itself.
 
 ## Locked until you sign in
 
@@ -75,6 +78,9 @@ locks again when everyone on that computer has signed out, after 12 hours withou
 app closes or the computer restarts. While it's locked, nobody can read the data, even with the
 database files in hand. Sync keeps running, so changes still arrive.
 
+The files in the sync folder are encrypted too. Google, or anyone else who gets into the Drive
+account, can't read them.
+
 - **Forgot your password?** Ask an admin to set a new one on the Team page. Or, on the sign-in
   page, click **Forgot your password?** and use the CRM key from your password manager.
 - **"Unlock the CRM" after signing in**: your account can't open the CRM on this computer yet
@@ -83,8 +89,8 @@ database files in hand. Sync keeps running, so changes still arrive.
 
 ## Backups and the key
 
-- Every computer holds a full copy, so losing one computer loses nothing as long as another has
-  synced.
+- Every computer holds a full copy, and the sync folder holds one more, so losing a computer loses
+  nothing.
 - The CRM key is the one thing that can't be replaced. Keep it in your password manager.
 - Use a password of 12 characters or more that you don't use anywhere else. It protects the data
   on every computer.
@@ -98,22 +104,26 @@ database files in hand. Sync keeps running, so changes still arrive.
 2. Replace the JM CRM folder with the one from the new zip (same location).
 3. Open JM CRM.exe and sign in.
 
-Update all computers on the same day. Computers set up before the CRM locked itself kept the key
-in the settings file; after the update, the first sign-in on each computer moves it into your
-account and removes it from the file.
+Update all computers on the same day. If your computers were set up with an older version that
+synced over Tailscale, choose the sync folder on **This computer** after updating: on the first
+computer first, then on the others once the folder is shared with them. Tailscale isn't needed
+after that.
 
 ## If something isn't syncing
 
-**This computer** shows the reason next to each computer. The usual fixes:
+**This computer** shows the reason. The usual fixes:
 
-- **"Can't reach …"**: the other computer is off or asleep, the CRM isn't running there, or
-  Tailscale is disconnected on one side. Changes wait and go through once both are back.
-- **Windows Firewall** on the This computer page says other computers can't reach this one: click
-  **Allow**, then **Yes**. If you clicked Cancel when Windows first asked about JM CRM, open
-  Windows Security > Firewall & network protection > Allow an app through firewall, and allow
-  JM CRM.
-- **"uses a different CRM key"**: that computer was started as a separate CRM. On it, close the
-  CRM, delete `%LOCALAPPDATA%\JMCRM`, open it again and choose **Join the team's CRM**.
+- **"Can't find the sync folder"**: Google Drive isn't running or isn't signed in. Open Google
+  Drive from the Start menu.
+- **"Waiting for Google Drive to finish copying"**: normal for a minute or two after the other
+  computer was used. If it lasts longer, click the Google Drive icon in the taskbar and check that
+  it's syncing.
+- **"The sync folder belongs to a CRM with a different key"**: this computer was started as a
+  separate CRM, or the wrong folder was chosen. Choose the shared **JM CRM Sync** folder under
+  **Sync folder**, or, if this computer was started on its own by mistake, close the CRM, delete
+  `%LOCALAPPDATA%\JMCRM`, open it again and choose **Join the team's CRM**.
+- The folder moved, or Google Drive uses a different drive letter now: under **Sync folder**,
+  click **Change** and choose it again.
 
 Logs are in `%LOCALAPPDATA%\JMCRM\logs`. If the app won't start, it shows a message and writes
 `startup-error.txt` there.

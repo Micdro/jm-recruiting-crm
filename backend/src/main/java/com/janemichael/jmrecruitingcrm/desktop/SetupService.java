@@ -11,28 +11,23 @@ import com.janemichael.jmrecruitingcrm.common.EncryptionBackfill;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.KeyWrap;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
-import com.janemichael.jmrecruitingcrm.sync.SyncClient;
-import com.janemichael.jmrecruitingcrm.sync.SyncClient.SyncException;
+import com.janemichael.jmrecruitingcrm.sync.FolderSync;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity;
-import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.JoinResponse;
-import com.janemichael.jmrecruitingcrm.sync.SyncServer;
-import com.janemichael.jmrecruitingcrm.sync.SyncService;
-import com.janemichael.jmrecruitingcrm.sync.SyncService.Peer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.InetAddress;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * First run on a computer: either start a new CRM (this becomes computer 1 and gets a new key) or
- * join one that already runs on another computer (copying everything from it).
+ * join the team's CRM through the shared sync folder (copying everything from it).
  *
  * <p>Only the sync token is saved on this computer. The CRM key is shown once to be kept in a
  * password manager, and each account keeps its own copy locked with its password, so the data on
@@ -53,22 +48,23 @@ public class SetupService {
     public record StartResult(String key) {
     }
 
-    public record JoinResult(long nodeId, String joinedThrough, String warning) {
+    /**
+     * @param computers how many other computers' files were in the folder
+     * @param copied    how many records were copied from them
+     */
+    public record JoinResult(long nodeId, int computers, int copied, String warning) {
     }
 
     private final boolean desktop;
     private final String home;
     private final FieldEncryptor encryptor;
     private final SyncIdentity identity;
-    private final SyncService sync;
-    private final SyncClient client;
-    private final SyncServer server;
+    private final FolderSync folderSync;
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final EncryptionBackfill backfill;
     private final CrmLock crmLock;
     private final LoginThrottle loginThrottle;
-    private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
     public SetupService(
@@ -76,30 +72,24 @@ public class SetupService {
             @Value("${app.desktop.home:}") String home,
             FieldEncryptor encryptor,
             SyncIdentity identity,
-            SyncService sync,
-            SyncClient client,
-            SyncServer server,
+            FolderSync folderSync,
             AppUserRepository users,
             PasswordEncoder passwordEncoder,
             EncryptionBackfill backfill,
             CrmLock crmLock,
             LoginThrottle loginThrottle,
-            JdbcTemplate jdbc,
             TransactionTemplate transaction
     ) {
         this.desktop = desktop;
         this.home = home;
         this.encryptor = encryptor;
         this.identity = identity;
-        this.sync = sync;
-        this.client = client;
-        this.server = server;
+        this.folderSync = folderSync;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.backfill = backfill;
         this.crmLock = crmLock;
         this.loginThrottle = loginThrottle;
-        this.jdbc = jdbc;
         this.transaction = transaction;
     }
 
@@ -113,14 +103,22 @@ public class SetupService {
         return desktop && !encryptor.hasSyncToken();
     }
 
-    /** Starts a brand-new CRM on this computer. Returns the new key, shown once to be saved. */
-    public synchronized StartResult startNew(String computerName, String name, String email, String password) {
+    /**
+     * Starts a brand-new CRM on this computer. With a sync folder, it starts sharing through it
+     * right away (it can also be chosen later). Returns the new key, shown once to be saved.
+     */
+    public synchronized StartResult startNew(String computerName, String name, String email, String password,
+                                             String syncFolder) {
         requireSetupMode();
+        boolean sharing = syncFolder != null && !syncFolder.isBlank();
+        if (sharing) {
+            folderSync.checkFreeForNewCrm(syncFolder);
+        }
         String key = FieldEncryptor.newKey();
         encryptor.configure(key);
 
         transaction.executeWithoutResult(status -> {
-            identity.become(1, clean(computerName, computerName()), true);
+            identity.become(1, clean(computerName, computerName()));
             AppUser admin = new AppUser();
             admin.setEmail(email.trim().toLowerCase());
             admin.setDisplayName(name.trim());
@@ -132,50 +130,37 @@ public class SetupService {
         });
 
         settings().saveSyncToken(encryptor.syncToken());
+        if (sharing) {
+            folderSync.useFolder(syncFolder);
+        }
         finishSetup();
         log.info("Started a new CRM on this computer");
         return new StartResult(key);
     }
 
-    /** Joins the CRM running on another computer and copies everything from it. */
-    public synchronized JoinResult join(String rawAddress, String key, String computerName) {
+    /** Joins the team's CRM through the shared sync folder and copies everything in it. */
+    public synchronized JoinResult join(String syncFolder, String key, String computerName) {
         requireSetupMode();
-        String address = SyncClient.normalizeAddress(rawAddress, sync.syncPort());
-        if (address == null) {
-            throw new BadRequestException("Enter the other computer's name or address");
-        }
+        String cleanKey = key == null ? "" : key.trim();
         String token;
         try {
-            token = FieldEncryptor.syncTokenFor(key.trim());
+            token = FieldEncryptor.syncTokenFor(cleanKey);
         } catch (IllegalStateException invalid) {
             throw new BadRequestException("That isn't a CRM key. Paste the whole key, exactly as saved.");
         }
 
-        JoinResponse joined;
-        try {
-            joined = client.join(address, token, clean(computerName, computerName()), sync.syncPort());
-        } catch (SyncException problem) {
-            throw new BadRequestException(problem.getMessage());
-        }
+        // Copy first, so this computer's number comes after every computer the team already has.
+        FolderSync.Copy copy = folderSync.copyEverything(syncFolder, token);
+        int nodeId = folderSync.nextNodeId(syncFolder);
 
-        encryptor.configure(key.trim());
-        identity.become((int) joined.nodeId(), clean(computerName, computerName()), false);
+        encryptor.configure(cleanKey);
+        identity.become(nodeId, clean(computerName, computerName()));
         settings().saveSyncToken(token);
-
-        Peer peer = new Peer(joined.node().id(), joined.node().name(), address);
-        String problem = sync.syncWith(peer);
-        // Make sure this computer knows where to reach the one it joined, even if that one doesn't.
-        jdbc.update("""
-                INSERT INTO sync_node (id, name, address) VALUES (?, ?, ?)
-                ON CONFLICT (id) DO UPDATE SET address = EXCLUDED.address
-                WHERE sync_node.address IS DISTINCT FROM EXCLUDED.address
-                """, peer.id(), peer.name(), address);
+        folderSync.useFolder(syncFolder);
 
         finishSetup();
-        log.info("Joined the CRM through {} as computer {}", peer.name(), joined.nodeId());
-        return new JoinResult(joined.nodeId(), peer.name(),
-                problem == null ? null : "Joined, but the first copy didn't finish: " + problem
-                        + " It will keep trying in the background.");
+        log.info("Joined the CRM through the sync folder as computer {}", nodeId);
+        return new JoinResult(nodeId, copy.computers(), copy.applied(), copy.warning());
     }
 
     /**
@@ -200,13 +185,19 @@ public class SetupService {
         log.info("Set a new password for {} with the CRM key", user.getEmail());
     }
 
-    /** Opens the sync port, then locks the CRM until someone signs in. */
+    /** Only on the desktop: a server has no business looking at its drives for anyone. */
+    public List<FolderSync.Suggestion> folderSuggestions() {
+        if (!desktop) {
+            throw new NotFoundException("Not found");
+        }
+        return FolderSync.suggestions();
+    }
+
+    /** Starts with Windows from now on (so sync keeps running), then locks until someone signs in. */
     private void finishSetup() {
-        server.open();
         backfill.run(null);
         crmLock.lockIfNobodySignedIn();
         DesktopOs.setStartsWithWindows(true);
-        DesktopOs.allowSyncThroughFirewall(sync.syncPort());
     }
 
     private void requireSetupMode() {

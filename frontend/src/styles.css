@@ -1973,6 +1973,33 @@ a.cell-title:hover {
   color: var(--ink);
 }
 
+.folder-path {
+  overflow-wrap: anywhere;
+}
+
+.setting-row .computer-state {
+  display: block;
+}
+
+.folder-form {
+  max-width: 640px;
+}
+
+.folder-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.folder-suggestions .btn {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 .sync-badge {
   display: block;
   margin-top: 4px;

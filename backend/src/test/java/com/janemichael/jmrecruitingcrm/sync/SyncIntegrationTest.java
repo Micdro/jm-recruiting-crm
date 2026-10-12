@@ -42,7 +42,7 @@ class SyncIntegrationTest {
 
     @BeforeEach
     void becomeComputerOne() {
-        identity.become(1, "Test computer", true);
+        identity.become(1, "Test computer");
         now = ChronoUnit.MICROS.between(Instant.EPOCH, Instant.now());
     }
 

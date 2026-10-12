@@ -352,31 +352,39 @@ jobs:
           $status = Invoke-RestMethod "$base/api/setup/status"
           if (-not ($status.desktop -and $status.needsSetup)) { throw "Expected the setup screen, got $($status | ConvertTo-Json)" }
 
+          # Google Drive's folder on Windows, with spaces in the path. The CRM creates "JM CRM Sync" in it.
+          $drive = Join-Path $env:RUNNER_TEMP 'Google Drive\My Drive'
+          New-Item -ItemType Directory -Force $drive | Out-Null
+          $folder = Join-Path $drive 'JM CRM Sync'
+
           Invoke-WebRequest -UseBasicParsing "$base/api/auth/csrf" -SessionVariable session | Out-Null
           $token = ($session.Cookies.GetCookies($base) | Where-Object Name -eq 'XSRF-TOKEN').Value
-          $body = @{ computerName = 'CI'; name = 'CI Admin'; email = 'ci@jane-michael.test'; password = 'ci-password-123' } | ConvertTo-Json
+          $body = @{ computerName = 'CI'; name = 'CI Admin'; email = 'ci@jane-michael.test'; password = 'ci-password-123'; syncFolder = $folder } | ConvertTo-Json
           $result = Invoke-RestMethod -Method Post -Uri "$base/api/setup/start" -WebSession $session `
             -ContentType 'application/json' -Headers @{ 'X-XSRF-TOKEN' = $token } -Body $body
           if ($result.key.Length -ne 44) { throw "Setup did not return a key" }
 
           $page = Invoke-WebRequest -UseBasicParsing "$base/"
           if ($page.Content -notmatch 'id="root"') { throw "The app page did not load" }
-          if (-not (Test-Path "$env:JMCRM_HOME\settings.properties")) { throw "The key was not saved" }
+          $settings = Get-Content -Raw "$env:JMCRM_HOME\settings.properties"
+          if ($settings -notmatch 'sync\.token') { throw "The sync token was not saved" }
+          if ($settings.Contains($result.key.Substring(0, 40))) { throw "The CRM key was saved on disk" }
+
+          # The CRM writes its encrypted sync files into the shared folder.
+          if (-not (Test-Path (Join-Path $folder 'crm.check'))) { throw "The sync folder was not set up" }
+          if (-not (Test-Path (Join-Path $folder 'computer-1\about.jmcrm'))) { throw "No sync files were written" }
+          if (-not (Get-ChildItem (Join-Path $folder 'computer-1') -Filter '0*.jmcrm')) { throw "No changes were written" }
+
+          # Locked until someone signs in.
+          $status = Invoke-RestMethod "$base/api/setup/status"
+          if (-not $status.locked) { throw "Expected the CRM to be locked after setup" }
 
           # Opening it again while it runs just opens the browser.
           $second = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
           if (-not $second.WaitForExit(60000)) { throw "A second copy kept running" }
 
-          # The sync port only opens after setup, and it answers only with the right key.
-          try {
-            Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:4781/api/sync/changes?since=0" | Out-Null
-            throw "The sync port answered without a key"
-          } catch [System.Net.WebException], [Microsoft.PowerShell.Commands.HttpResponseException] {
-            if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw "Expected 401 from the sync port, got: $($_.Exception.Message)" }
-          }
-
           Stop-Process -Id $app.Id -Force
-          Write-Output "The Windows app starts its database, serves the CRM and completes setup"
+          Write-Output "The Windows app starts its database, serves the CRM, completes setup and writes to the sync folder"
 
       - name: Show the app log
         if: failure()

@@ -5,6 +5,7 @@ import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ForbiddenException;
+import com.janemichael.jmrecruitingcrm.sync.FolderSync;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity;
 import com.janemichael.jmrecruitingcrm.sync.SyncService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,7 +38,15 @@ public class DesktopController {
             Integer nodeId,
             boolean windows,
             boolean startsWithWindows,
-            SyncService.Status sync
+            SyncService.Status sync,
+            FolderSync.FolderStatus folder
+    ) {
+    }
+
+    public record FolderRequest(
+            @NotBlank(message = "Choose the sync folder")
+            @Size(max = 500, message = "That folder path is too long")
+            String path
     ) {
     }
 
@@ -64,9 +73,11 @@ public class DesktopController {
     private final JdbcTemplate jdbc;
     private final ApplicationContext context;
     private final CrmLock crmLock;
+    private final FolderSync folderSync;
 
     public DesktopController(
             SyncService sync,
+            FolderSync folderSync,
             SyncIdentity identity,
             CurrentUserService currentUser,
             JdbcTemplate jdbc,
@@ -74,6 +85,7 @@ public class DesktopController {
             CrmLock crmLock
     ) {
         this.sync = sync;
+        this.folderSync = folderSync;
         this.identity = identity;
         this.currentUser = currentUser;
         this.jdbc = jdbc;
@@ -95,13 +107,21 @@ public class DesktopController {
     public Status status() {
         SyncService.Status syncStatus = sync.status();
         return new Status(syncStatus.name(), syncStatus.nodeId(), DesktopOs.isWindows(),
-                DesktopOs.startsWithWindows(), syncStatus);
+                DesktopOs.startsWithWindows(), syncStatus, folderSync.status());
     }
 
-    /** Syncs with every computer now instead of waiting a few seconds. */
+    /** Syncs now instead of waiting a few seconds. */
     @PostMapping("/sync-now")
     public Status syncNow() {
+        folderSync.syncNow();
         sync.syncAll();
+        return status();
+    }
+
+    /** Chooses (or changes) the shared folder this computer syncs through. */
+    @PutMapping("/folder")
+    public Status useFolder(@Valid @RequestBody FolderRequest request) {
+        folderSync.useFolder(request.path());
         return status();
     }
 

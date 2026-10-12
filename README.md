@@ -31,21 +31,30 @@ Everything a person does is recorded in the activity history on the record it to
 ## Windows app (each computer keeps its own copy)
 
 The team runs the CRM as a Windows app. Each computer has its own built-in database, so pages
-open and save instantly, and the copies sync with each other over Tailscale within a few seconds.
+open and save instantly, and the copies sync through a shared Google Drive (or OneDrive) folder,
+usually within a minute. No server, no open ports, no VPN.
 Setup steps for the team: **[docs/WINDOWS.md](docs/WINDOWS.md)**.
 
 How it works:
 
 - `JM CRM.exe` (built by CI with jpackage) starts PostgreSQL from files bundled in the app, keeps
   its data in `%LOCALAPPDATA%\JMCRM`, and serves the CRM on http://localhost:4780 only.
-- Every change to a shared table is versioned by a database trigger. Each computer asks the others
-  for changes on a separate sync port (4781), authenticated with a token derived from the CRM key,
-  and applies them: the newest version of a row wins, rows wait for their parents, a delete that
-  would orphan someone else's new record is undone, and duplicate pipeline entries or accounts
-  collapse to one.
+- Every change to a shared table is versioned by a database trigger. Every few seconds each
+  computer writes what changed into its own subfolder of the shared folder (`computer-N/`, numbered
+  files of up to 1,000 changes) and applies the other computers' new files in order. Applying
+  follows the same rules however a change arrives: the newest version of a row wins, rows wait for
+  their parents, a delete that would orphan someone else's new record is undone, and duplicate
+  pipeline entries or accounts collapse to one.
+- Each file is gzipped JSON sealed with AES-256-GCM under a key derived from the sync token (which
+  comes from the CRM key), bound to its path so files can't be swapped. The cloud provider sees
+  only ciphertext. Files are written under a temporary name and renamed; one that hasn't fully
+  arrived fails its check and is read on a later round.
+- After 200 files a computer folds them into one snapshot, so the folder stays small. A computer
+  that fell behind reads the snapshot instead, and a new computer joins by reading everything in
+  the folder. The computers never need to be on at the same time.
 - Each computer creates ids in its own range (computer 2 from 2,000,000,001), so new records never
   collide.
-- Encrypted fields travel encrypted; every computer shares the same key.
+- Encrypted fields travel encrypted inside the sealed files; every computer shares the same key.
 - **Locked until someone signs in.** The CRM key is never written to disk. Each account holds its
   own copy of the key, locked with that person's password (Argon2id, 64 MiB, then AES-256-GCM),
   stored with the account and synced like any other row. Signing in opens it in memory; the CRM

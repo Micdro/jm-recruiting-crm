@@ -1,6 +1,8 @@
-// Runs two desktop copies of the CRM side by side (as two computers would) and checks that they
-// set up, join, sync both ways, keep their data across a restart, and stay locked (no key on disk,
-// nothing readable in the database files) until someone signs in.
+// Runs desktop copies of the CRM side by side (as separate computers would) and checks that they
+// set up, join and sync both ways through a shared folder (standing in for Google Drive), even
+// when they're never on at the same time; that a third computer can join from a folder whose old
+// files were folded into a snapshot; and that each copy stays locked (no key on disk, nothing
+// readable in the database or the shared folder) until someone signs in.
 //
 //   node sync/two-computers.mjs <path to desktop jar>
 //
@@ -34,6 +36,14 @@ function computer(name, base) {
 
 const first = computer('first', 4780);
 const second = computer('second', 4790);
+const third = computer('third', 4800);
+const computers = [first, second, third];
+
+// What Google Drive would keep the same on every computer. The CRM creates the folder itself.
+const shared = mkdtempSync(join(tmpdir(), 'jmcrm-drive-'));
+const syncFolder = join(shared, 'JM CRM Sync');
+const OTHER_KEY = 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=';
+const SECRETS = ['Dana Reyes', 'dana@acme.test', 'Secret notes', 'Acme AI'];
 
 function start(pc) {
   pc.cookies.clear();
@@ -50,7 +60,9 @@ function start(pc) {
   delete env.SPRING_DATASOURCE_URL;
   delete env.SPRING_DATASOURCE_USERNAME;
   delete env.SPRING_DATASOURCE_PASSWORD;
-  pc.process = spawn('java', ['-Xmx512m', '-Dapp.sync.interval-ms=1000', '-jar', jar], {
+  // Small numbers, so a snapshot replaces old sync files within this test.
+  const options = ['-Xmx512m', '-Dapp.sync.interval-ms=1000', '-Dapp.sync.folder.compact-after=4'];
+  pc.process = spawn('java', [...options, '-jar', jar], {
     env,
     stdio: ['ignore', 'ignore', 'ignore'],
   });
@@ -189,7 +201,7 @@ async function main() {
   start(second);
   await Promise.all([waitForHealth(first), waitForHealth(second)]);
 
-  // The first computer starts the CRM.
+  // The first computer starts the CRM in the shared folder.
   const status = await request(first, 'GET', '/api/setup/status');
   check(status.desktop && status.needsSetup, 'a fresh desktop copy asks to be set up');
   await csrf(first);
@@ -198,8 +210,11 @@ async function main() {
     name: 'Michael Drougas',
     email: EMAIL,
     password: PASSWORD,
+    syncFolder,
   });
   check(typeof key === 'string' && key.length === 44, 'starting a CRM returns a new key');
+  check(existsSync(join(syncFolder, 'crm.check')) && existsSync(join(syncFolder, 'computer-1')),
+    'the sync folder is created and marked as this CRM\'s');
   const settings = readFileSync(join(first.home, 'settings.properties'), 'utf8');
   check(settings.includes('sync.token') && !settings.includes(key.slice(0, 40)), 'only the sync token is saved, not the key');
   check(await locked(first), 'the CRM is locked until someone signs in');
@@ -214,34 +229,31 @@ async function main() {
     companyId: acme.id,
   });
   check(acme.id > 1_000_000_000 && acme.id < 2_000_000_000, 'the first computer uses ids from its own range');
+  const folderStatus = (await request(first, 'GET', '/api/desktop/status')).folder;
+  check(folderStatus.path === syncFolder && !folderStatus.problem, 'the first computer reports the sync folder as working');
 
   // A wrong key is refused.
   await csrf(second);
   let refused = false;
   try {
-    await request(second, 'POST', '/api/setup/join', {
-      address: `127.0.0.1:${first.sync}`,
-      key: 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=',
-      computerName: 'Second PC',
-    });
+    await request(second, 'POST', '/api/setup/join', { syncFolder, key: OTHER_KEY, computerName: 'Second PC' });
   } catch (error) {
-    refused = error.message.includes('different CRM key');
+    refused = error.message.includes('different key');
   }
   check(refused, 'joining with the wrong key is refused');
 
-  // The second computer joins and copies everything.
-  const joined = await request(second, 'POST', '/api/setup/join', {
-    address: `127.0.0.1:${first.sync}`,
-    key,
-    computerName: 'Second PC',
-  });
-  check(joined.nodeId === 2 && joined.joinedThrough === 'First PC' && !joined.warning, 'the second computer joins as computer 2');
+  // The second computer joins through the folder and copies everything.
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const joined = await request(second, 'POST', '/api/setup/join', { syncFolder, key, computerName: 'Second PC' });
+  check(joined.nodeId === 2 && joined.computers === 1 && joined.copied > 0 && !joined.warning,
+    'the second computer joins as computer 2 and copies the first computer\'s records');
   check(await locked(second), 'the joined computer is locked until someone signs in');
   check(!readFileSync(join(second.home, 'settings.properties'), 'utf8').includes(key.slice(0, 40)), 'the joined computer does not save the key');
 
   await signIn(second);
   check(!(await locked(second)), 'the password unlocks the joined computer (its copy of the key came with the account)');
-  check((await companyNames(second)).includes('Acme AI'), 'the second computer has the first computer\'s companies');
+  await eventually('the second computer has the first computer\'s companies', async () =>
+    (await companyNames(second)).includes('Acme AI'));
   const copied = await request(second, 'GET', `/api/contacts/${contact.id}`);
   check(copied.email === 'dana@acme.test', 'encrypted fields arrive readable with the shared key');
 
@@ -263,17 +275,17 @@ async function main() {
   await eventually('a delete on the second computer reaches the first', async () =>
     !(await companyNames(first)).includes('Zest Risk'));
 
-  const desktop = await request(first, 'GET', '/api/desktop/status');
-  check(desktop.sync.peers.length === 1 && desktop.sync.peers[0].name === 'Second PC', 'the first computer lists the second');
-  await eventually('the first computer reports the second as in step', async () => {
-    const peer = (await request(first, 'GET', '/api/desktop/status')).sync.peers[0];
-    return peer.secondsSinceSuccess !== null && peer.secondsSinceSuccess < 30 && !peer.lastError;
+  await eventually('the first computer lists the second and reports it as in step', async () => {
+    const peers = (await request(first, 'GET', '/api/desktop/status')).sync.peers;
+    const peer = peers.find((candidate) => candidate.name === 'Second PC');
+    return peers.length === 1 && peer && peer.secondsSinceSuccess !== null && peer.secondsSinceSuccess < 30
+      && !peer.lastError && peer.secondsSinceSeen !== null && peer.secondsSinceSeen < 300;
   });
 
   // The unlock screen's endpoint checks the key and the password.
   let wrongKey = false;
   try {
-    await request(second, 'POST', '/api/desktop/unlock', { key: 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=', password: PASSWORD });
+    await request(second, 'POST', '/api/desktop/unlock', { key: OTHER_KEY, password: PASSWORD });
   } catch (error) {
     wrongKey = error.message.includes('400');
   }
@@ -290,20 +302,57 @@ async function main() {
   await eventually('changes sync to a computer while it is locked', async () =>
     (await companyNames(first)).includes('Added While Locked'));
 
-  // Nothing readable in the database files: names, emails and notes are all scrambled.
-  const readable = filesContaining(join(first.home, 'database'), ['Dana Reyes', 'dana@acme.test', 'Secret notes', 'Acme AI']);
+  // Nothing readable in the database files or the shared folder.
+  const readable = filesContaining(join(first.home, 'database'), SECRETS);
   check(readable.length === 0, `no names, emails or notes are readable in the database files${readable.length ? `: ${readable.join(', ')}` : ''}`);
+  const inFolder = filesContaining(syncFolder, SECRETS);
+  check(inFolder.length === 0, `nothing is readable in the shared folder${inFolder.length ? `: ${inFolder.join(', ')}` : ''}`);
 
-  // Work done while one computer is off arrives when it comes back.
+  // The computers never need to be on at the same time: the second gets the first's work while the
+  // first is off.
   await stop(second);
   await request(first, 'POST', '/api/companies', { name: 'Made While Off', status: 'LEAD' });
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await stop(first);
   start(second);
   await waitForHealth(second);
   check(await locked(second), 'a restarted computer starts locked');
   await signIn(second);
-  await eventually('changes made while a computer was off arrive when it is back', async () =>
+  await eventually('work done while a computer was off arrives even with the other computer off', async () =>
     (await companyNames(second)).includes('Made While Off'));
   check((await companyNames(second)).includes('Acme AI'), 'a restarted computer keeps its own copy');
+
+  // Enough changes for old sync files to be folded into a snapshot.
+  for (let i = 1; i <= 6; i++) {
+    await request(second, 'POST', '/api/companies', { name: `Batch Co ${i}`, status: 'LEAD' });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  await eventually('old sync files are replaced by a snapshot', async () =>
+    readdirSync(join(syncFolder, 'computer-2')).some((file) => file.startsWith('snapshot-')));
+
+  // A third computer joins from the compacted folder while the first is still off.
+  start(third);
+  await waitForHealth(third);
+  await csrf(third);
+  const thirdJoined = await request(third, 'POST', '/api/setup/join', { syncFolder, key, computerName: 'Third PC' });
+  check(thirdJoined.nodeId === 3 && thirdJoined.computers === 2, 'a third computer joins as computer 3');
+  await signIn(third);
+  await eventually('the third computer has everything, from the snapshot and the newer files', async () => {
+    const names = await companyNames(third);
+    return ['Acme AI', 'Made While Off', 'Added While Locked', 'Batch Co 6'].every((name) => names.includes(name))
+      && !names.includes('Zest Risk');
+  });
+
+  // The first computer comes back and catches up on everything it missed.
+  start(first);
+  await waitForHealth(first);
+  await signIn(first);
+  await eventually('a computer that was off catches up when it is back', async () => {
+    const names = await companyNames(first);
+    return names.includes('Batch Co 6');
+  });
+  await eventually('the first computer lists both other computers', async () =>
+    (await request(first, 'GET', '/api/desktop/status')).sync.peers.length === 2);
 
   // A forgotten password: the CRM key sets a new one, which then unlocks the CRM.
   await signOut(second);
@@ -311,7 +360,7 @@ async function main() {
   try {
     await request(second, 'POST', '/api/setup/reset-password', {
       email: EMAIL,
-      key: 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=',
+      key: OTHER_KEY,
       password: 'a-brand-new-password',
     });
   } catch (error) {
@@ -330,9 +379,10 @@ try {
   await main();
 } catch (error) {
   console.error(error.message);
-  console.error('--- first computer log ---\n' + log(first));
-  console.error('--- second computer log ---\n' + log(second));
+  for (const pc of computers) {
+    console.error(`--- ${pc.name} computer log ---\n` + log(pc));
+  }
   process.exitCode = 1;
 } finally {
-  await Promise.all([stop(first), stop(second)]);
+  await Promise.all(computers.map(stop));
 }

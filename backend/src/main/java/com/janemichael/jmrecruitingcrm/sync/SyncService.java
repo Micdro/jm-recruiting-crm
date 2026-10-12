@@ -4,7 +4,6 @@ import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.sync.SyncClient.SyncException;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity.Self;
 import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.ChangesResponse;
-import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.JoinResponse;
 import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.NodeInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,16 +11,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 
 /**
- * Keeps this computer's copy in step with the others. Every few seconds it asks each computer in
- * the group for what changed since last time and applies it. A computer that is off or offline is
- * skipped and caught up later.
+ * Direct sync between computers that can reach each other: every few seconds this asks each
+ * computer with a known address for what changed since last time and applies it. A computer that
+ * is off or offline is skipped and caught up later. Most teams sync through the shared folder
+ * instead ({@link FolderSync}); both can run side by side. Also reports sync status for both.
  */
 @Service
 public class SyncService {
@@ -39,7 +38,9 @@ public class SyncService {
             Instant lastAttempt,
             String lastError,
             /** Measured by this computer's clock, so the page needn't compare clocks. */
-            Long secondsSinceSuccess
+            Long secondsSinceSuccess,
+            /** Since that computer last noted in the sync folder that it was running (its clock). */
+            Long secondsSinceSeen
     ) {
     }
 
@@ -52,6 +53,7 @@ public class SyncService {
     private final SyncApplier applier;
     private final SyncClient client;
     private final FieldEncryptor encryptor;
+    private final boolean direct;
     private final int syncPort;
 
     public SyncService(
@@ -61,6 +63,7 @@ public class SyncService {
             SyncApplier applier,
             SyncClient client,
             FieldEncryptor encryptor,
+            @Value("${app.sync.direct.enabled:false}") boolean direct,
             @Value("${app.sync.port:4781}") int syncPort
     ) {
         this.jdbc = jdbc;
@@ -69,6 +72,7 @@ public class SyncService {
         this.applier = applier;
         this.client = client;
         this.encryptor = encryptor;
+        this.direct = direct;
         this.syncPort = syncPort;
     }
 
@@ -77,18 +81,6 @@ public class SyncService {
     }
 
     // Answering other computers -------------------------------------------------
-
-    /** Another computer joins the group through this one and gets the next computer number. */
-    @Transactional
-    public synchronized JoinResponse acceptJoin(String name, String remoteHost, int remotePort) {
-        Self self = requireSelf();
-        int nodeId = identity.nextNodeId();
-        String cleanName = name == null || name.isBlank() ? "Computer " + nodeId : name.trim();
-        jdbc.update("INSERT INTO sync_node (id, name, address) VALUES (?, ?, ?)",
-                nodeId, truncate(cleanName, 100), address(remoteHost, remotePort));
-        log.info("{} joined as computer {}", cleanName, nodeId);
-        return new JoinResponse(SyncProtocol.VERSION, nodeId, new NodeInfo(self.nodeId(), self.name()));
-    }
 
     /** Everything changed since the cursor. Also notes where the asking computer can be reached. */
     public ChangesResponse changesSince(long since, Long callerNode, String remoteHost, Integer remotePort) {
@@ -108,7 +100,7 @@ public class SyncService {
     @Scheduled(initialDelayString = "${app.sync.initial-delay-ms:3000}", fixedDelayString = "${app.sync.interval-ms:5000}")
     public void syncAll() {
         // Runs while the CRM is locked too: it copies scrambled data without reading it.
-        if (!identity.isEnabled() || !encryptor.hasSyncToken()) {
+        if (!direct || !identity.isEnabled() || !encryptor.hasSyncToken()) {
             return;
         }
         for (Peer peer : peers()) {
@@ -167,7 +159,8 @@ public class SyncService {
         Self self = identity.self().orElseThrow();
         List<PeerStatus> peers = jdbc.query("""
                 SELECT n.id, n.name, n.address, s.last_success, s.last_attempt, s.last_error,
-                       extract(epoch FROM now() - s.last_success)::bigint AS seconds_since_success
+                       extract(epoch FROM now() - s.last_success)::bigint AS seconds_since_success,
+                       greatest(0, extract(epoch FROM now() - s.last_seen))::bigint AS seconds_since_seen
                 FROM sync_node n LEFT JOIN sync_peer_state s ON s.node_id = n.id
                 WHERE n.id <> ?
                 ORDER BY n.id
@@ -178,7 +171,8 @@ public class SyncService {
                 instant(resultSet.getTimestamp("last_success")),
                 instant(resultSet.getTimestamp("last_attempt")),
                 resultSet.getString("last_error"),
-                resultSet.getObject("seconds_since_success") == null ? null : resultSet.getLong("seconds_since_success")),
+                resultSet.getObject("seconds_since_success") == null ? null : resultSet.getLong("seconds_since_success"),
+                resultSet.getObject("seconds_since_seen") == null ? null : resultSet.getLong("seconds_since_seen")),
                 self.nodeId());
         Integer waiting = jdbc.queryForObject("SELECT count(*) FROM sync_pending", Integer.class);
         return new Status(true, self.nodeId(), self.name(), peers, waiting == null ? 0 : waiting);

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.ErrorResponse;
-import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.JoinRequest;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
@@ -24,9 +23,11 @@ import java.util.concurrent.Executors;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * The sync port: a small, separate HTTP server that only answers other computers in the group.
- * It runs on desktop copies only. The CRM itself is served on localhost; this port carries nothing
- * but sync, and every request must carry the token derived from the shared CRM key.
+ * The sync port: a small, separate HTTP server that only answers other computers in the group,
+ * for direct sync. It runs on desktop copies only, and only when direct sync is turned on
+ * ({@code app.sync.direct.enabled}); the shared folder needs no open port. The CRM itself is
+ * served on localhost; this port carries nothing but sync, and every request must carry the token
+ * derived from the shared CRM key.
  */
 @Component
 public class SyncServer implements SmartLifecycle {
@@ -37,6 +38,7 @@ public class SyncServer implements SmartLifecycle {
     private final SyncIdentity identity;
     private final FieldEncryptor encryptor;
     private final boolean desktop;
+    private final boolean direct;
     private final int port;
     private final String bindAddress;
     private final ObjectMapper json = new ObjectMapper()
@@ -51,6 +53,7 @@ public class SyncServer implements SmartLifecycle {
             SyncIdentity identity,
             FieldEncryptor encryptor,
             @Value("${app.desktop.enabled:false}") boolean desktop,
+            @Value("${app.sync.direct.enabled:false}") boolean direct,
             @Value("${app.sync.port:4781}") int port,
             @Value("${app.sync.bind-address:0.0.0.0}") String bindAddress
     ) {
@@ -58,6 +61,7 @@ public class SyncServer implements SmartLifecycle {
         this.identity = identity;
         this.encryptor = encryptor;
         this.desktop = desktop;
+        this.direct = direct;
         this.port = port;
         this.bindAddress = bindAddress;
     }
@@ -76,7 +80,7 @@ public class SyncServer implements SmartLifecycle {
 
     /** Starts listening, if this is a desktop copy and it isn't already. */
     public synchronized void open() {
-        if (!desktop || port <= 0 || server != null) {
+        if (!desktop || !direct || port <= 0 || server != null) {
             return;
         }
         try {
@@ -132,9 +136,6 @@ public class SyncServer implements SmartLifecycle {
                 Long callerPort = parseLong(exchange.getRequestHeaders().getFirst(SyncProtocol.PORT_HEADER));
                 send(exchange, 200, sync.changesSince(since, caller, remoteHost,
                         callerPort == null ? null : callerPort.intValue()));
-            } else if ("POST".equals(method) && "/api/sync/join".equals(path)) {
-                JoinRequest request = json.readValue(exchange.getRequestBody(), JoinRequest.class);
-                send(exchange, 200, sync.acceptJoin(request.name(), remoteHost, request.port()));
             } else {
                 send(exchange, 404, new ErrorResponse("Not found."));
             }

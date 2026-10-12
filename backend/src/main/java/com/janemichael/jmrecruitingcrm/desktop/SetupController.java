@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.desktop;
 
 import com.janemichael.jmrecruitingcrm.auth.UserDtos;
+import com.janemichael.jmrecruitingcrm.sync.FolderSync;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * First-run setup for the desktop app, and resetting a forgotten password with the CRM key. Open to
@@ -43,14 +46,17 @@ public class SetupController {
 
             @NotBlank(message = "Password is required")
             @Size(min = UserDtos.MIN_PASSWORD_LENGTH, max = 200, message = UserDtos.PASSWORD_TOO_SHORT)
-            String password
+            String password,
+
+            @Size(max = 500, message = "That folder path is too long")
+            String syncFolder
     ) {
     }
 
     public record JoinRequest(
-            @NotBlank(message = "Enter the other computer's name or address")
-            @Size(max = 255, message = "Address must be 255 characters or fewer")
-            String address,
+            @NotBlank(message = "Choose the shared sync folder")
+            @Size(max = 500, message = "That folder path is too long")
+            String syncFolder,
 
             @NotBlank(message = "Paste the CRM key")
             @Size(max = 200, message = "That key is too long")
@@ -84,12 +90,19 @@ public class SetupController {
 
     @PostMapping("/start")
     public SetupService.StartResult start(@Valid @RequestBody StartRequest request) {
-        return setup.startNew(request.computerName(), request.name(), request.email(), request.password());
+        return setup.startNew(request.computerName(), request.name(), request.email(), request.password(),
+                request.syncFolder());
     }
 
     @PostMapping("/join")
     public SetupService.JoinResult join(@Valid @RequestBody JoinRequest request) {
-        return setup.join(request.address(), request.key(), request.computerName());
+        return setup.join(request.syncFolder(), request.key(), request.computerName());
+    }
+
+    /** Google Drive and OneDrive folders on this computer that could hold the sync folder. */
+    @GetMapping("/folders")
+    public List<FolderSync.Suggestion> folders() {
+        return setup.folderSuggestions();
     }
 
     /** A forgotten password, reset with the CRM key (desktop only). */
