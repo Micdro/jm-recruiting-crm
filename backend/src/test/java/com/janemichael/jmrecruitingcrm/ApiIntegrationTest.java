@@ -36,6 +36,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -579,6 +580,98 @@ class ApiIntegrationTest {
         mockMvc.perform(signedIn(get(files + "/" + fileId))).andExpect(status().isNotFound());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM file_blob WHERE blob_key = ?", Long.class, row.get("blob_key")))
                 .isZero();
+    }
+
+    @Test
+    void deletedRecordsWaitInTheTrashWithTheirHistoryAndComeBack() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Harbor Trust")))
+                .andExpect(status().isCreated()).andReturn());
+        long nina = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Nina Park", "title", "CTO", "companyId", companyId)))
+                .andExpect(status().isCreated()).andReturn());
+        mockMvc.perform(send(post("/api/contacts/" + nina + "/activities"), body("type", "LINKEDIN", "notes", "Asked about FDEs")))
+                .andExpect(status().isOk());
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", companyId, "title", "Forward Deployed Engineer",
+                        "track", "PRODUCTION_AI_ENGINEERING", "hiringManagerId", nina)))
+                .andExpect(status().isCreated()).andReturn());
+        entityManager.flush();
+
+        mockMvc.perform(signedIn(delete("/api/contacts/" + nina))).andExpect(status().isNoContent());
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(signedIn(get("/api/contacts/" + nina))).andExpect(status().isNotFound());
+        mockMvc.perform(signedIn(get("/api/searches/" + searchId))).andExpect(jsonPath("$.hiringManagerId").value(nullValue()));
+        mockMvc.perform(signedIn(get("/api/trash")))
+                .andExpect(jsonPath("$[0].kind").value("CONTACT"))
+                .andExpect(jsonPath("$[0].recordId").value(nina))
+                .andExpect(jsonPath("$[0].label").value("Nina Park"))
+                .andExpect(jsonPath("$[0].detail").value(containsString("CTO at Harbor Trust")))
+                .andExpect(jsonPath("$[0].detail").value(containsString("history entr")))
+                .andExpect(jsonPath("$[0].deletedByName").value("Integration Admin"));
+        Map<String, Object> stored = jdbc.queryForMap("SELECT label, contents FROM trash_item WHERE record_id = ?", nina);
+        assertThat((String) stored.get("label")).startsWith("enc:v1:").doesNotContain("Nina");
+        assertThat((String) stored.get("contents")).startsWith("enc:v1:").doesNotContain("LINKEDIN");
+
+        mockMvc.perform(signedIn(post("/api/trash/undo")).param("kind", "CONTACT").param("recordId", String.valueOf(nina)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.label").value("Nina Park"))
+                .andExpect(jsonPath("$.path").value("/contacts/" + nina));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(signedIn(get("/api/contacts/" + nina)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("CTO"))
+                .andExpect(jsonPath("$.touchCount").value(1));
+        mockMvc.perform(signedIn(get("/api/activities").param("contactId", String.valueOf(nina))))
+                .andExpect(jsonPath("$[?(@.type == 'LINKEDIN')].summary").value(hasItem(containsString("Asked about FDEs"))));
+        mockMvc.perform(signedIn(get("/api/searches/" + searchId))).andExpect(jsonPath("$.hiringManagerId").value(nina));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM trash_item WHERE record_id = ?", Long.class, nina)).isZero();
+
+        // A contact can't come back without its company; if that's in the Trash, it says so.
+        long otherCompany = id(mockMvc.perform(send(post("/api/companies"), body("name", "Pier Analytics")))
+                .andExpect(status().isCreated()).andReturn());
+        long omar = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Omar Haddad", "companyId", otherCompany)))
+                .andExpect(status().isCreated()).andReturn());
+        entityManager.flush();
+        mockMvc.perform(signedIn(delete("/api/contacts/" + omar))).andExpect(status().isNoContent());
+        mockMvc.perform(signedIn(delete("/api/companies/" + otherCompany))).andExpect(status().isNoContent());
+        entityManager.flush();
+        entityManager.clear();
+        mockMvc.perform(signedIn(post("/api/trash/undo")).param("kind", "CONTACT").param("recordId", String.valueOf(omar)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.messages[0]").value("Restore Pier Analytics first. It's in the Trash too."));
+        mockMvc.perform(signedIn(post("/api/trash/undo")).param("kind", "COMPANY").param("recordId", String.valueOf(otherCompany)))
+                .andExpect(status().isOk());
+        mockMvc.perform(signedIn(post("/api/trash/undo")).param("kind", "CONTACT").param("recordId", String.valueOf(omar)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void aDeletedCandidateComesBackWithItsResume() throws Exception {
+        long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Ines Duarte")))
+                .andExpect(status().isCreated()).andReturn());
+        byte[] resume = "%PDF-1.7\nInes Duarte".getBytes(StandardCharsets.UTF_8);
+        String files = "/api/candidates/" + candidateId + "/files";
+        long fileId = id(mockMvc.perform(signedIn(post(files)).param("name", "Ines.pdf")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content(resume))
+                .andExpect(status().isCreated()).andReturn());
+        entityManager.flush();
+
+        mockMvc.perform(signedIn(delete("/api/candidates/" + candidateId))).andExpect(status().isNoContent());
+        entityManager.flush();
+        entityManager.clear();
+        mockMvc.perform(signedIn(get("/api/trash")))
+                .andExpect(jsonPath("$[?(@.recordId == " + candidateId + ")].detail").value(hasItem(containsString("1 file"))));
+
+        mockMvc.perform(signedIn(post("/api/trash/undo")).param("kind", "CANDIDATE").param("recordId", String.valueOf(candidateId)))
+                .andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+        mockMvc.perform(signedIn(get(files + "/" + fileId)))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsByteArray()).isEqualTo(resume));
     }
 
     // Recruiting flow -----------------------------------------------------------

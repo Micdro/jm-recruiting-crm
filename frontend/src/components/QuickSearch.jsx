@@ -19,6 +19,7 @@ const PAGES = [
   { title: 'Import', path: '/import' },
   { title: 'Export', path: '/export' },
   { title: 'Team', path: '/team' },
+  { title: 'Trash', path: '/trash' },
 ];
 
 const joined = (...parts) => parts.filter(Boolean).join(', ');

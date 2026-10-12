@@ -161,6 +161,11 @@ export const api = {
   },
   placements: crud('/api/placements'),
   templates: crud('/api/templates'),
+  trash: {
+    list: () => get('/api/trash'),
+    restore: (id) => post(`/api/trash/${id}/restore`),
+    undo: (kind, recordId) => client.post('/api/trash/undo', null, { params: { kind, recordId } }).then((r) => r.data),
+  },
   activities: {
     list: (params) => get('/api/activities', params),
     note: (body) => post('/api/activities', body),

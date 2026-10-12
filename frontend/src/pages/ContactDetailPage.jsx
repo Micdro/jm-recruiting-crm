@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
+import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, ErrorNote, ExternalLink, Loading, Pill, TouchPips } from '../components/Bits.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
 import MessageComposer from '../components/MessageComposer.jsx';
@@ -15,6 +16,7 @@ export default function ContactDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const undoable = useUndoableDelete();
   const contact = useLoader(() => api.contacts.get(id), [id], `contact:${id}`);
   const history = useLoader(() => api.activities.list({ contactId: id }), [id], `contact:${id}:history`);
   const [editing, setEditing] = useState(false);
@@ -65,7 +67,7 @@ export default function ContactDetailPage() {
             onConfirm={async () => {
               try {
                 await api.contacts.remove(record.id);
-                toast(`Deleted ${record.name}`);
+                undoable('CONTACT', record.id, `Deleted ${record.name}`);
                 navigate('/contacts');
               } catch (err) {
                 setError(errorMessage(err));

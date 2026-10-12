@@ -2090,6 +2090,70 @@ a.cell-title:hover {
   }
 }
 
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.toast-action {
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--radius);
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Trash ------------------------------------------------------------------------ */
+
+.trash-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trash-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.trash-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.trash-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.trash-name {
+  font-weight: 500;
+}
+
+.trash-detail {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.trash-meta {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
 /* Quick search (Ctrl+K) ---------------------------------------------------------- */
 
 .search-trigger {

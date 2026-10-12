@@ -21,6 +21,7 @@ const TOOLS = [
   { to: '/import', label: 'Import' },
   { to: '/export', label: 'Export' },
   { to: '/team', label: 'Team' },
+  { to: '/trash', label: 'Trash' },
 ];
 
 export default function Layout() {

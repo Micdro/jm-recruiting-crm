@@ -363,8 +363,8 @@ public class FolderSync {
     /**
      * Candidates' files travel as files of their own rather than inside the batches, so a large
      * resume isn't copied into every snapshot. This computer fetches the files its records need,
-     * shares the ones the folder lacks, and removes files no record uses any more, here and in the
-     * folder. The contents stay encrypted with the CRM key throughout, so this works while locked.
+     * shares the ones the folder lacks, and removes files no record uses any more (and that aren't
+     * kept for something in the Trash), here and in the folder. The contents stay encrypted with the CRM key throughout, so this works while locked.
      */
     private void syncFiles(SyncFolder folder) throws IOException {
         Set<String> needed = new HashSet<>(jdbc.queryForList("SELECT DISTINCT blob_key FROM candidate_file", String.class));
@@ -400,6 +400,7 @@ public class FolderSync {
         List<String> unused = jdbc.queryForList("""
                 SELECT blob_key FROM file_blob b
                 WHERE NOT EXISTS (SELECT 1 FROM candidate_file f WHERE f.blob_key = b.blob_key)
+                  AND NOT EXISTS (SELECT 1 FROM trash_item t WHERE position(b.blob_key IN coalesce(t.blob_keys, '')) > 0)
                   AND b.created_at < now() - interval '1 minute'
                 """, String.class);
         for (String key : unused) {

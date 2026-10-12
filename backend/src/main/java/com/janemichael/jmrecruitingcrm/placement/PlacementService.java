@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.placement;
 
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
@@ -41,6 +43,7 @@ public class PlacementService {
     private final PipelineService pipelineService;
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
+    private final TrashService trash;
 
     public PlacementService(
             PlacementRepository placementRepository,
@@ -49,8 +52,10 @@ public class PlacementService {
             PipelineRepository pipelineRepository,
             PipelineService pipelineService,
             CurrentUserService currentUserService,
-            ActivityLogger activityLogger
+            ActivityLogger activityLogger,
+            TrashService trash
     ) {
+        this.trash = trash;
         this.placementRepository = placementRepository;
         this.searchRepository = searchRepository;
         this.candidateRepository = candidateRepository;
@@ -123,6 +128,7 @@ public class PlacementService {
 
     @Transactional
     public void delete(Long id) {
+        trash.capture(TrashKind.PLACEMENT, id);
         if (placementRepository.deletePlacementById(id) == 0) {
             throw new NotFoundException("Placement not found");
         }

@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.candidate;
 
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -42,6 +44,7 @@ public class CandidateService {
     private final ActivityLogger activityLogger;
     private final FieldEncryptor encryptor;
     private final Clock clock;
+    private final TrashService trash;
 
     public CandidateService(
             CandidateRepository candidateRepository,
@@ -51,8 +54,10 @@ public class CandidateService {
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
             FieldEncryptor encryptor,
-            Clock clock
+            Clock clock,
+            TrashService trash
     ) {
+        this.trash = trash;
         this.candidateRepository = candidateRepository;
         this.pipelineRepository = pipelineRepository;
         this.placementRepository = placementRepository;
@@ -141,6 +146,7 @@ public class CandidateService {
         if (placementRepository.existsByCandidateId(id)) {
             throw new ConflictException("This candidate has a placement. Delete the placement first.");
         }
+        trash.capture(TrashKind.CANDIDATE, id);
         if (candidateRepository.deleteCandidateById(id) == 0) {
             throw new NotFoundException("Candidate not found");
         }

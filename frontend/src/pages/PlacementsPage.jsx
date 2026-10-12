@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { api, errorMessage } from '../api.js';
+import { useUndoableDelete } from '../undo.js';
 import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
 import ExportButton from '../components/ExportButton.jsx';
 import Modal from '../components/Modal.jsx';
@@ -12,6 +13,7 @@ import { useLoader, useTitle, useToast } from '../hooks.js';
 export default function PlacementsPage() {
   useTitle('Placements');
   const toast = useToast();
+  const undoable = useUndoableDelete();
   const placements = useLoader(() => api.placements.list(), [], 'placements');
   const [editing, setEditing] = useState(null);
 
@@ -120,8 +122,9 @@ export default function PlacementsPage() {
             placement={editing.id ? editing : null}
             onCancel={() => setEditing(null)}
             onDeleted={() => {
+              const deleted = editing;
               setEditing(null);
-              toast('Placement deleted');
+              undoable('PLACEMENT', deleted.id, `Deleted the placement of ${deleted.candidateName}`, () => placements.reload());
               placements.reload();
             }}
             onSaved={() => {

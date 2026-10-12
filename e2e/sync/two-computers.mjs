@@ -146,6 +146,22 @@ async function main() {
   await eventually('a delete on the second computer reaches the first', async () =>
     !(await companyNames(first)).includes('Zest Risk'));
 
+  // A delete on one computer can be undone on another, from the shared Trash.
+  const undoMe = await request(second, 'POST', '/api/companies', { name: 'Restore Me Co', status: 'LEAD' });
+  await eventually('a new company reaches the first computer', async () =>
+    (await companyNames(first)).includes('Restore Me Co'));
+  await request(second, 'DELETE', `/api/companies/${undoMe.id}`);
+  let trashed;
+  await eventually('the delete shows in the first computer\'s Trash', async () => {
+    trashed = (await request(first, 'GET', '/api/trash')).find((item) => item.recordId === undoMe.id);
+    return Boolean(trashed) && !(await companyNames(first)).includes('Restore Me Co');
+  });
+  await request(first, 'POST', `/api/trash/${trashed.id}/restore`);
+  await eventually('a company restored on the first computer is back on the second', async () =>
+    (await companyNames(second)).includes('Restore Me Co'));
+  await eventually('and has left the Trash there too', async () =>
+    !(await request(second, 'GET', '/api/trash')).some((item) => item.recordId === undoMe.id));
+
   await eventually('the first computer lists the second and reports it as in step', async () => {
     const peers = (await request(first, 'GET', '/api/desktop/status')).sync.peers;
     const peer = peers.find((candidate) => candidate.name === 'Second PC');

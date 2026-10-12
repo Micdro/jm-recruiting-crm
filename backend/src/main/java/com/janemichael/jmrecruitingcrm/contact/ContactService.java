@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -50,6 +52,7 @@ public class ContactService {
     private final ActivityLogger activityLogger;
     private final FieldEncryptor encryptor;
     private final Clock clock;
+    private final TrashService trash;
 
     public ContactService(
             ContactRepository contactRepository,
@@ -57,8 +60,10 @@ public class ContactService {
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
             FieldEncryptor encryptor,
-            Clock clock
+            Clock clock,
+            TrashService trash
     ) {
+        this.trash = trash;
         this.contactRepository = contactRepository;
         this.companyRepository = companyRepository;
         this.currentUserService = currentUserService;
@@ -141,6 +146,7 @@ public class ContactService {
 
     @Transactional
     public void delete(Long id) {
+        trash.capture(TrashKind.CONTACT, id);
         if (contactRepository.deleteContactById(id) == 0) {
             throw new NotFoundException("Contact not found");
         }

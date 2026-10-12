@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.company;
 
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
@@ -37,6 +39,7 @@ public class CompanyService {
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
     private final FieldEncryptor encryptor;
+    private final TrashService trash;
 
     public CompanyService(
             CompanyRepository companyRepository,
@@ -44,8 +47,10 @@ public class CompanyService {
             SearchRepository searchRepository,
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
-            FieldEncryptor encryptor
+            FieldEncryptor encryptor,
+            TrashService trash
     ) {
+        this.trash = trash;
         this.companyRepository = companyRepository;
         this.contactRepository = contactRepository;
         this.searchRepository = searchRepository;
@@ -131,6 +136,7 @@ public class CompanyService {
         if (searchRepository.existsByCompanyId(id)) {
             throw new ConflictException(HAS_SEARCHES_MESSAGE);
         }
+        trash.capture(TrashKind.COMPANY, id);
         if (companyRepository.deleteCompanyById(id) == 0) {
             throw new NotFoundException("Company not found");
         }

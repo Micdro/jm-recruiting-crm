@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.candidate;
 
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
@@ -105,6 +107,7 @@ public class CandidateFileService {
     private final FieldEncryptor encryptor;
     private final JdbcTemplate jdbc;
     private final SyncIdentity identity;
+    private final TrashService trash;
 
     public CandidateFileService(
             CandidateFileRepository files,
@@ -112,8 +115,10 @@ public class CandidateFileService {
             CurrentUserService currentUser,
             FieldEncryptor encryptor,
             JdbcTemplate jdbc,
-            SyncIdentity identity
+            SyncIdentity identity,
+            TrashService trash
     ) {
+        this.trash = trash;
         this.files = files;
         this.candidates = candidates;
         this.currentUser = currentUser;
@@ -192,6 +197,7 @@ public class CandidateFileService {
     @Transactional
     public void delete(Long candidateId, Long fileId) {
         CandidateFile file = find(candidateId, fileId);
+        trash.capture(TrashKind.FILE, file.getId());
         files.delete(file);
         files.flush();
         if (!identity.isEnabled()) {
@@ -212,6 +218,7 @@ public class CandidateFileService {
         jdbc.update("""
                 DELETE FROM file_blob b
                 WHERE NOT EXISTS (SELECT 1 FROM candidate_file f WHERE f.blob_key = b.blob_key)
+                  AND NOT EXISTS (SELECT 1 FROM trash_item t WHERE position(b.blob_key IN coalesce(t.blob_keys, '')) > 0)
                 """ + (onlyOld ? " AND b.created_at < now() - interval '5 minutes'" : ""));
     }
 

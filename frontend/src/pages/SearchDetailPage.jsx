@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
+import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Empty, ErrorNote, Loading, Pill } from '../components/Bits.jsx';
 import { SelectField, TextArea } from '../components/Fields.jsx';
 import Modal from '../components/Modal.jsx';
@@ -37,6 +38,7 @@ export default function SearchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const undoable = useUndoableDelete();
   const search = useLoader(() => api.searches.get(id), [id], `search:${id}`);
   const pipeline = useLoader(() => api.searches.pipeline(id), [id], `search:${id}:pipeline`);
   const history = useLoader(() => api.activities.list({ searchId: id }), [id], `search:${id}:history`);
@@ -109,7 +111,7 @@ export default function SearchDetailPage() {
             onConfirm={async () => {
               try {
                 await api.searches.remove(record.id);
-                toast(`Deleted ${record.title}`);
+                undoable('SEARCH', record.id, `Deleted ${record.title}`);
                 navigate('/searches');
               } catch (err) {
                 setError(errorMessage(err));

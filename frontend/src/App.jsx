@@ -20,6 +20,7 @@ const ImportPage = lazy(() => import('./pages/ImportPage.jsx'));
 import TeamPage from './pages/TeamPage.jsx';
 import TemplatesPage from './pages/TemplatesPage.jsx';
 import ExportPage from './pages/ExportPage.jsx';
+import TrashPage from './pages/TrashPage.jsx';
 import ThisComputerPage from './pages/ThisComputerPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import UnlockPage from './pages/UnlockPage.jsx';
@@ -76,6 +77,7 @@ export default function App() {
         />
         <Route path="templates" element={<TemplatesPage />} />
         <Route path="export" element={<ExportPage />} />
+        <Route path="trash" element={<TrashPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="computer" element={<ThisComputerPage />} />
         <Route path="*" element={<NotFoundPage />} />

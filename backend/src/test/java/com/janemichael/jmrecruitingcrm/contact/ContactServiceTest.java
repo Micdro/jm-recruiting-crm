@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -50,7 +51,8 @@ class ContactServiceTest {
     private final FieldEncryptor encryptor = new FieldEncryptor("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
 
     private final ContactService contactService = new ContactService(
-            contactRepository, companyRepository, currentUserService, activityLogger, encryptor, clock);
+            contactRepository, companyRepository, currentUserService, activityLogger, encryptor, clock,
+            mock(TrashService.class));
 
     private final AppUser user = new AppUser();
 

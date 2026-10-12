@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
+import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, Empty, ErrorNote, ExternalLink, Loading, Pill } from '../components/Bits.jsx';
 import CandidateFiles from '../components/CandidateFiles.jsx';
 import { SelectField } from '../components/Fields.jsx';
@@ -28,6 +29,7 @@ export default function CandidateDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const undoable = useUndoableDelete();
   const candidate = useLoader(() => api.candidates.get(id), [id], `candidate:${id}`);
   const pipeline = useLoader(() => api.candidates.pipeline(id), [id], `candidate:${id}:pipeline`);
   const history = useLoader(() => api.activities.list({ candidateId: id }), [id], `candidate:${id}:history`);
@@ -79,7 +81,7 @@ export default function CandidateDetailPage() {
             onConfirm={async () => {
               try {
                 await api.candidates.remove(record.id);
-                toast(`Deleted ${record.name}`);
+                undoable('CANDIDATE', record.id, `Deleted ${record.name}`);
                 navigate('/candidates');
               } catch (err) {
                 setError(errorMessage(err));

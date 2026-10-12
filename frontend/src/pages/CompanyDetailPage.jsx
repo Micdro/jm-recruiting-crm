@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
+import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, Empty, ErrorNote, ExternalLink, Loading, Pill, TouchPips } from '../components/Bits.jsx';
 import NoteForm from '../components/NoteForm.jsx';
 import Modal from '../components/Modal.jsx';
@@ -29,6 +30,7 @@ export default function CompanyDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const undoable = useUndoableDelete();
   const company = useLoader(() => api.companies.get(id), [id], `company:${id}`);
   const contacts = useLoader(() => api.contacts.list({ companyId: id }), [id], `company:${id}:contacts`);
   const searches = useLoader(() => api.searches.list({ companyId: id }), [id], `company:${id}:searches`);
@@ -80,7 +82,7 @@ export default function CompanyDetailPage() {
             onConfirm={async () => {
               try {
                 await api.companies.remove(record.id);
-                toast(`Deleted ${record.name}`);
+                undoable('COMPANY', record.id, `Deleted ${record.name}`);
                 navigate('/companies');
               } catch (err) {
                 setError(errorMessage(err));

@@ -18,7 +18,8 @@ public final class SyncTables {
             "job_search",
             "pipeline_entry",
             "placement",
-            "activity");
+            "activity",
+            "trash_item");
 
     /** Tables whose ids are generated locally. Each computer generates them in its own range. */
     public static final List<String> GENERATED_IDS = ORDER.subList(1, ORDER.size());

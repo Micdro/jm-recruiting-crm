@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '../api.js';
+import { useUndoableDelete } from '../undo.js';
 import { formatDate, toIsoDate } from '../format.js';
 import { useLoader, useToast } from '../hooks.js';
 import { ConfirmButton, ErrorNote } from './Bits.jsx';
@@ -23,6 +24,7 @@ function size(bytes) {
 /** Resumes and other files on a candidate: added here, encrypted in the CRM, shared with the team. */
 export default function CandidateFiles({ candidateId }) {
   const toast = useToast();
+  const undoable = useUndoableDelete();
   const files = useLoader(() => api.candidates.files(candidateId), [candidateId], `candidate:${candidateId}:files`);
   const input = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -125,7 +127,7 @@ export default function CandidateFiles({ candidateId }) {
                   onConfirm={async () => {
                     try {
                       await api.candidates.removeFile(candidateId, file.id);
-                      toast(`Deleted ${file.fileName}`);
+                      undoable('FILE', file.id, `Deleted ${file.fileName}`, () => files.reload());
                       files.reload();
                     } catch (err) {
                       setError(errorMessage(err));

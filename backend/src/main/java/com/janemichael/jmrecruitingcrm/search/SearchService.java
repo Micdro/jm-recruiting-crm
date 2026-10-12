@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.search;
 
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
@@ -39,6 +41,7 @@ public class SearchService {
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
     private final Clock clock;
+    private final TrashService trash;
 
     public SearchService(
             SearchRepository searchRepository,
@@ -48,8 +51,10 @@ public class SearchService {
             PlacementRepository placementRepository,
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
-            Clock clock
+            Clock clock,
+            TrashService trash
     ) {
+        this.trash = trash;
         this.searchRepository = searchRepository;
         this.companyRepository = companyRepository;
         this.contactRepository = contactRepository;
@@ -145,6 +150,7 @@ public class SearchService {
         if (placementRepository.existsBySearchId(id)) {
             throw new ConflictException("This search has a placement. Delete the placement first.");
         }
+        trash.capture(TrashKind.SEARCH, id);
         if (searchRepository.deleteSearchById(id) == 0) {
             throw new NotFoundException("Search not found");
         }
