@@ -278,7 +278,7 @@ function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
                 <div className="queue-actions">
                   <button
                     type="button"
-                    className="btn btn-sm btn-primary"
+                    className="btn btn-sm"
                     disabled={capped || contact.status === 'DO_NOT_CONTACT'}
                     onClick={() => onWrite(contact)}
                     aria-label={`Write a message to ${contact.name}`}
