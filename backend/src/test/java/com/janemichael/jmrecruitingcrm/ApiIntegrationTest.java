@@ -33,6 +33,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -379,6 +380,47 @@ class ApiIntegrationTest {
                         "password", "elevenchars")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.messages[0]").value("Password must be at least 12 characters"));
+    }
+
+    @Test
+    void messageTemplatesAreSharedEncryptedAndChecked() throws Exception {
+        long id = id(mockMvc.perform(send(post("/api/templates"), body(
+                        "name", "Intro email",
+                        "channel", "EMAIL",
+                        "touch", 2,
+                        "subject", "Engineers for {company}",
+                        "body", "Hi {first name}, are you hiring deployment engineers?  ")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ownerName").value("Integration Admin"))
+                .andExpect(jsonPath("$.body").value("Hi {first name}, are you hiring deployment engineers?"))
+                .andReturn());
+        entityManager.flush();
+
+        Map<String, Object> row = jdbc.queryForMap("select name, subject, body from message_template where id = ?", id);
+        assertThat((String) row.get("name")).startsWith("enc:v1:").doesNotContain("Intro");
+        assertThat((String) row.get("subject")).startsWith("enc:v1:").doesNotContain("Engineers");
+        assertThat((String) row.get("body")).startsWith("enc:v1:").doesNotContain("hiring");
+
+        // A LinkedIn message has no subject.
+        mockMvc.perform(send(put("/api/templates/" + id), body(
+                        "name", "Connection note", "channel", "LINKEDIN", "touch", 1,
+                        "subject", "Not used", "body", "Hi {first name}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.channel").value("LINKEDIN"))
+                .andExpect(jsonPath("$.subject").value(nullValue()));
+        mockMvc.perform(signedIn(get("/api/templates")))
+                .andExpect(jsonPath("$[?(@.name == 'Connection note')]").exists());
+
+        mockMvc.perform(send(post("/api/templates"), body("name", "Call script", "channel", "CALL", "body", "Hello")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("Templates are for LinkedIn or email"));
+        mockMvc.perform(send(post("/api/templates"), body("name", "Five", "channel", "EMAIL", "touch", 5, "body", "Hi")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("Touch must be 1 to 4"));
+
+        mockMvc.perform(signedIn(delete("/api/templates/" + id))).andExpect(status().isNoContent());
+        mockMvc.perform(send(put("/api/templates/" + id), body("name", "Gone", "channel", "EMAIL", "body", "Hi")))
+                .andExpect(status().isNotFound());
     }
 
     // Recruiting flow -----------------------------------------------------------

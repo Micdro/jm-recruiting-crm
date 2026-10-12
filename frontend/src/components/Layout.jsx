@@ -14,6 +14,7 @@ const NAV = [
 ];
 
 const TOOLS = [
+  { to: '/templates', label: 'Templates' },
   { to: '/import', label: 'Import' },
   { to: '/team', label: 'Team' },
 ];

@@ -37,6 +37,7 @@ public class EncryptionBackfill implements ApplicationRunner {
         ENCRYPTED_COLUMNS.put("pipeline_entry", List.of("rationale"));
         ENCRYPTED_COLUMNS.put("placement", List.of("base_salary", "fee_amount", "notes"));
         ENCRYPTED_COLUMNS.put("activity", List.of("summary"));
+        ENCRYPTED_COLUMNS.put("message_template", List.of("name", "subject", "body"));
     }
 
     private final JdbcTemplate jdbc;

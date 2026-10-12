@@ -3,10 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, Details, DueTag, ErrorNote, ExternalLink, Loading, Pill, TouchPips } from '../components/Bits.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
+import MessageComposer from '../components/MessageComposer.jsx';
 import Modal from '../components/Modal.jsx';
 import Timeline from '../components/Timeline.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
-import { ACTION_TYPE, BUYING_ROLE, MAX_TOUCHES, OUTREACH_STATUS } from '../labels.js';
+import { ACTION_TYPE, ACTIVITY_TYPE, BUYING_ROLE, MAX_TOUCHES, OUTREACH_STATUS } from '../labels.js';
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 
@@ -17,6 +18,7 @@ export default function ContactDetailPage() {
   const contact = useLoader(() => api.contacts.get(id), [id], `contact:${id}`);
   const history = useLoader(() => api.activities.list({ contactId: id }), [id], `contact:${id}:history`);
   const [editing, setEditing] = useState(false);
+  const [writing, setWriting] = useState(false);
   const [error, setError] = useState('');
 
   const record = contact.data;
@@ -79,6 +81,11 @@ export default function ContactDetailPage() {
           <section className="panel" aria-labelledby="outreach-heading">
             <div className="panel-head">
               <h2 id="outreach-heading">Outreach</h2>
+              {record.status !== 'DO_NOT_CONTACT' && (
+                <button type="button" className="btn btn-sm btn-primary" onClick={() => setWriting(true)}>
+                  Write message
+                </button>
+              )}
               {canRestart && (
                 <button
                   type="button"
@@ -152,6 +159,19 @@ export default function ContactDetailPage() {
           <Timeline activities={history.data} loading={history.loading} />
         </section>
       </div>
+
+      {writing && (
+        <Modal title={`Message for ${record.name}`} onClose={() => setWriting(false)} wide>
+          <MessageComposer
+            contact={record}
+            onLogged={(updated, type) => {
+              setWriting(false);
+              toast(`${ACTIVITY_TYPE[type]} logged.`);
+              refresh(updated);
+            }}
+          />
+        </Modal>
+      )}
 
       {editing && (
         <Modal title={`Edit ${record.name}`} onClose={() => setEditing(false)}>

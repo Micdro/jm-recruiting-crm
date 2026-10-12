@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, Pill, TouchPips } from '../components/Bits.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
+import MessageComposer from '../components/MessageComposer.jsx';
 import Modal from '../components/Modal.jsx';
 import TallyMeter from '../components/TallyMeter.jsx';
 import Timeline from '../components/Timeline.jsx';
@@ -29,6 +30,8 @@ export default function TodayPage() {
   const [scope, setScope] = useState('mine');
   const dashboard = useLoader(() => api.dashboard(scope), [scope], `dashboard:${scope}`);
   const [logging, setLogging] = useState(null);
+  const [writing, setWriting] = useState(null);
+  const toast = useToast();
 
   const data = dashboard.data;
 
@@ -64,7 +67,13 @@ export default function TodayPage() {
 
           <div className="today-grid">
             <div className="today-main">
-              <ContactQueue data={data} scope={scope} onChanged={dashboard.reload} onLog={(contact) => setLogging({ kind: 'contact', record: contact })} />
+              <ContactQueue
+                data={data}
+                scope={scope}
+                onChanged={dashboard.reload}
+                onLog={(contact) => setLogging({ kind: 'contact', record: contact })}
+                onWrite={setWriting}
+              />
               <CompanyFollowUps data={data} />
               <CandidateQueue data={data} onLog={(candidate) => setLogging({ kind: 'candidate', record: candidate })} />
             </div>
@@ -81,6 +90,19 @@ export default function TodayPage() {
             </aside>
           </div>
         </>
+      )}
+
+      {writing && (
+        <Modal title={`Message for ${writing.name}`} onClose={() => setWriting(null)} wide>
+          <MessageComposer
+            contact={writing}
+            onLogged={(updated, type) => {
+              toast(touchLoggedMessage(writing, updated, type));
+              setWriting(null);
+              dashboard.reload();
+            }}
+          />
+        </Modal>
       )}
 
       {logging && (
@@ -131,7 +153,21 @@ function TouchSummary({ data }) {
   );
 }
 
-function ContactQueue({ data, scope, onChanged, onLog }) {
+/** What logging a touch did, for the confirmation. */
+function touchLoggedMessage(contact, updated, type) {
+  const next = updated.nextActionDate
+    ? ` Next: ${ACTION_TYPE[updated.nextActionType] ?? 'Follow-up'} on ${formatWeekday(updated.nextActionDate)}.`
+    : '';
+  const what =
+    type === 'REPLY'
+      ? `Reply logged for ${contact.name}.`
+      : updated.status === 'NO_RESPONSE' && contact.status !== 'NO_RESPONSE'
+        ? `Touch 4 of 4 logged for ${contact.name}. Sequence complete.`
+        : `${ACTIVITY_TYPE[type]} logged for ${contact.name}.`;
+  return what + next;
+}
+
+function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
   const toast = useToast();
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
@@ -142,16 +178,7 @@ function ContactQueue({ data, scope, onChanged, onLog }) {
     setError('');
     try {
       const updated = await api.contacts.logActivity(contact.id, { type });
-      const next = updated.nextActionDate
-        ? ` Next: ${ACTION_TYPE[updated.nextActionType] ?? 'Follow-up'} on ${formatWeekday(updated.nextActionDate)}.`
-        : '';
-      const what =
-        type === 'REPLY'
-          ? `Reply logged for ${contact.name}.`
-          : updated.status === 'NO_RESPONSE' && contact.status !== 'NO_RESPONSE'
-            ? `Touch 4 of 4 logged for ${contact.name}. Sequence complete.`
-            : `${ACTIVITY_TYPE[type]} logged for ${contact.name}.`;
-      toast(what + next);
+      toast(touchLoggedMessage(contact, updated, type));
       onChanged();
     } catch (err) {
       setError(errorMessage(err));
@@ -249,6 +276,15 @@ function ContactQueue({ data, scope, onChanged, onLog }) {
                   {scope === 'team' && contact.ownerName && <span className="queue-owner">{contact.ownerName}</span>}
                 </div>
                 <div className="queue-actions">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    disabled={capped || contact.status === 'DO_NOT_CONTACT'}
+                    onClick={() => onWrite(contact)}
+                    aria-label={`Write a message to ${contact.name}`}
+                  >
+                    Write
+                  </button>
                   {QUICK_TYPES.map((type) => (
                     <button
                       key={type}

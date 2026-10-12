@@ -17,6 +17,7 @@ import PlacementsPage from './pages/PlacementsPage.jsx';
 // The CSV reader is only needed on the import page, so it loads when that page opens.
 const ImportPage = lazy(() => import('./pages/ImportPage.jsx'));
 import TeamPage from './pages/TeamPage.jsx';
+import TemplatesPage from './pages/TemplatesPage.jsx';
 import ThisComputerPage from './pages/ThisComputerPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import UnlockPage from './pages/UnlockPage.jsx';
@@ -70,6 +71,7 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route path="templates" element={<TemplatesPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="computer" element={<ThisComputerPage />} />
         <Route path="*" element={<NotFoundPage />} />

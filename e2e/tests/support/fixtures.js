@@ -106,6 +106,7 @@ export const test = base.extend({
     });
 
     const created = {
+      templates: new Set(),
       placements: new Set(),
       searches: new Set(),
       candidates: new Set(),
@@ -137,6 +138,7 @@ export const test = base.extend({
       addToSearch: (searchId, candidateId, overrides = {}) =>
         createVia('/api/pipeline', { searchId, candidateId, ...overrides }),
       createPlacement: (data) => createVia('/api/placements', data, 'placements'),
+      createTemplate: (data) => createVia('/api/templates', data, 'templates'),
       getJson: async (path) => {
         const response = await api.get(path);
         expect(response.ok(), `${path}: ${await response.text()}`).toBeTruthy();
@@ -166,8 +168,9 @@ export const test = base.extend({
       if (company) created.companies.add(company.id);
     }
 
-    // Delete in dependency order: placements, then searches (their pipeline goes with them),
+    // Delete in dependency order: templates and placements, then searches (their pipeline goes with them),
     // then candidates and contacts, then companies.
+    for (const id of created.templates) await api.delete(`/api/templates/${id}`);
     for (const id of created.placements) await api.delete(`/api/placements/${id}`);
     for (const id of created.searches) await api.delete(`/api/searches/${id}`);
     for (const id of created.candidates) await api.delete(`/api/candidates/${id}`);

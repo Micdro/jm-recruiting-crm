@@ -10,6 +10,7 @@ public final class SyncTables {
     public static final List<String> ORDER = List.of(
             "sync_node",
             "app_user",
+            "message_template",
             "company",
             "contact",
             "candidate",

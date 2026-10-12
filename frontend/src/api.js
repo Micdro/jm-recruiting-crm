@@ -143,6 +143,7 @@ export const api = {
     remove: (id) => del(`/api/pipeline/${id}`),
   },
   placements: crud('/api/placements'),
+  templates: crud('/api/templates'),
   activities: {
     list: (params) => get('/api/activities', params),
     note: (body) => post('/api/activities', body),
