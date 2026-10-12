@@ -32,6 +32,9 @@ public interface ActivityRepository extends JpaRepository<Activity, Long> {
     @Query(FETCH + "order by a.occurredAt desc, a.id desc")
     List<Activity> findRecent(Pageable pageable);
 
+    @Query(FETCH + "order by a.occurredAt desc, a.id desc")
+    List<Activity> findAllWithDetails();
+
     @Query("select count(a) from Activity a "
             + "where a.touch = true and a.user.id = :userId and a.occurredAt >= :from and a.occurredAt < :to")
     long countTouches(@Param("userId") Long userId, @Param("from") Instant from, @Param("to") Instant to);

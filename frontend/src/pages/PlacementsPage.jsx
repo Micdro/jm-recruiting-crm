@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
+import ExportButton from '../components/ExportButton.jsx';
 import Modal from '../components/Modal.jsx';
 import PlacementForm from '../forms/PlacementForm.jsx';
 import { INVOICE_STATUS } from '../labels.js';
@@ -27,6 +28,7 @@ export default function PlacementsPage() {
   return (
     <>
       <PageHeader title="Placements" sub="Hires, fees and invoices.">
+        <ExportButton part="placements" rows={list} noun="placements" />
         <button type="button" className="btn btn-primary" onClick={() => setEditing({})}>
           Record placement
         </button>

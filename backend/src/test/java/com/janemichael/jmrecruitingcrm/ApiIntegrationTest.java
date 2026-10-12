@@ -500,6 +500,31 @@ class ApiIntegrationTest {
         assertThat(morningReminder.showNow("nobody@jane-michael.test").message()).isNull();
     }
 
+    @Test
+    void exportSendsFullRecordsForTheListsAskedFor() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Quillstone Risk")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Rhea Patel", "companyId", companyId, "notes", "Met at the fraud summit")))
+                .andExpect(status().isCreated());
+        entityManager.flush();
+
+        mockMvc.perform(signedIn(get("/api/export").param("include", "contacts,companies")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contacts[?(@.name == 'Rhea Patel')].notes").value("Met at the fraud summit"))
+                .andExpect(jsonPath("$.companies[?(@.name == 'Quillstone Risk')].contactCount").value(1))
+                .andExpect(jsonPath("$.activities").value(nullValue()));
+
+        mockMvc.perform(signedIn(get("/api/export")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pipeline").isArray())
+                .andExpect(jsonPath("$.activities").isArray());
+
+        mockMvc.perform(signedIn(get("/api/export").param("include", "passwords")))
+                .andExpect(status().isBadRequest());
+    }
+
     // Recruiting flow -----------------------------------------------------------
 
     @Test

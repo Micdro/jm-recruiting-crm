@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
+import ExportButton from '../components/ExportButton.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
@@ -50,6 +51,7 @@ export default function CandidatesPage() {
   return (
     <>
       <PageHeader title="Candidates" sub="Production AI engineers and technical leaders, judged by what they owned in production.">
+        <ExportButton part="candidates" rows={rows} noun="candidates" />
         <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
           Add candidate
         </button>

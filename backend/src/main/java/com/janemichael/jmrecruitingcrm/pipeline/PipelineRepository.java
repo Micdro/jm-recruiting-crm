@@ -16,6 +16,9 @@ public interface PipelineRepository extends JpaRepository<PipelineEntry, Long> {
             + "join fetch s.company "
             + "join fetch p.candidate ";
 
+    @Query(FETCH + "order by s.id, p.stageChangedAt desc")
+    List<PipelineEntry> findAllWithDetails();
+
     @Query(FETCH + "where s.id = :searchId order by p.stageChangedAt desc")
     List<PipelineEntry> findForSearch(@Param("searchId") Long searchId);
 

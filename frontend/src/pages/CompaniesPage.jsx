@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
+import ExportButton from '../components/ExportButton.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import CompanyForm from '../forms/CompanyForm.jsx';
@@ -47,6 +48,7 @@ export default function CompaniesPage() {
   return (
     <>
       <PageHeader title="Companies" sub="AI-native vendors selling into banks, insurers and other regulated institutions.">
+        <ExportButton part="companies" rows={rows} noun="companies" />
         <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
           Add company
         </button>

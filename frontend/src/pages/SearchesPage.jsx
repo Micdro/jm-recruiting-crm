@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
+import ExportButton from '../components/ExportButton.jsx';
 import { FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import StageBar from '../components/StageBar.jsx';
@@ -32,6 +33,7 @@ export default function SearchesPage() {
   return (
     <>
       <PageHeader title="Searches" sub="Client engagements, from intake to placement.">
+        <ExportButton part="searches" rows={rows} noun="searches" />
         <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
           Open search
         </button>

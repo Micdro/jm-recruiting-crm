@@ -2090,6 +2090,28 @@ a.cell-title:hover {
   }
 }
 
+/* Export ---------------------------------------------------------------------- */
+
+.narrow-panel {
+  max-width: 720px;
+}
+
+.export-sheets {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.export-sheets strong {
+  margin-right: 4px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
 /* Numbers -------------------------------------------------------------------- */
 
 /* Tiles grow to fill each row, so a wrapped row never leaves a gap. */

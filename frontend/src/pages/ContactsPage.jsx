@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore, TouchPips } from '../components/Bits.jsx';
+import ExportButton from '../components/ExportButton.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
@@ -41,6 +42,7 @@ export default function ContactsPage() {
   return (
     <>
       <PageHeader title="Contacts" sub="Buyers and hiring managers at client and prospect companies.">
+        <ExportButton part="contacts" rows={rows} noun="contacts" />
         <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
           Add contact
         </button>
