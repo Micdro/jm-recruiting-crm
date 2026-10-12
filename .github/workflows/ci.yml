@@ -416,7 +416,11 @@ jobs:
             ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $served 'latest.json')
           $web = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1' `
             -WorkingDirectory $served -PassThru -WindowStyle Hidden
-          Start-Sleep -Seconds 2
+          $serving = $false
+          for ($i = 0; $i -lt 30 -and -not $serving; $i++) {
+            try { $serving = (Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8765/latest.json' -TimeoutSec 2).StatusCode -eq 200 } catch { Start-Sleep -Seconds 1 }
+          }
+          if (-not $serving) { throw "The local release page didn't start" }
 
           Invoke-WebRequest -UseBasicParsing "$base/api/auth/csrf" -WebSession $session | Out-Null
           $token = ($session.Cookies.GetCookies($base) | Where-Object Name -eq 'XSRF-TOKEN').Value

@@ -139,9 +139,12 @@ public class AppUpdater {
                 phase = Phase.IDLE;
             }
             problem = null;
-        } catch (IOException | UpdateException exception) {
+        } catch (UpdateException exception) {
             problem = "Couldn't check for updates: " + exception.getMessage();
             log.info(problem);
+        } catch (IOException exception) {
+            problem = "Couldn't reach the release page to check for updates. It tries again in a few hours.";
+            log.info("Update check failed: {}", exception.toString());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
