@@ -70,6 +70,21 @@ The first computer doesn't need to be on for this.
   computers sync, the later change wins. Logged touches and notes are always kept.
 - Leave the files in **JM CRM Sync** alone. The CRM tidies them up itself.
 
+## Faster sync (optional)
+
+Through the folder, changes take about a minute. To get them within seconds, turn on **Direct
+connections** on **This computer** for one computer that's usually on, such as your desktop at home.
+Windows asks twice about network access: click **Allow access**, then **Yes**.
+
+- The CRM asks your router to let the other computers in (most home routers allow this; it's
+  called UPnP). The page then says "Other homes connect at …".
+- The other computers find it through the folder and connect to it by themselves. They don't need
+  this turned on, and their changes reach it the same way.
+- If the page says your router didn't open a port, or that your internet provider shares your
+  address, other homes can't connect. Computers in the same house still can, and everything keeps
+  syncing through the folder as before.
+- Only computers with the CRM key get an answer, and everything sent is encrypted.
+
 ## Locked until you sign in
 
 Everything that identifies a client or candidate is encrypted in the database, and the key that

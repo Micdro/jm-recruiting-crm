@@ -113,6 +113,7 @@ export const api = {
     allowFirewall: () => post('/api/desktop/firewall'),
     removeComputer: (id) => del(`/api/desktop/computers/${id}`),
     useFolder: (path) => put('/api/desktop/folder', { path }),
+    setDirect: (enabled) => put('/api/desktop/direct', { enabled }),
     quit: () => post('/api/desktop/quit'),
     unlock: (key, password) => post('/api/desktop/unlock', { key, password }),
   },

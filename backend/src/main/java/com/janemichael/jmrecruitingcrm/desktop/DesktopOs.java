@@ -17,9 +17,9 @@ public final class DesktopOs {
     private static final Logger log = LoggerFactory.getLogger(DesktopOs.class);
 
     public static final String APP_NAME = "JM CRM";
-    public static final String FIREWALL_RULE = "JM CRM sync";
-    /** Tailscale gives every device an address in this range. Only those may reach the sync port. */
-    public static final String TAILSCALE_RANGE = "100.64.0.0/10";
+    public static final String FIREWALL_RULE = "JM CRM direct sync";
+    /** The rule older versions added, which only let Tailscale devices in. */
+    private static final String OLD_FIREWALL_RULE = "JM CRM sync";
 
     private DesktopOs() {
     }
@@ -81,14 +81,19 @@ public final class DesktopOs {
         }
     }
 
-    /** Asks Windows (with its usual permission prompt) to let Tailscale devices reach the sync port. */
+    /**
+     * Asks Windows (with its usual permission prompt) to let the other computers reach the sync port,
+     * from the home network or, through the router, from other homes. The port only answers
+     * requests signed with the team's key.
+     */
     public static void allowSyncThroughFirewall(int port) {
         if (!isWindows()) {
             return;
         }
         String rule = "Remove-NetFirewallRule -DisplayName '" + FIREWALL_RULE + "' -ErrorAction SilentlyContinue; "
+                + "Remove-NetFirewallRule -DisplayName '" + OLD_FIREWALL_RULE + "' -ErrorAction SilentlyContinue; "
                 + "New-NetFirewallRule -DisplayName '" + FIREWALL_RULE + "' -Direction Inbound -Protocol TCP "
-                + "-LocalPort " + port + " -RemoteAddress " + TAILSCALE_RANGE + " -Action Allow -Profile Any";
+                + "-LocalPort " + port + " -Action Allow -Profile Any";
         runPowerShell(rule, true);
     }
 

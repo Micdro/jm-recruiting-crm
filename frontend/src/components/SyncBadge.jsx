@@ -1,8 +1,7 @@
 import { Link } from 'react-router';
 import { api } from '../api.js';
 import { useInterval, useLoader } from '../hooks.js';
-
-const FRESH_SECONDS = 60;
+import { connectedDirectly, inStep } from '../syncState.js';
 
 /** A one-line sync summary under the user's name in the sidebar (desktop app only). */
 export default function SyncBadge() {
@@ -13,16 +12,15 @@ export default function SyncBadge() {
   if (!peers) return null;
   const folder = status.data.folder;
 
-  const behind = peers.filter(
-    (peer) => peer.secondsSinceSuccess === null || peer.secondsSinceSuccess > FRESH_SECONDS || peer.lastError,
-  ).length;
+  const behind = peers.filter((peer) => !inStep(peer)).length;
 
   let label;
   let tone;
-  if (!folder?.path) {
+  // Without a folder, only computers connected directly sync.
+  if (!folder?.path && !peers.some(connectedDirectly)) {
     label = 'Choose a sync folder';
     tone = '';
-  } else if (folder.problem) {
+  } else if (folder?.problem) {
     label = 'Sync folder unavailable';
     tone = 'problem';
   } else if (peers.length === 0) {

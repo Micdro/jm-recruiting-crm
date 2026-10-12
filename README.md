@@ -52,6 +52,15 @@ How it works:
 - After 200 files a computer folds them into one snapshot, so the folder stays small. A computer
   that fell behind reads the snapshot instead, and a new computer joins by reading everything in
   the folder. The computers never need to be on at the same time.
+- **Direct connections (optional, per computer).** A computer with them on opens its sync port
+  (4781), asks the home router to forward it (UPnP IGD, renewed hourly) and lists its home and
+  internet addresses in its sealed `about` file in the folder. The others connect to it every few
+  seconds: they fetch its changes and, if it can't reach them in turn, send it theirs, so one
+  reachable computer is enough. Requests are signed with HMAC-SHA256 under a key derived from the
+  sync token (the token itself never travels), must be within ten minutes of the server's clock,
+  and bodies are sealed with AES-256-GCM both ways, each response bound to its request. An address
+  that keeps failing is shut out for a while. The folder keeps working alongside; nothing depends
+  on direct connections.
 - Each computer creates ids in its own range (computer 2 from 2,000,000,001), so new records never
   collide.
 - Encrypted fields travel encrypted inside the sealed files; every computer shares the same key.

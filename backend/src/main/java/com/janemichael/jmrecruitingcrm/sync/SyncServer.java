@@ -3,91 +3,98 @@ package com.janemichael.jmrecruitingcrm.sync;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
+import com.janemichael.jmrecruitingcrm.sync.SyncCipher.UnreadableException;
 import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.ErrorResponse;
+import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.NodeInfo;
+import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.PushRequest;
+import com.janemichael.jmrecruitingcrm.sync.SyncProtocol.PushResponse;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * The sync port: a small, separate HTTP server that only answers other computers in the group,
- * for direct sync. It runs on desktop copies only, and only when direct sync is turned on
- * ({@code app.sync.direct.enabled}); the shared folder needs no open port. The CRM itself is
- * served on localhost; this port carries nothing but sync, and every request must carry the token
- * derived from the shared CRM key.
+ * The sync port, for direct connections: a small HTTP server, separate from the CRM itself (which
+ * only answers on this computer), that answers nothing but the other computers in the group. It
+ * runs only while direct connections are turned on ({@link DirectSync}).
+ *
+ * <p>It can be reachable from the internet, so it trusts nothing: every request must be signed
+ * with the group's key and be recent, bodies are sealed both ways, and an address that keeps
+ * failing is shut out for a while.
  */
 @Component
-public class SyncServer implements SmartLifecycle {
+public class SyncServer {
 
     private static final Logger log = LoggerFactory.getLogger(SyncServer.class);
 
+    /** Failed attempts from one address within {@link #FAILURE_WINDOW_MS} before it is shut out. */
+    private static final int MAX_FAILURES = 20;
+    private static final long FAILURE_WINDOW_MS = 10 * 60 * 1000L;
+
     private final SyncService sync;
+    private final SyncApplier applier;
     private final SyncIdentity identity;
     private final FieldEncryptor encryptor;
     private final boolean desktop;
-    private final boolean direct;
     private final int port;
     private final String bindAddress;
     private final ObjectMapper json = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private final Map<String, Deque<Long>> failures = new HashMap<>();
 
     private HttpServer server;
     private ExecutorService executor;
-    private volatile boolean running;
 
     public SyncServer(
             SyncService sync,
+            SyncApplier applier,
             SyncIdentity identity,
             FieldEncryptor encryptor,
             @Value("${app.desktop.enabled:false}") boolean desktop,
-            @Value("${app.sync.direct.enabled:false}") boolean direct,
             @Value("${app.sync.port:4781}") int port,
             @Value("${app.sync.bind-address:0.0.0.0}") String bindAddress
     ) {
         this.sync = sync;
+        this.applier = applier;
         this.identity = identity;
         this.encryptor = encryptor;
         this.desktop = desktop;
-        this.direct = direct;
         this.port = port;
         this.bindAddress = bindAddress;
     }
 
-    /**
-     * Opens the port once this computer is set up. Until then nothing listens, so Windows only asks
-     * about network access at the moment setup explains it.
-     */
-    @Override
-    public void start() {
-        running = true;
-        if (identity.isEnabled()) {
-            open();
+    /** Starts listening. Returns false if the port couldn't be opened. */
+    public synchronized boolean open() {
+        if (server != null) {
+            return true;
         }
-    }
-
-    /** Starts listening, if this is a desktop copy and it isn't already. */
-    public synchronized void open() {
-        if (!desktop || !direct || port <= 0 || server != null) {
-            return;
+        if (!desktop || port < 0) {
+            return false;
         }
         try {
             server = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
         } catch (IOException exception) {
-            log.error("Could not open the sync port {}. Other computers won't be able to sync with this one.", port, exception);
-            return;
+            log.error("Could not open the sync port {}", port, exception);
+            return false;
         }
         executor = Executors.newFixedThreadPool(4, runnable -> {
             Thread thread = new Thread(runnable, "sync-server");
@@ -97,81 +104,149 @@ public class SyncServer implements SmartLifecycle {
         server.setExecutor(executor);
         server.createContext("/api/sync/", this::handle);
         server.start();
-        log.info("Sync port open on {}:{}", bindAddress, port);
+        log.info("Sync port open on {}:{}", bindAddress, port());
+        return true;
     }
 
-    @Override
-    public synchronized void stop() {
+    public synchronized void close() {
         if (server != null) {
             server.stop(1);
             executor.shutdownNow();
             server = null;
+            log.info("Sync port closed");
         }
-        running = false;
     }
 
-    @Override
-    public boolean isRunning() {
-        return running;
+    public synchronized boolean isOpen() {
+        return server != null;
+    }
+
+    /** The port it listens on (the configured one, or the one picked when that is 0). */
+    public synchronized int port() {
+        return server == null ? port : server.getAddress().getPort();
     }
 
     private void handle(HttpExchange exchange) throws IOException {
+        String remote = exchange.getRemoteAddress().getAddress().getHostAddress();
         try {
+            if (shutOut(remote)) {
+                sendError(exchange, 429, "Too many failed attempts. Try again later.");
+                return;
+            }
             if (!encryptor.hasSyncToken() || !identity.isEnabled()) {
-                send(exchange, 404, new ErrorResponse("The CRM on that computer isn't set up yet."));
-                return;
-            }
-            if (!authorized(exchange.getRequestHeaders().getFirst(SyncProtocol.TOKEN_HEADER))) {
-                send(exchange, 401, new ErrorResponse("Wrong CRM key."));
+                sendError(exchange, 404, "The CRM on that computer isn't set up yet.");
                 return;
             }
 
-            String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
-            String remoteHost = exchange.getRemoteAddress().getAddress().getHostAddress();
+            String path = exchange.getRequestURI().getRawPath();
+            String query = exchange.getRequestURI().getRawQuery();
+            String pathAndQuery = query == null ? path : path + "?" + query;
+            Long node = parseLong(exchange.getRequestHeaders().getFirst(SyncProtocol.NODE_HEADER));
+            Long time = parseLong(exchange.getRequestHeaders().getFirst(SyncProtocol.TIME_HEADER));
+            String signature = exchange.getRequestHeaders().getFirst(SyncProtocol.SIGNATURE_HEADER);
+            byte[] body = readBody(exchange);
 
-            if ("GET".equals(method) && "/api/sync/changes".equals(path)) {
-                long since = longParam(exchange.getRequestURI().getRawQuery(), "since");
-                Long caller = parseLong(exchange.getRequestHeaders().getFirst(SyncProtocol.NODE_HEADER));
-                Long callerPort = parseLong(exchange.getRequestHeaders().getFirst(SyncProtocol.PORT_HEADER));
-                send(exchange, 200, sync.changesSince(since, caller, remoteHost,
-                        callerPort == null ? null : callerPort.intValue()));
-            } else {
-                send(exchange, 404, new ErrorResponse("Not found."));
+            SyncCipher cipher = SyncCipher.forDirect(encryptor.syncToken());
+            if (node == null || time == null || body == null
+                    || Math.abs(System.currentTimeMillis() - time) > SyncProtocol.MAX_CLOCK_SKEW_MS
+                    || !cipher.verify(SyncProtocol.signed(method, pathAndQuery, node, time, body), signature)) {
+                recordFailure(remote);
+                sendError(exchange, 401, "Not signed with this CRM's key.");
+                return;
             }
+
+            Object answer;
+            if ("GET".equals(method) && "/api/sync/changes".equals(path)) {
+                answer = sync.changesSince(longParam(query, "since"), node);
+            } else if ("POST".equals(method) && "/api/sync/push".equals(path)) {
+                PushRequest push = unpack(cipher.open(SyncProtocol.requestName(method, pathAndQuery, node, time), body),
+                        PushRequest.class);
+                int applied = push.changes() == null ? 0 : applier.apply(push.changes()).applied();
+                if (applied > 0) {
+                    log.info("Received {} changes directly from computer {}", applied, node);
+                }
+                NodeInfo self = sync.self();
+                answer = new PushResponse(SyncProtocol.VERSION, self, applied);
+            } else {
+                sendError(exchange, 404, "Not found.");
+                return;
+            }
+            sendSealed(exchange, cipher, signature, answer);
+        } catch (UnreadableException exception) {
+            recordFailure(remote);
+            sendError(exchange, 400, "The request couldn't be read.");
         } catch (RuntimeException exception) {
             log.warn("Sync request failed", exception);
-            send(exchange, 500, new ErrorResponse("The other computer hit an error: " + exception.getMessage()));
+            sendError(exchange, 500, "The other computer hit an error.");
         } finally {
             exchange.close();
         }
     }
 
-    private boolean authorized(String header) {
-        if (header == null || !header.startsWith("Bearer ")) {
+    // Shutting out addresses that keep failing ---------------------------------------
+
+    private synchronized boolean shutOut(String remote) {
+        Deque<Long> times = failures.get(remote);
+        if (times == null) {
             return false;
         }
-        byte[] given = header.substring("Bearer ".length()).trim().getBytes(StandardCharsets.UTF_8);
-        byte[] expected = encryptor.syncToken().getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(given, expected);
+        long cutoff = System.currentTimeMillis() - FAILURE_WINDOW_MS;
+        while (!times.isEmpty() && times.peekFirst() < cutoff) {
+            times.pollFirst();
+        }
+        if (times.isEmpty()) {
+            failures.remove(remote);
+            return false;
+        }
+        return times.size() >= MAX_FAILURES;
     }
 
-    private void send(HttpExchange exchange, int status, Object body) throws IOException {
-        byte[] bytes = json.writeValueAsBytes(body);
-        boolean gzip = bytes.length > 1024 && String.valueOf(exchange.getRequestHeaders().getFirst("Accept-Encoding"))
-                .contains("gzip");
+    private synchronized void recordFailure(String remote) {
+        if (failures.size() > 10_000) {
+            failures.clear();
+        }
+        failures.computeIfAbsent(remote, key -> new ArrayDeque<>()).addLast(System.currentTimeMillis());
+        log.debug("Refused a sync request from {}", remote);
+    }
+
+    // Reading and writing --------------------------------------------------------------
+
+    /** The request body, or null if it is too large. */
+    private static byte[] readBody(HttpExchange exchange) throws IOException {
+        try (InputStream in = exchange.getRequestBody()) {
+            byte[] body = in.readNBytes(SyncProtocol.MAX_BODY_BYTES + 1);
+            return body.length > SyncProtocol.MAX_BODY_BYTES ? null : body;
+        }
+    }
+
+    private <T> T unpack(byte[] packed, Class<T> type) throws UnreadableException {
+        try (InputStream in = new GZIPInputStream(new ByteArrayInputStream(packed))) {
+            return json.readValue(in, type);
+        } catch (IOException exception) {
+            throw new UnreadableException("The request couldn't be read");
+        }
+    }
+
+    private void sendSealed(HttpExchange exchange, SyncCipher cipher, String signature, Object body) throws IOException {
+        ByteArrayOutputStream packed = new ByteArrayOutputStream();
+        try (OutputStream gzip = new GZIPOutputStream(packed)) {
+            json.writeValue(gzip, body);
+        }
+        byte[] sealed = cipher.seal(SyncProtocol.responseName(signature), packed.toByteArray());
+        exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
+        exchange.sendResponseHeaders(200, sealed.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(sealed);
+        }
+    }
+
+    private void sendError(HttpExchange exchange, int status, String message) throws IOException {
+        byte[] bytes = json.writeValueAsBytes(new ErrorResponse(message));
         exchange.getResponseHeaders().set("Content-Type", "application/json");
-        if (gzip) {
-            exchange.getResponseHeaders().set("Content-Encoding", "gzip");
-            exchange.sendResponseHeaders(status, 0);
-            try (OutputStream out = new GZIPOutputStream(exchange.getResponseBody())) {
-                out.write(bytes);
-            }
-        } else {
-            exchange.sendResponseHeaders(status, bytes.length);
-            try (OutputStream out = exchange.getResponseBody()) {
-                out.write(bytes);
-            }
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(bytes);
         }
     }
 

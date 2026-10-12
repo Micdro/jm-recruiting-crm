@@ -58,6 +58,9 @@ class FolderSyncIntegrationTest {
     @Autowired
     private FolderSync folderSync;
 
+    @Autowired
+    private DirectSync direct;
+
     @TempDir
     Path shared;
 
@@ -157,7 +160,7 @@ class FolderSyncIntegrationTest {
 
     @Test
     void manyFilesAreFoldedIntoOneSnapshot() throws Exception {
-        FolderSync compacting = new FolderSync(jdbc, identity, feed, applier, encryptor, 2);
+        FolderSync compacting = new FolderSync(jdbc, identity, feed, applier, encryptor, direct, 2);
         compacting.useFolder(shared.toString());
         for (int i = 0; i < 3; i++) {
             jdbc.update("INSERT INTO company (name, status) VALUES (?, 'LEAD')", "Compact Co " + i);
@@ -225,7 +228,7 @@ class FolderSyncIntegrationTest {
 
     private void writeAbout(int node, String instance, long lastBatch) throws IOException {
         folder.writeAbout(new About(SyncFolder.PROTOCOL, node, instance, "Computer " + node, lastBatch,
-                System.currentTimeMillis()));
+                System.currentTimeMillis(), 0, List.of()));
     }
 
     private static Batch batch(int node, long seq, SyncChange... changes) {

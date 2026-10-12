@@ -4,9 +4,7 @@ import { ConfirmButton, Empty, ErrorNote, Loading, PageHeader } from '../compone
 import FolderField from '../components/FolderField.jsx';
 import { timeAgo } from '../format.js';
 import { useAuth, useInterval, useLoader, useTitle, useToast } from '../hooks.js';
-
-/** A computer counts as in step if it synced within this long (sync runs every few seconds). */
-const FRESH_SECONDS = 60;
+import { connectedDirectly, inStep } from '../syncState.js';
 
 /** Computers note in the sync folder every couple of minutes that they're running. */
 function runningLabel(seconds) {
@@ -121,6 +119,15 @@ export default function ThisComputerPage() {
         )}
       </section>
 
+      <DirectPanel
+        direct={data.direct}
+        windows={data.windows}
+        busy={busy === 'direct'}
+        onToggle={() =>
+          act('direct', () => api.desktop.setDirect(!data.direct.enabled), data.direct.enabled ? 'Direct connections off' : 'Direct connections on')
+        }
+      />
+
       <section className="panel" aria-labelledby="computers-heading">
         <div className="panel-head">
           <h2 id="computers-heading">Other computers</h2>
@@ -132,17 +139,20 @@ export default function ThisComputerPage() {
         ) : (
           <ul className="computers">
             {peers.map((peer) => {
-              const fresh = peer.secondsSinceSuccess !== null && peer.secondsSinceSuccess < FRESH_SECONDS && !peer.lastError;
+              const direct = connectedDirectly(peer);
+              const fresh = inStep(peer);
               const ago = timeAgo(peer.secondsSinceSuccess, peer.lastSuccess);
               const problem = !fresh && peer.lastError;
-              const running = runningLabel(peer.secondsSinceSeen);
+              const running = direct ? 'Running now' : runningLabel(peer.secondsSinceSeen);
               return (
                 <li key={peer.id}>
                   <div>
                     <span className="computer-name">{peer.name}</span>{' '}
                     {running && <span className="muted">{running}</span>}
                     <p className={`computer-state ${fresh ? 'computer-state-ok' : problem ? 'computer-state-problem' : ''}`}>
-                      {fresh
+                      {direct
+                        ? 'Connected directly. Up to date with its changes.'
+                        : fresh
                         ? 'Up to date with its changes.'
                         : problem
                           ? `${peer.lastError}${peer.lastSuccess ? ` Last synced ${ago}.` : ''}`
@@ -234,6 +244,84 @@ export default function ThisComputerPage() {
           <li>Sign in with that person’s CRM account. Admins add accounts on the Team page.</li>
         </ol>
       </section>
+    </>
+  );
+}
+
+/** Whether other computers can connect straight to this one, and where. */
+function DirectPanel({ direct, windows, busy, onToggle }) {
+  const firewall = useLoader(
+    () => (windows && direct.enabled ? api.desktop.firewall() : Promise.resolve({ allowed: true })),
+    [windows, direct.enabled],
+  );
+  const toast = useToast();
+  const blocked = direct.enabled && firewall.data && !firewall.data.allowed;
+
+  return (
+    <section className="panel" aria-labelledby="direct-heading">
+      <div className="panel-head">
+        <h2 id="direct-heading">Direct connections</h2>
+      </div>
+      <div className="setting-row">
+        <p>
+          <strong>{direct.enabled ? 'On' : 'Off'}</strong>
+          {direct.enabled ? (
+            <DirectDetails direct={direct} />
+          ) : (
+            <>
+              Changes travel through the sync folder, usually within a minute. Turn this on so the other computers can
+              connect to this one directly and get changes within seconds. One computer that’s usually running is enough.
+              {windows && ' Windows asks twice about network access: click Allow access, then Yes.'}
+            </>
+          )}
+        </p>
+        <button type="button" className="btn btn-sm" disabled={busy} onClick={onToggle}>
+          {busy ? (direct.enabled ? 'Turning off…' : 'Turning on…') : direct.enabled ? 'Turn off' : 'Turn on'}
+        </button>
+      </div>
+      {blocked && (
+        <div className="setting-row">
+          <p>
+            <strong>Windows Firewall</strong>
+            <span className="computer-state computer-state-problem">Windows is blocking the other computers.</span>
+          </p>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={async () => {
+              await api.desktop.allowFirewall();
+              toast('Click Yes when Windows asks');
+              setTimeout(firewall.reload, 8000);
+            }}
+          >
+            Allow
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DirectDetails({ direct }) {
+  if (!direct.listening) {
+    return (
+      <span className="computer-state computer-state-problem">
+        The CRM couldn’t open its port for other computers. Another program may be using it. Restart the CRM to try again.
+      </span>
+    );
+  }
+  return (
+    <>
+      {direct.internetAddress ? (
+        <span className="computer-state computer-state-ok">
+          Other homes connect at {direct.internetAddress}, through your router.
+        </span>
+      ) : (
+        direct.routerProblem && <span className="computer-state">{direct.routerProblem}</span>
+      )}
+      {direct.homeAddresses.length > 0 && (
+        <span className="computer-state muted">On this network: {direct.homeAddresses.join(', ')}</span>
+      )}
     </>
   );
 }

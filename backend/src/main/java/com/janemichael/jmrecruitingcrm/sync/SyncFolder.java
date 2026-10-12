@@ -2,7 +2,7 @@ package com.janemichael.jmrecruitingcrm.sync;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.janemichael.jmrecruitingcrm.sync.FolderCipher.UnreadableException;
+import com.janemichael.jmrecruitingcrm.sync.SyncCipher.UnreadableException;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -61,8 +61,12 @@ final class SyncFolder {
      * @param instance  a random id for this set of files; a new one tells readers to start over
      * @param lastBatch the newest batch written
      * @param updatedAt when the computer last wrote this, in milliseconds since 1970 (its own clock)
+     * @param cursor    how far into its own records the batches up to {@code lastBatch} go, so a
+     *                  computer that has read them can connect directly and ask only for what's newer
+     * @param addresses where other computers can connect to it directly, if it accepts connections
      */
-    record About(int protocol, int node, String instance, String name, long lastBatch, long updatedAt) {
+    record About(int protocol, int node, String instance, String name, long lastBatch, long updatedAt,
+                 long cursor, List<String> addresses) {
     }
 
     /** A batch of changes, or (as a snapshot) every row, replacing all batches up to {@code seq}. */
@@ -81,13 +85,13 @@ final class SyncFolder {
     }
 
     private final Path root;
-    private final FolderCipher cipher;
+    private final SyncCipher cipher;
     private final ObjectMapper json = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     SyncFolder(Path root, String syncToken) {
         this.root = root;
-        this.cipher = FolderCipher.forToken(syncToken);
+        this.cipher = SyncCipher.forFolder(syncToken);
     }
 
     Path root() {

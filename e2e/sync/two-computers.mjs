@@ -6,12 +6,28 @@
 //
 //   node sync/two-computers.mjs <path to desktop jar>
 //
-// Each copy gets its own home folder, database and ports. Exit code 0 means everything synced.
+// Exit code 0 means everything synced.
 
-import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  check,
+  companyNames,
+  computer,
+  csrf,
+  eventually,
+  filesContaining,
+  locked,
+  request,
+  run,
+  signIn as signInAs,
+  signOut,
+  sleep,
+  start as startComputer,
+  stop,
+  waitForHealth,
+} from './desktop.mjs';
 
 const jar = process.argv[2];
 if (!jar) {
@@ -21,18 +37,6 @@ if (!jar) {
 
 const PASSWORD = 'two-computers-password';
 const EMAIL = 'michael@two-computers.test';
-
-function computer(name, base) {
-  return {
-    name,
-    home: mkdtempSync(join(tmpdir(), `jmcrm-${name}-`)),
-    ui: base,
-    sync: base + 1,
-    db: base + 2,
-    process: null,
-    cookies: new Map(),
-  };
-}
 
 const first = computer('first', 4780);
 const second = computer('second', 4790);
@@ -45,156 +49,9 @@ const syncFolder = join(shared, 'JM CRM Sync');
 const OTHER_KEY = 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=';
 const SECRETS = ['Dana Reyes', 'dana@acme.test', 'Secret notes', 'Acme AI'];
 
-function start(pc) {
-  pc.cookies.clear();
-  const env = {
-    ...process.env,
-    JMCRM_DESKTOP: 'true',
-    JMCRM_HOME: pc.home,
-    JMCRM_PORT: String(pc.ui),
-    JMCRM_SYNC_PORT: String(pc.sync),
-    JMCRM_DB_PORT: String(pc.db),
-    JMCRM_NO_BROWSER: '1',
-  };
-  // CI points the server tests at its own database; the desktop copies bring their own.
-  delete env.SPRING_DATASOURCE_URL;
-  delete env.SPRING_DATASOURCE_USERNAME;
-  delete env.SPRING_DATASOURCE_PASSWORD;
-  // Small numbers, so a snapshot replaces old sync files within this test.
-  const options = ['-Xmx512m', '-Dapp.sync.interval-ms=1000', '-Dapp.sync.folder.compact-after=4'];
-  pc.process = spawn('java', [...options, '-jar', jar], {
-    env,
-    stdio: ['ignore', 'ignore', 'ignore'],
-  });
-}
-
-async function stop(pc) {
-  if (!pc.process) return;
-  const exited = new Promise((resolve) => pc.process.once('exit', resolve));
-  pc.process.kill('SIGTERM');
-  await exited;
-  pc.process = null;
-}
-
-function log(pc) {
-  const file = join(pc.home, 'logs', 'jm-crm.log');
-  const startup = join(pc.home, 'logs', 'startup-error.txt');
-  let text = '';
-  if (existsSync(startup)) text += readFileSync(startup, 'utf8');
-  if (existsSync(file)) text += readFileSync(file, 'utf8').split('\n').slice(-120).join('\n');
-  return text;
-}
-
-async function request(pc, method, path, body, { form = false } = {}) {
-  const headers = { Accept: 'application/json' };
-  const cookie = [...pc.cookies].map(([key, value]) => `${key}=${value}`).join('; ');
-  if (cookie) headers.Cookie = cookie;
-  if (pc.cookies.has('XSRF-TOKEN')) headers['X-XSRF-TOKEN'] = pc.cookies.get('XSRF-TOKEN');
-  let payload;
-  if (body !== undefined) {
-    if (form) {
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      payload = new URLSearchParams(body).toString();
-    } else {
-      headers['Content-Type'] = 'application/json';
-      payload = JSON.stringify(body);
-    }
-  }
-  const response = await fetch(`http://127.0.0.1:${pc.ui}${path}`, { method, headers, body: payload });
-  for (const setCookie of response.headers.getSetCookie()) {
-    const [pair] = setCookie.split(';');
-    const index = pair.indexOf('=');
-    pc.cookies.set(pair.slice(0, index), pair.slice(index + 1));
-  }
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    throw new Error(`${pc.name}: ${method} ${path} -> ${response.status} ${text}`);
-  }
-  return data;
-}
-
-async function csrf(pc) {
-  await request(pc, 'GET', '/api/auth/csrf');
-}
-
-async function signIn(pc, password = PASSWORD) {
-  await csrf(pc);
-  await request(pc, 'POST', '/api/auth/login', { email: EMAIL, password }, { form: true });
-  await csrf(pc);
-}
-
-async function signOut(pc) {
-  await request(pc, 'POST', '/api/auth/logout');
-  pc.cookies.delete('JSESSIONID');
-  await csrf(pc);
-}
-
-const locked = async (pc) => (await request(pc, 'GET', '/api/setup/status')).locked;
-
-/** Every file in a folder (recursively) that contains any of the given strings. */
-function filesContaining(folder, needles) {
-  const found = [];
-  const buffers = needles.map((needle) => Buffer.from(needle, 'utf8'));
-  const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const path = join(dir, name);
-      const info = statSync(path, { throwIfNoEntry: false });
-      if (!info) continue;
-      if (info.isDirectory()) walk(path);
-      else if (info.isFile()) {
-        let content;
-        try {
-          content = readFileSync(path);
-        } catch {
-          continue; // Held open by the database on some systems.
-        }
-        if (buffers.some((needle) => content.includes(needle))) found.push(path);
-      }
-    }
-  };
-  walk(folder);
-  return found;
-}
-
-async function waitForHealth(pc, seconds = 180) {
-  const deadline = Date.now() + seconds * 1000;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${pc.ui}/api/health`);
-      if (response.ok) return;
-    } catch {
-      // Not up yet.
-    }
-    if (pc.process && pc.process.exitCode !== null) break;
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  throw new Error(`${pc.name} did not start.\n${log(pc)}`);
-}
-
-async function eventually(description, check, seconds = 30) {
-  const deadline = Date.now() + seconds * 1000;
-  let last;
-  while (Date.now() < deadline) {
-    try {
-      if (await check()) {
-        console.log(`ok - ${description}`);
-        return;
-      }
-    } catch (error) {
-      last = error;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  throw new Error(`Timed out: ${description}${last ? ` (${last.message})` : ''}`);
-}
-
-function check(condition, description) {
-  if (!condition) throw new Error(`Failed: ${description}`);
-  console.log(`ok - ${description}`);
-}
-
-const companyNames = async (pc) => (await request(pc, 'GET', '/api/companies')).map((company) => company.name);
+// Small numbers, so a snapshot replaces old sync files within this test.
+const start = (pc) => startComputer(pc, jar, ['-Dapp.sync.interval-ms=1000', '-Dapp.sync.folder.compact-after=4']);
+const signIn = (pc, password = PASSWORD) => signInAs(pc, EMAIL, password);
 
 async function main() {
   start(first);
@@ -243,7 +100,7 @@ async function main() {
   check(refused, 'joining with the wrong key is refused');
 
   // The second computer joins through the folder and copies everything.
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await sleep(2000);
   const joined = await request(second, 'POST', '/api/setup/join', { syncFolder, key, computerName: 'Second PC' });
   check(joined.nodeId === 2 && joined.computers === 1 && joined.copied > 0 && !joined.warning,
     'the second computer joins as computer 2 and copies the first computer\'s records');
@@ -297,7 +154,7 @@ async function main() {
   await signOut(first);
   check(await locked(first), 'signing out locks the CRM');
   await request(second, 'POST', '/api/companies', { name: 'Added While Locked', status: 'LEAD' });
-  await new Promise((resolve) => setTimeout(resolve, 4000));
+  await sleep(4000);
   await signIn(first);
   await eventually('changes sync to a computer while it is locked', async () =>
     (await companyNames(first)).includes('Added While Locked'));
@@ -312,7 +169,7 @@ async function main() {
   // first is off.
   await stop(second);
   await request(first, 'POST', '/api/companies', { name: 'Made While Off', status: 'LEAD' });
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await sleep(3000);
   await stop(first);
   start(second);
   await waitForHealth(second);
@@ -325,7 +182,7 @@ async function main() {
   // Enough changes for old sync files to be folded into a snapshot.
   for (let i = 1; i <= 6; i++) {
     await request(second, 'POST', '/api/companies', { name: `Batch Co ${i}`, status: 'LEAD' });
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await sleep(1500);
   }
   await eventually('old sync files are replaced by a snapshot', async () =>
     readdirSync(join(syncFolder, 'computer-2')).some((file) => file.startsWith('snapshot-')));
@@ -375,14 +232,4 @@ async function main() {
   console.log('All sync checks passed');
 }
 
-try {
-  await main();
-} catch (error) {
-  console.error(error.message);
-  for (const pc of computers) {
-    console.error(`--- ${pc.name} computer log ---\n` + log(pc));
-  }
-  process.exitCode = 1;
-} finally {
-  await Promise.all(computers.map(stop));
-}
+await run(computers, main);

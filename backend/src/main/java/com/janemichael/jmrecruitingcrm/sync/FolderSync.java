@@ -2,7 +2,7 @@ package com.janemichael.jmrecruitingcrm.sync;
 
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
-import com.janemichael.jmrecruitingcrm.sync.FolderCipher.UnreadableException;
+import com.janemichael.jmrecruitingcrm.sync.SyncCipher.UnreadableException;
 import com.janemichael.jmrecruitingcrm.sync.SyncFolder.About;
 import com.janemichael.jmrecruitingcrm.sync.SyncFolder.Batch;
 import com.janemichael.jmrecruitingcrm.sync.SyncFolder.Belongs;
@@ -61,12 +61,14 @@ public class FolderSync {
     private final SyncFeed feed;
     private final SyncApplier applier;
     private final FieldEncryptor encryptor;
+    private final DirectSync direct;
     private final int compactAfter;
 
     /** What was last written to the folder for each row, so a row isn't written again unchanged. */
     private final Map<String, String> written = new HashMap<>();
     private volatile String problem;
     private volatile Instant lastAbout = Instant.EPOCH;
+    private volatile List<String> lastAddresses = List.of();
 
     public FolderSync(
             JdbcTemplate jdbc,
@@ -74,6 +76,7 @@ public class FolderSync {
             SyncFeed feed,
             SyncApplier applier,
             FieldEncryptor encryptor,
+            DirectSync direct,
             @Value("${app.sync.folder.compact-after:200}") int compactAfter
     ) {
         this.jdbc = jdbc;
@@ -81,10 +84,12 @@ public class FolderSync {
         this.feed = feed;
         this.applier = applier;
         this.encryptor = encryptor;
+        this.direct = direct;
         this.compactAfter = Math.max(2, compactAfter);
     }
 
-    @Scheduled(initialDelayString = "${app.sync.initial-delay-ms:3000}", fixedDelayString = "${app.sync.interval-ms:5000}")
+    @Scheduled(initialDelayString = "${app.sync.initial-delay-ms:3000}",
+            fixedDelayString = "${app.sync.folder.interval-ms:${app.sync.interval-ms:5000}}")
     public void scheduled() {
         // Runs while the CRM is locked too: the files only need the sync token.
         if (identity.isEnabled() && encryptor.hasSyncToken() && folderPath() != null) {
@@ -169,6 +174,7 @@ public class FolderSync {
                 UUID.randomUUID().toString());
         written.clear();
         lastAbout = Instant.EPOCH;
+        lastAddresses = List.of();
     }
 
     /** Checks that a new CRM can start in this folder: it must not hold another CRM. */
@@ -323,10 +329,13 @@ public class FolderSync {
         if (folder.batches(self).size() > compactAfter) {
             compact(folder, self, seq);
         }
-        if (!fresh.isEmpty() || Duration.between(lastAbout, Instant.now()).compareTo(HEARTBEAT) >= 0) {
+        List<String> addresses = direct.addresses();
+        if (!fresh.isEmpty() || !addresses.equals(lastAddresses)
+                || Duration.between(lastAbout, Instant.now()).compareTo(HEARTBEAT) >= 0) {
             folder.writeAbout(new About(SyncFolder.PROTOCOL, self, instance, (String) state.get("name"), seq,
-                    System.currentTimeMillis()));
+                    System.currentTimeMillis(), changes.cursor(), addresses));
             lastAbout = Instant.now();
+            lastAddresses = addresses;
         }
     }
 
@@ -387,8 +396,10 @@ public class FolderSync {
                 jdbc.update("UPDATE sync_peer_state SET folder_seq = 0, folder_instance = ? WHERE node_id = ?",
                         about.instance(), node);
             }
-            jdbc.update("UPDATE sync_peer_state SET last_seen = ? WHERE node_id = ?",
-                    Timestamp.from(Instant.ofEpochMilli(about.updatedAt())), node);
+            List<String> addresses = about.addresses() == null ? List.of() : about.addresses();
+            jdbc.update("UPDATE sync_peer_state SET last_seen = ?, direct_addresses = ? WHERE node_id = ?",
+                    Timestamp.from(Instant.ofEpochMilli(about.updatedAt())),
+                    addresses.isEmpty() ? null : String.join(",", addresses), node);
 
             List<Long> batches = folder.batches(node);
             long first = batches.isEmpty() ? Long.MAX_VALUE : batches.get(0);
@@ -420,6 +431,12 @@ public class FolderSync {
                 applied += applier.apply(folder.readBatch(node, seq, false).changes()).applied();
                 done = seq;
                 saveRead(node, done);
+            }
+            if (done >= about.lastBatch() && about.cursor() > 0) {
+                // Everything that computer had made up to that point is here: a direct connection
+                // only needs to ask for what's newer.
+                jdbc.update("UPDATE sync_peer_state SET cursor = greatest(cursor, ?) WHERE node_id = ?",
+                        about.cursor(), node);
             }
             jdbc.update("UPDATE sync_peer_state SET last_success = now(), last_error = NULL WHERE node_id = ?", node);
             return new ReadResult(applied, null);

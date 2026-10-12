@@ -5,7 +5,9 @@ import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ForbiddenException;
+import com.janemichael.jmrecruitingcrm.sync.DirectSync;
 import com.janemichael.jmrecruitingcrm.sync.FolderSync;
+import com.janemichael.jmrecruitingcrm.sync.SyncServer;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity;
 import com.janemichael.jmrecruitingcrm.sync.SyncService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,8 +41,12 @@ public class DesktopController {
             boolean windows,
             boolean startsWithWindows,
             SyncService.Status sync,
-            FolderSync.FolderStatus folder
+            FolderSync.FolderStatus folder,
+            DirectSync.DirectStatus direct
     ) {
+    }
+
+    public record DirectRequest(boolean enabled) {
     }
 
     public record FolderRequest(
@@ -74,10 +80,14 @@ public class DesktopController {
     private final ApplicationContext context;
     private final CrmLock crmLock;
     private final FolderSync folderSync;
+    private final DirectSync direct;
+    private final SyncServer syncServer;
 
     public DesktopController(
             SyncService sync,
             FolderSync folderSync,
+            DirectSync direct,
+            SyncServer syncServer,
             SyncIdentity identity,
             CurrentUserService currentUser,
             JdbcTemplate jdbc,
@@ -86,6 +96,8 @@ public class DesktopController {
     ) {
         this.sync = sync;
         this.folderSync = folderSync;
+        this.direct = direct;
+        this.syncServer = syncServer;
         this.identity = identity;
         this.currentUser = currentUser;
         this.jdbc = jdbc;
@@ -107,14 +119,29 @@ public class DesktopController {
     public Status status() {
         SyncService.Status syncStatus = sync.status();
         return new Status(syncStatus.name(), syncStatus.nodeId(), DesktopOs.isWindows(),
-                DesktopOs.startsWithWindows(), syncStatus, folderSync.status());
+                DesktopOs.startsWithWindows(), syncStatus, folderSync.status(), direct.status());
     }
 
     /** Syncs now instead of waiting a few seconds. */
     @PostMapping("/sync-now")
     public Status syncNow() {
         folderSync.syncNow();
+        sync.retryNow();
         sync.syncAll();
+        return status();
+    }
+
+    /**
+     * Turns direct connections on or off for this computer. Turning on asks Windows to let the other
+     * computers in (with its permission prompt) and tells them, through the folder, where to connect.
+     */
+    @PutMapping("/direct")
+    public Status setDirect(@RequestBody DirectRequest request) {
+        direct.setEnabled(request.enabled());
+        if (request.enabled()) {
+            DesktopOs.allowSyncThroughFirewall(syncServer.port());
+        }
+        folderSync.syncNow();
         return status();
     }
 
@@ -139,7 +166,7 @@ public class DesktopController {
     @PostMapping("/firewall")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void allowThroughFirewall() {
-        DesktopOs.allowSyncThroughFirewall(sync.syncPort());
+        DesktopOs.allowSyncThroughFirewall(syncServer.port());
     }
 
     /** Removes a computer that is no longer used, so the others stop trying to reach it. */

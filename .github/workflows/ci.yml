@@ -243,7 +243,7 @@ jobs:
           echo "::error title=Container log::${message:-$(tail -30 container.log | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')}"
 
   sync:
-    name: Two desktop copies stay in sync
+    name: Desktop copies stay in sync
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -263,12 +263,21 @@ jobs:
         working-directory: backend
         run: ./mvnw -B -q -DskipTests -Pdesktop-linux package
 
-      # Two copies, each with its own database and ports, set up, joined and synced both ways.
-      - name: Sync two desktop copies
+      # Three copies, each with its own database and ports, set up, joined and synced through a
+      # shared folder, including while some are off.
+      - name: Sync desktop copies through a shared folder
         working-directory: e2e
         run: |
           jar=$(ls ../backend/target/jm-recruiting-crm-*.jar | grep -v original | head -1)
           node sync/two-computers.mjs "$jar" 2>&1 | tee sync.log
+          test "${PIPESTATUS[0]}" = 0
+
+      # Two copies syncing over a direct connection, with the folder slowed right down.
+      - name: Sync desktop copies directly
+        working-directory: e2e
+        run: |
+          jar=$(ls ../backend/target/jm-recruiting-crm-*.jar | grep -v original | head -1)
+          node sync/direct.mjs "$jar" 2>&1 | tee -a sync.log
           test "${PIPESTATUS[0]}" = 0
 
       - name: Report sync failures
