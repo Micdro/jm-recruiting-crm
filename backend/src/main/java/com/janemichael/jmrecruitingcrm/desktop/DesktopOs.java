@@ -165,6 +165,31 @@ public final class DesktopOs {
     }
 
     /**
+     * Starts a PowerShell script on its own, so it keeps running after the CRM closes (the updater
+     * waits for that). Returns false if it couldn't be started.
+     */
+    public static boolean runDetachedPowerShell(String script) {
+        if (!isWindows()) {
+            return false;
+        }
+        String encoded = Base64.getEncoder().encodeToString(script.getBytes(StandardCharsets.UTF_16LE));
+        List<String> command = List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "
+                        + "'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand','" + encoded + "'");
+        try {
+            Process starter = new ProcessBuilder(command).redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            return starter.waitFor(30, TimeUnit.SECONDS) && starter.exitValue() == 0;
+        } catch (IOException exception) {
+            log.warn("Could not start PowerShell", exception);
+            return false;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /**
      * Runs a PowerShell script passed as -EncodedCommand, so paths with spaces or quotes can't break
      * it. Elevated scripts show Windows' permission prompt.
      */

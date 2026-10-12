@@ -71,6 +71,13 @@ How it works:
   closes. While locked, data requests get 423 and only sync (which copies scrambled rows) runs.
   The CRM key from the password manager can unlock an account that has no copy yet, or set a new
   password when one is forgotten.
+- **Updates.** CI numbers each build (`-Djmcrm.build`) and publishes `latest.json` (build number
+  and SHA-256) next to the zip on the `windows-latest` release. The app checks it every six hours;
+  **Update now** downloads the zip, checks its hash, unpacks it beside the app, and starts a small
+  PowerShell script that waits for the app to close, swaps the folders (keeping the old one until
+  the swap worked, or copying over it if a file is held open), and starts the new version. Data
+  and settings live in `%LOCALAPPDATA%\JMCRM`, so they carry over. Each computer notes its version
+  in the sync folder, so the others can say when it needs updating.
 - The same app still deploys as a server (below); a server could later join the group as one more
   computer.
 

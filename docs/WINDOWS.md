@@ -115,14 +115,16 @@ account, can't read them.
 
 ## Updating
 
-1. On each computer, open **This computer** and click **Close**.
-2. Replace the JM CRM folder with the one from the new zip (same location).
-3. Open JM CRM.exe and sign in.
+The CRM checks for a new version every few hours. When one is ready, a strip at the top of the page
+says so: click **Update now**. It downloads the new version, restarts in about a minute, and you
+sign in again. Your data and settings aren't touched. **This computer** shows each computer's
+version and points out any that need updating, so update the others when they offer it too.
 
-Update all computers on the same day. If your computers were set up with an older version that
-synced over Tailscale, choose the sync folder on **This computer** after updating: on the first
-computer first, then on the others once the folder is shared with them. Tailscale isn't needed
-after that.
+Copies installed before October 12, 2026 can't update themselves yet. Update those once by hand:
+on **This computer**, click **Close**, replace the JM CRM folder with the one from the new zip (same
+location), and open JM CRM.exe. If your computers were set up with a version that synced over
+Tailscale, choose the sync folder on **This computer** afterwards: on the first computer first, then
+on the others once the folder is shared with them.
 
 ## If something isn't syncing
 

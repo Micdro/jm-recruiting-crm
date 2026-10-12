@@ -336,11 +336,16 @@ jobs:
           jpackage --type app-image --name "JM CRM" --input backend/target/desktop --main-jar app.jar `
             --dest dist --icon packaging/windows/jm-crm.ico --app-version "1.0.${{ github.run_number }}" `
             --vendor "Jane Michael LLC" --description "Jane Michael recruiting CRM" `
-            --java-options "-Djmcrm.desktop=true" --java-options "-Xmx768m" `
+            --java-options "-Djmcrm.desktop=true" --java-options "-Djmcrm.build=${{ github.run_number }}" `
+            --java-options "-Xmx768m" `
             --java-options '-splash:$APPDIR/splash.png'
           if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }
           Compress-Archive -Path "dist/JM CRM" -DestinationPath JM-CRM-Windows.zip
           "{0:N0} MB" -f ((Get-Item JM-CRM-Windows.zip).Length / 1MB)
+          # What the installed apps check to find a newer version.
+          $hash = (Get-FileHash JM-CRM-Windows.zip -Algorithm SHA256).Hash.ToLower()
+          @{ build = ${{ github.run_number }}; version = "1.0.${{ github.run_number }}"; sha256 = $hash; zip = 'JM-CRM-Windows.zip' } |
+            ConvertTo-Json | Set-Content -Encoding utf8 latest.json
 
       - name: Start the app and set it up
         shell: pwsh
@@ -349,6 +354,8 @@ jobs:
           JMCRM_HOME: ${{ runner.temp }}\JM CRM test
         run: |
           trap { Write-Output "::error title=Windows smoke test::$($_.Exception.Message)"; break }
+          # Updates come from a local copy of the release page in this test (see below).
+          $env:APP_UPDATE_URL = 'http://127.0.0.1:8765/latest.json'
           $app = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
           $base = 'http://127.0.0.1:4780'
           $up = $false
@@ -392,8 +399,56 @@ jobs:
           $second = Start-Process -FilePath "dist/JM CRM/JM CRM.exe" -PassThru
           if (-not $second.WaitForExit(60000)) { throw "A second copy kept running" }
 
-          Stop-Process -Id $app.Id -Force
-          Write-Output "The Windows app starts its database, serves the CRM, completes setup and writes to the sync folder"
+          # Updating from inside the app: serve a "newer" build (this one plus a marker file) the way
+          # the release page does, then install it and check the app came back from the new files.
+          $served = Join-Path $env:RUNNER_TEMP 'served'
+          New-Item -ItemType Directory -Force $served | Out-Null
+          $servedZip = Join-Path $served 'JM-CRM-Windows.zip'
+          Copy-Item JM-CRM-Windows.zip $servedZip
+          Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::Open($servedZip, 'Update')
+          $writer = New-Object System.IO.StreamWriter($archive.CreateEntry('JM CRM/update-marker.txt').Open())
+          $writer.Write('updated')
+          $writer.Close()
+          $archive.Dispose()
+          $hash = (Get-FileHash $servedZip -Algorithm SHA256).Hash.ToLower()
+          @{ build = ${{ github.run_number }} + 1; sha256 = $hash; zip = 'JM-CRM-Windows.zip' } |
+            ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $served 'latest.json')
+          $web = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1' `
+            -WorkingDirectory $served -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 2
+
+          Invoke-WebRequest -UseBasicParsing "$base/api/auth/csrf" -WebSession $session | Out-Null
+          $token = ($session.Cookies.GetCookies($base) | Where-Object Name -eq 'XSRF-TOKEN').Value
+          Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$base/api/auth/login" -WebSession $session `
+            -Headers @{ 'X-XSRF-TOKEN' = $token } -Body @{ email = 'ci@jane-michael.test'; password = 'ci-password-123' } | Out-Null
+          Invoke-WebRequest -UseBasicParsing "$base/api/auth/csrf" -WebSession $session | Out-Null
+          $token = ($session.Cookies.GetCookies($base) | Where-Object Name -eq 'XSRF-TOKEN').Value
+
+          $check = Invoke-RestMethod -Method Post -Uri "$base/api/desktop/update/check" -WebSession $session `
+            -Headers @{ 'X-XSRF-TOKEN' = $token }
+          if (-not ($check.supported -and $check.available)) { throw "The newer build wasn't offered: $($check | ConvertTo-Json -Compress)" }
+          $before = (Invoke-RestMethod "$base/api/health").started
+          Invoke-RestMethod -Method Post -Uri "$base/api/desktop/update" -WebSession $session `
+            -Headers @{ 'X-XSRF-TOKEN' = $token } | Out-Null
+          $restarted = $false
+          for ($i = 0; $i -lt 150; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              if ((Invoke-RestMethod "$base/api/health" -TimeoutSec 5).started -ne $before) { $restarted = $true; break }
+            } catch {}
+          }
+          $updateLog = Get-Content "$env:JMCRM_HOME\logs\update.log" -Raw -ErrorAction SilentlyContinue
+          if (-not $restarted) { throw "The app didn't come back after updating. Update log: $updateLog" }
+          if (-not (Test-Path 'dist/JM CRM/update-marker.txt')) { throw "The app folder wasn't replaced. Update log: $updateLog" }
+          if ($updateLog -notmatch 'Updated') { throw "The update log doesn't say it updated: $updateLog" }
+          if ((Test-Path 'dist/JM CRM.old') -or (Get-ChildItem dist -Filter '*update*' -Directory)) { throw "The old version or the download was left behind" }
+          $status = Invoke-RestMethod "$base/api/setup/status"
+          if (-not $status.locked) { throw "Expected the CRM to start locked after updating" }
+
+          Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+          Get-Process -Name 'JM CRM' -ErrorAction SilentlyContinue | Stop-Process -Force
+          Write-Output "The Windows app starts its database, serves the CRM, completes setup, writes to the sync folder and updates itself"
 
       - name: Show the app log
         if: failure()
@@ -424,6 +479,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete windows-latest --yes --cleanup-tag 2>$null
-          gh release create windows-latest JM-CRM-Windows.zip --target "${{ github.sha }}" `
+          gh release create windows-latest JM-CRM-Windows.zip latest.json --target "${{ github.sha }}" `
             --title "JM CRM for Windows" `
-            --notes "Download JM-CRM-Windows.zip, unzip it, and open JM CRM.exe. Setup steps: docs/WINDOWS.md."
+            --notes "Download JM-CRM-Windows.zip, unzip it, and open JM CRM.exe. Setup steps: docs/WINDOWS.md. Installed copies update themselves from here (latest.json)."

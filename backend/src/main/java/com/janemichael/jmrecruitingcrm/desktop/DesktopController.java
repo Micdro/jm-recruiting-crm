@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The "This computer" page (sync status, start with Windows, the firewall and quitting) and unlocking. */
+/** The "This computer" page (sync, updates, start with Windows, the firewall and quitting) and unlocking. */
 @RestController
 @RequestMapping("/api/desktop")
 @ConditionalOnProperty(name = "app.desktop.enabled", havingValue = "true")
@@ -42,7 +42,8 @@ public class DesktopController {
             boolean startsWithWindows,
             SyncService.Status sync,
             FolderSync.FolderStatus folder,
-            DirectSync.DirectStatus direct
+            DirectSync.DirectStatus direct,
+            AppUpdater.UpdateStatus update
     ) {
     }
 
@@ -82,12 +83,14 @@ public class DesktopController {
     private final FolderSync folderSync;
     private final DirectSync direct;
     private final SyncServer syncServer;
+    private final AppUpdater updater;
 
     public DesktopController(
             SyncService sync,
             FolderSync folderSync,
             DirectSync direct,
             SyncServer syncServer,
+            AppUpdater updater,
             SyncIdentity identity,
             CurrentUserService currentUser,
             JdbcTemplate jdbc,
@@ -98,6 +101,7 @@ public class DesktopController {
         this.folderSync = folderSync;
         this.direct = direct;
         this.syncServer = syncServer;
+        this.updater = updater;
         this.identity = identity;
         this.currentUser = currentUser;
         this.jdbc = jdbc;
@@ -119,7 +123,25 @@ public class DesktopController {
     public Status status() {
         SyncService.Status syncStatus = sync.status();
         return new Status(syncStatus.name(), syncStatus.nodeId(), DesktopOs.isWindows(),
-                DesktopOs.startsWithWindows(), syncStatus, folderSync.status(), direct.status());
+                DesktopOs.startsWithWindows(), syncStatus, folderSync.status(), direct.status(),
+                updater.status());
+    }
+
+    @GetMapping("/update")
+    public AppUpdater.UpdateStatus update() {
+        return updater.status();
+    }
+
+    /** Looks for a newer version now instead of waiting for the next check. */
+    @PostMapping("/update/check")
+    public AppUpdater.UpdateStatus checkForUpdate() {
+        return updater.check();
+    }
+
+    /** Downloads and installs the newest version, then restarts the CRM (it starts locked). */
+    @PostMapping("/update")
+    public AppUpdater.UpdateStatus installUpdate() {
+        return updater.start();
     }
 
     /** Syncs now instead of waiting a few seconds. */

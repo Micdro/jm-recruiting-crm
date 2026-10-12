@@ -228,7 +228,7 @@ class FolderSyncIntegrationTest {
 
     private void writeAbout(int node, String instance, long lastBatch) throws IOException {
         folder.writeAbout(new About(SyncFolder.PROTOCOL, node, instance, "Computer " + node, lastBatch,
-                System.currentTimeMillis(), 0, List.of()));
+                System.currentTimeMillis(), 0, List.of(), null));
     }
 
     private static Batch batch(int node, long seq, SyncChange... changes) {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, Empty, ErrorNote, Loading, PageHeader } from '../components/Bits.jsx';
 import FolderField from '../components/FolderField.jsx';
+import { updateMessage, useAppUpdate } from '../appUpdate.js';
 import { timeAgo } from '../format.js';
 import { useAuth, useInterval, useLoader, useTitle, useToast } from '../hooks.js';
 import { connectedDirectly, inStep } from '../syncState.js';
@@ -50,6 +51,8 @@ export default function ThisComputerPage() {
 
   const peers = data.sync.peers;
   const isAdmin = user?.role === 'ADMIN';
+  // The newest version any computer here knows of; computers on an older one should update.
+  const newest = Math.max(data.update?.build ?? 0, data.update?.latestBuild ?? 0, ...peers.map((peer) => peer.build ?? 0));
 
   return (
     <>
@@ -149,6 +152,11 @@ export default function ThisComputerPage() {
                   <div>
                     <span className="computer-name">{peer.name}</span>{' '}
                     {running && <span className="muted">{running}</span>}
+                    {peer.build && (
+                      <span className={peer.build < newest ? 'computer-version computer-state-problem' : 'computer-version muted'}>
+                        {peer.build < newest ? `Version 1.0.${peer.build}. Update it on that computer.` : `Version 1.0.${peer.build}`}
+                      </span>
+                    )}
                     <p className={`computer-state ${fresh ? 'computer-state-ok' : problem ? 'computer-state-problem' : ''}`}>
                       {direct
                         ? 'Connected directly. Up to date with its changes.'
@@ -186,6 +194,8 @@ export default function ThisComputerPage() {
         <div className="panel-head">
           <h2 id="settings-heading">On this computer</h2>
         </div>
+
+        <VersionRow />
 
         {data.windows && (
           <div className="setting-row">
@@ -323,5 +333,32 @@ function DirectDetails({ direct }) {
         <span className="computer-state muted">On this network: {direct.homeAddresses.join(', ')}</span>
       )}
     </>
+  );
+}
+
+/** This computer's version, and installing a newer one. */
+function VersionRow() {
+  const update = useAppUpdate();
+  const { data } = update;
+  if (!data?.supported) return null;
+
+  return (
+    <div className="setting-row">
+      <p>
+        <strong>Version {data.version}</strong>
+        {updateMessage(update) || 'Up to date. The CRM checks for a new version every few hours.'}
+        {update.problem && <span className="computer-state computer-state-problem">{update.problem}</span>}
+      </p>
+      {!update.busy &&
+        (data.available ? (
+          <button type="button" className="btn btn-sm btn-primary" onClick={update.install}>
+            Update now
+          </button>
+        ) : (
+          <button type="button" className="btn btn-sm" disabled={update.checking} onClick={update.check}>
+            {update.checking ? 'Checking…' : 'Check for updates'}
+          </button>
+        ))}
+    </div>
   );
 }

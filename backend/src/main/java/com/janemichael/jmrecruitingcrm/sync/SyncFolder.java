@@ -64,9 +64,10 @@ final class SyncFolder {
      * @param cursor    how far into its own records the batches up to {@code lastBatch} go, so a
      *                  computer that has read them can connect directly and ask only for what's newer
      * @param addresses where other computers can connect to it directly, if it accepts connections
+     * @param build     the app version it runs (null for a development copy)
      */
     record About(int protocol, int node, String instance, String name, long lastBatch, long updatedAt,
-                 long cursor, List<String> addresses) {
+                 long cursor, List<String> addresses, Integer build) {
     }
 
     /** A batch of changes, or (as a snapshot) every row, replacing all batches up to {@code seq}. */

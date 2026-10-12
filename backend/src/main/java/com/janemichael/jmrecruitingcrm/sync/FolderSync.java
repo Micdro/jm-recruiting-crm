@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.sync;
 
+import com.janemichael.jmrecruitingcrm.common.AppVersion;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.sync.SyncCipher.UnreadableException;
@@ -333,7 +334,7 @@ public class FolderSync {
         if (!fresh.isEmpty() || !addresses.equals(lastAddresses)
                 || Duration.between(lastAbout, Instant.now()).compareTo(HEARTBEAT) >= 0) {
             folder.writeAbout(new About(SyncFolder.PROTOCOL, self, instance, (String) state.get("name"), seq,
-                    System.currentTimeMillis(), changes.cursor(), addresses));
+                    System.currentTimeMillis(), changes.cursor(), addresses, AppVersion.build()));
             lastAbout = Instant.now();
             lastAddresses = addresses;
         }
@@ -397,9 +398,9 @@ public class FolderSync {
                         about.instance(), node);
             }
             List<String> addresses = about.addresses() == null ? List.of() : about.addresses();
-            jdbc.update("UPDATE sync_peer_state SET last_seen = ?, direct_addresses = ? WHERE node_id = ?",
+            jdbc.update("UPDATE sync_peer_state SET last_seen = ?, direct_addresses = ?, app_build = ? WHERE node_id = ?",
                     Timestamp.from(Instant.ofEpochMilli(about.updatedAt())),
-                    addresses.isEmpty() ? null : String.join(",", addresses), node);
+                    addresses.isEmpty() ? null : String.join(",", addresses), about.build(), node);
 
             List<Long> batches = folder.batches(node);
             long first = batches.isEmpty() ? Long.MAX_VALUE : batches.get(0);

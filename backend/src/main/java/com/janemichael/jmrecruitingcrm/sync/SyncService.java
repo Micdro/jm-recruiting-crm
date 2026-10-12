@@ -51,7 +51,9 @@ public class SyncService {
             Long secondsSinceSeen,
             /** Since the last direct connection with it worked, or null if none has. */
             Long secondsSinceDirect,
-            String directAddress
+            String directAddress,
+            /** The app version it last said it runs, or null if it hasn't. */
+            Integer build
     ) {
     }
 
@@ -240,7 +242,7 @@ public class SyncService {
         }
         Self self = identity.self().orElseThrow();
         List<PeerStatus> peers = jdbc.query("""
-                SELECT n.id, n.name, s.last_success, s.last_attempt, s.last_error, s.direct_address,
+                SELECT n.id, n.name, s.last_success, s.last_attempt, s.last_error, s.direct_address, s.app_build,
                        extract(epoch FROM now() - s.last_success)::bigint AS seconds_since_success,
                        greatest(0, extract(epoch FROM now() - s.last_seen))::bigint AS seconds_since_seen,
                        extract(epoch FROM now() - s.direct_last_success)::bigint AS seconds_since_direct
@@ -256,7 +258,8 @@ public class SyncService {
                 nullableLong(resultSet.getObject("seconds_since_success")),
                 nullableLong(resultSet.getObject("seconds_since_seen")),
                 nullableLong(resultSet.getObject("seconds_since_direct")),
-                resultSet.getString("direct_address")),
+                resultSet.getString("direct_address"),
+                resultSet.getObject("app_build") == null ? null : resultSet.getInt("app_build")),
                 self.nodeId());
         Integer waiting = jdbc.queryForObject("SELECT count(*) FROM sync_pending", Integer.class);
         return new Status(true, self.nodeId(), self.name(), peers, waiting == null ? 0 : waiting);

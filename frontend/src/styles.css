@@ -2180,3 +2180,33 @@ a.cell-title:hover {
     border: 0;
   }
 }
+
+/* App updates --------------------------------------------------------------------- */
+
+.update-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 14px;
+}
+
+.update-banner p {
+  margin: 0;
+}
+
+.update-problem {
+  display: block;
+  color: var(--red);
+}
+
+.computer-version {
+  display: block;
+  font-size: 13px;
+}

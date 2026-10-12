@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth, useDesktop } from '../hooks.js';
 import SyncBadge from './SyncBadge.jsx';
+import UpdateBanner from './UpdateBanner.jsx';
 
 const NAV = [
   { to: '/', label: 'Today', end: true },
@@ -77,6 +78,7 @@ export default function Layout() {
       </header>
 
       <main id="main" className="main" tabIndex={-1}>
+        {desktop && <UpdateBanner />}
         <Outlet />
       </main>
     </div>
