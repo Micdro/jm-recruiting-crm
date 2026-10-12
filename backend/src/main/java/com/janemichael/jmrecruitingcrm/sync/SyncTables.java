@@ -14,6 +14,7 @@ public final class SyncTables {
             "company",
             "contact",
             "candidate",
+            "candidate_file",
             "job_search",
             "pipeline_entry",
             "placement",

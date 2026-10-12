@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, Details, DueTag, Empty, ErrorNote, ExternalLink, Loading, Pill } from '../components/Bits.jsx';
+import CandidateFiles from '../components/CandidateFiles.jsx';
 import { SelectField } from '../components/Fields.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
 import Modal from '../components/Modal.jsx';
@@ -108,6 +109,8 @@ export default function CandidateDetailPage() {
             )}
           </section>
 
+          <CandidateFiles candidateId={record.id} />
+
           <CandidateSearches candidate={record} entries={pipeline.data} onChanged={() => refresh()} />
 
           <section className="panel" aria-labelledby="candidate-log">
@@ -130,7 +133,7 @@ export default function CandidateDetailPage() {
                 { label: 'Email', value: record.email && <a href={`mailto:${record.email}`}>{record.email}</a> },
                 { label: 'Phone', value: record.phone && <a href={`tel:${record.phone}`}>{record.phone}</a> },
                 { label: 'LinkedIn', value: record.linkedinUrl && <ExternalLink href={href(record.linkedinUrl)}>Profile</ExternalLink> },
-                { label: 'Resume', value: record.resumeUrl && <ExternalLink href={href(record.resumeUrl)}>Open resume</ExternalLink> },
+                { label: 'Resume link', value: record.resumeUrl && <ExternalLink href={href(record.resumeUrl)}>Open resume</ExternalLink> },
                 { label: 'Location', value: record.location },
                 { label: 'Track', value: TRACK[record.track] },
                 { label: 'Roles', value: (record.roleAreas ?? []).map((area) => ROLE_AREA[area]).join(', ') },

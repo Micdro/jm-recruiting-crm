@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -128,6 +129,7 @@ public class FolderSync {
             problem = null;
             publish(folder);
             readOthers(folder);
+            syncFiles(folder);
         } catch (IOException exception) {
             log.warn("Could not sync through {}", path, exception);
             problem = "Couldn't use the sync folder: " + exception.getMessage();
@@ -354,6 +356,56 @@ public class FolderSync {
 
     private static String fingerprint(SyncChange change) {
         return change.version() + "/" + change.origin() + "/" + change.deleted();
+    }
+
+    // Files (resumes) -----------------------------------------------------------------
+
+    /**
+     * Candidates' files travel as files of their own rather than inside the batches, so a large
+     * resume isn't copied into every snapshot. This computer fetches the files its records need,
+     * shares the ones the folder lacks, and removes files no record uses any more, here and in the
+     * folder. The contents stay encrypted with the CRM key throughout, so this works while locked.
+     */
+    private void syncFiles(SyncFolder folder) throws IOException {
+        Set<String> needed = new HashSet<>(jdbc.queryForList("SELECT DISTINCT blob_key FROM candidate_file", String.class));
+        Set<String> here = new HashSet<>(jdbc.queryForList("SELECT blob_key FROM file_blob", String.class));
+        Set<String> shared = folder.fileKeys();
+
+        int fetched = 0;
+        for (String key : needed) {
+            if (!here.contains(key) && shared.contains(key)) {
+                byte[] content = folder.readFile(key);
+                if (content != null) {
+                    jdbc.update("INSERT INTO file_blob (blob_key, content) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                            key, content);
+                    here.add(key);
+                    fetched++;
+                }
+            }
+        }
+        if (fetched > 0) {
+            log.info("Fetched {} candidate files from the sync folder", fetched);
+        }
+
+        for (String key : here) {
+            if (needed.contains(key) && !shared.contains(key)) {
+                List<byte[]> content = jdbc.query("SELECT content FROM file_blob WHERE blob_key = ?",
+                        (resultSet, row) -> resultSet.getBytes(1), key);
+                if (!content.isEmpty()) {
+                    folder.writeFile(key, content.getFirst());
+                }
+            }
+        }
+
+        List<String> unused = jdbc.queryForList("""
+                SELECT blob_key FROM file_blob b
+                WHERE NOT EXISTS (SELECT 1 FROM candidate_file f WHERE f.blob_key = b.blob_key)
+                  AND b.created_at < now() - interval '1 minute'
+                """, String.class);
+        for (String key : unused) {
+            folder.deleteFile(key);
+            jdbc.update("DELETE FROM file_blob WHERE blob_key = ?", key);
+        }
     }
 
     // Reading -----------------------------------------------------------------------

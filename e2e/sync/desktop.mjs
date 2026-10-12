@@ -59,13 +59,20 @@ export function log(pc) {
   return text;
 }
 
-export async function request(pc, method, path, body, { form = false } = {}) {
+/**
+ * One API call with the computer's cookies. {@code raw} sends bytes as the body (a file upload);
+ * {@code binary} returns the answer as bytes instead of JSON.
+ */
+export async function request(pc, method, path, body, { form = false, raw = null, binary = false } = {}) {
   const headers = { Accept: 'application/json' };
   const cookie = [...pc.cookies].map(([key, value]) => `${key}=${value}`).join('; ');
   if (cookie) headers.Cookie = cookie;
   if (pc.cookies.has('XSRF-TOKEN')) headers['X-XSRF-TOKEN'] = pc.cookies.get('XSRF-TOKEN');
   let payload;
-  if (body !== undefined) {
+  if (raw) {
+    headers['Content-Type'] = 'application/octet-stream';
+    payload = raw;
+  } else if (body !== undefined) {
     if (form) {
       headers['Content-Type'] = 'application/x-www-form-urlencoded';
       payload = new URLSearchParams(body).toString();
@@ -79,6 +86,9 @@ export async function request(pc, method, path, body, { form = false } = {}) {
     const [pair] = setCookie.split(';');
     const index = pair.indexOf('=');
     pc.cookies.set(pair.slice(0, index), pair.slice(index + 1));
+  }
+  if (binary && response.ok) {
+    return Buffer.from(await response.arrayBuffer());
   }
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;

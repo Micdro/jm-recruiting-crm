@@ -47,7 +47,8 @@ const computers = [first, second, third];
 const shared = mkdtempSync(join(tmpdir(), 'jmcrm-drive-'));
 const syncFolder = join(shared, 'JM CRM Sync');
 const OTHER_KEY = 'ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=';
-const SECRETS = ['Dana Reyes', 'dana@acme.test', 'Secret notes', 'Acme AI'];
+const SECRETS = ['Dana Reyes', 'dana@acme.test', 'Secret notes', 'Acme AI', 'Priya Natarajan', 'Staff ML Platform'];
+const RESUME = Buffer.from('%PDF-1.4\n% Priya Natarajan, Staff ML Platform Engineer\n');
 
 // Small numbers, so a snapshot replaces old sync files within this test.
 const start = (pc) => startComputer(pc, jar, ['-Dapp.sync.interval-ms=1000', '-Dapp.sync.folder.compact-after=4']);
@@ -128,6 +129,19 @@ async function main() {
   await eventually('a touch logged on the second computer reaches the first', async () =>
     (await request(first, 'GET', `/api/contacts/${contact.id}`)).touchCount === 1);
 
+  // A resume added on one computer opens on the other. It travels as its own encrypted file.
+  const priya = await request(first, 'POST', '/api/candidates', { name: 'Priya Natarajan' });
+  const resume = await request(first, 'POST',
+    `/api/candidates/${priya.id}/files?name=${encodeURIComponent('Priya Resume.pdf')}`, undefined, { raw: RESUME });
+  await eventually('a resume added on the first computer arrives on the second', async () => {
+    const files = await request(second, 'GET', `/api/candidates/${priya.id}/files`).catch(() => []);
+    return files.some((file) => file.id === resume.id && file.available);
+  });
+  const opened = await request(second, 'GET', `/api/candidates/${priya.id}/files/${resume.id}`, undefined, { binary: true });
+  check(opened.equals(RESUME), 'the second computer opens the same resume');
+  check(readdirSync(join(syncFolder, 'files')).filter((file) => file.endsWith('.jmfile')).length === 1,
+    'the resume is one file in the sync folder');
+
   await request(second, 'DELETE', `/api/companies/${fromSecond.id}`);
   await eventually('a delete on the second computer reaches the first', async () =>
     !(await companyNames(first)).includes('Zest Risk'));
@@ -194,6 +208,10 @@ async function main() {
   const thirdJoined = await request(third, 'POST', '/api/setup/join', { syncFolder, key, computerName: 'Third PC' });
   check(thirdJoined.nodeId === 3 && thirdJoined.computers === 2, 'a third computer joins as computer 3');
   await signIn(third);
+  await eventually('a computer that joins later gets the resume too', async () => {
+    const files = await request(third, 'GET', `/api/candidates/${priya.id}/files`).catch(() => []);
+    return files.length === 1 && files[0].available;
+  });
   await eventually('the third computer has everything, from the snapshot and the newer files', async () => {
     const names = await companyNames(third);
     return ['Acme AI', 'Made While Off', 'Added While Locked', 'Batch Co 6'].every((name) => names.includes(name))

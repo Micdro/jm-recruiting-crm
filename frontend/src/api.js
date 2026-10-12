@@ -142,6 +142,17 @@ export const api = {
     ...crud('/api/candidates'),
     pipeline: (id) => get(`/api/candidates/${id}/pipeline`),
     logActivity: (id, body) => post(`/api/candidates/${id}/activities`, body),
+    files: (id) => get(`/api/candidates/${id}/files`),
+    /** Sends the file as is, with its name; the server encrypts it before storing it. */
+    addFile: (id, file) =>
+      client
+        .post(`/api/candidates/${id}/files`, file, {
+          params: { name: file.name },
+          headers: { 'Content-Type': 'application/octet-stream' },
+        })
+        .then((r) => r.data),
+    removeFile: (id, fileId) => del(`/api/candidates/${id}/files/${fileId}`),
+    fileUrl: (id, fileId, download = false) => `/api/candidates/${id}/files/${fileId}${download ? '?download=true' : ''}`,
   },
   pipeline: {
     add: (body) => post('/api/pipeline', body),

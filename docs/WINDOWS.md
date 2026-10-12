@@ -99,7 +99,9 @@ app closes or the computer restarts. While it's locked, nobody can read the data
 database files in hand. Sync keeps running, so changes still arrive.
 
 The files in the sync folder are encrypted too. Google, or anyone else who gets into the Drive
-account, can't read them.
+account, can't read them. That includes resumes added to candidates: each one is encrypted before
+it's saved and reaches the other computers as its own file in the sync folder's `files` folder,
+usually within a minute or two.
 
 - **Forgot your password?** Ask an admin to set a new one on the Team page. Or, on the sign-in
   page, click **Forgot your password?** and use the CRM key from your password manager.

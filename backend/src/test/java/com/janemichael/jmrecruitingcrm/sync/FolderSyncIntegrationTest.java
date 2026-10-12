@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.sync;
 
 import com.janemichael.jmrecruitingcrm.TestSettings;
+import com.janemichael.jmrecruitingcrm.candidate.CandidateFileService;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.sync.SyncFolder.About;
@@ -105,6 +106,58 @@ class FolderSyncIntegrationTest {
         folderSync.syncNow();
         assertThat(folder.batches(1)).isEqualTo(batches);
         assertThat(folderSync.status().problem()).isNull();
+    }
+
+    @Test
+    void candidateFilesTravelAsTheirOwnEncryptedFilesAndGoWithTheirRecord() throws Exception {
+        folderSync.useFolder(shared.toString());
+        long candidate = jdbc.queryForObject(
+                "INSERT INTO candidate (name, status) VALUES ('File Test Candidate', 'ACTIVE') RETURNING id", Long.class);
+
+        // A resume added on this computer is shared in the folder, still encrypted.
+        String mine = "0123456789abcdef0123456789abcdef";
+        byte[] myResume = encryptor.encryptBytes("%PDF Mine Resume".getBytes(StandardCharsets.UTF_8),
+                CandidateFileService.context(mine));
+        addFile(candidate, mine, myResume);
+        folderSync.syncNow();
+        assertThat(folder.fileKeys()).contains(mine);
+        assertThat(folder.readFile(mine)).isEqualTo(myResume);
+        assertThat(filesContaining("Mine Resume")).isEmpty();
+
+        // One added on another computer: its record can arrive before the file does.
+        String theirs = "fedcba9876543210fedcba9876543210";
+        byte[] theirResume = encryptor.encryptBytes("%PDF Their Resume".getBytes(StandardCharsets.UTF_8),
+                CandidateFileService.context(theirs));
+        jdbc.update("""
+                INSERT INTO candidate_file (candidate_id, file_name, content_type, size_bytes, blob_key)
+                VALUES (?, 'theirs.pdf', 'application/pdf', 17, ?)
+                """, candidate, theirs);
+        folderSync.syncNow();
+        assertThat(storedFile(theirs)).as("waits for the file").isNull();
+        folder.writeFile(theirs, theirResume);
+        folderSync.syncNow();
+        assertThat(storedFile(theirs)).isEqualTo(theirResume);
+
+        // A deleted record takes its file with it, here and in the folder.
+        jdbc.update("DELETE FROM candidate_file WHERE blob_key = ?", mine);
+        jdbc.update("UPDATE file_blob SET created_at = now() - interval '2 minutes' WHERE blob_key = ?", mine);
+        folderSync.syncNow();
+        assertThat(folder.fileKeys()).doesNotContain(mine).contains(theirs);
+        assertThat(storedFile(mine)).isNull();
+    }
+
+    private void addFile(long candidate, String key, byte[] content) {
+        jdbc.update("INSERT INTO file_blob (blob_key, content) VALUES (?, ?)", key, content);
+        jdbc.update("""
+                INSERT INTO candidate_file (candidate_id, file_name, content_type, size_bytes, blob_key)
+                VALUES (?, 'mine.pdf', 'application/pdf', 16, ?)
+                """, candidate, key);
+    }
+
+    private byte[] storedFile(String key) {
+        List<byte[]> rows = jdbc.query("SELECT content FROM file_blob WHERE blob_key = ?",
+                (resultSet, row) -> resultSet.getBytes(1), key);
+        return rows.isEmpty() ? null : rows.getFirst();
     }
 
     @Test

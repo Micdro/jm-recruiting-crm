@@ -46,6 +46,23 @@ class FieldEncryptorTest {
     }
 
     @Test
+    void filesAreEncryptedAndTiedToTheirKey() {
+        byte[] resume = "%PDF-1.7 Dana Reyes, Staff ML Engineer".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        byte[] stored = encryptor.encryptBytes(resume, "candidate file a1");
+
+        assertThat(new String(stored, java.nio.charset.StandardCharsets.ISO_8859_1)).startsWith("JMB1").doesNotContain("Dana");
+        assertThat(encryptor.decryptBytes(stored, "candidate file a1")).isEqualTo(resume);
+        // Stored under another file's key, it can't be opened.
+        assertThatThrownBy(() -> encryptor.decryptBytes(stored, "candidate file b2")).isInstanceOf(IllegalStateException.class);
+        byte[] tampered = stored.clone();
+        tampered[tampered.length - 1] ^= 1;
+        assertThatThrownBy(() -> encryptor.decryptBytes(tampered, "candidate file a1")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new FieldEncryptor(OTHER_KEY).decryptBytes(stored, "candidate file a1"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void anotherKeyCannotReadTheData() {
         String stored = encryptor.encrypt("secret");
 

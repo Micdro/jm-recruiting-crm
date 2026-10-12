@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
@@ -523,6 +524,61 @@ class ApiIntegrationTest {
 
         mockMvc.perform(signedIn(get("/api/export").param("include", "passwords")))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void candidateFilesAreStoredEncryptedAndServedBack() throws Exception {
+        long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Priya Natarajan")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        byte[] resume = "%PDF-1.7\nPriya Natarajan, Staff ML Platform Engineer".getBytes(StandardCharsets.UTF_8);
+        String files = "/api/candidates/" + candidateId + "/files";
+
+        long fileId = id(mockMvc.perform(signedIn(post(files)).param("name", "C:\\Users\\me\\Priya Resume.pdf")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content(resume))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.fileName").value("Priya Resume.pdf"))
+                .andExpect(jsonPath("$.contentType").value("application/pdf"))
+                .andExpect(jsonPath("$.sizeBytes").value(resume.length))
+                .andExpect(jsonPath("$.available").value(true))
+                .andReturn());
+        entityManager.flush();
+
+        // Nothing readable in the database: not the name, not the contents.
+        Map<String, Object> row = jdbc.queryForMap("SELECT file_name, blob_key FROM candidate_file WHERE id = ?", fileId);
+        assertThat((String) row.get("file_name")).startsWith("enc:v1:").doesNotContain("Priya");
+        byte[] stored = jdbc.queryForObject("SELECT content FROM file_blob WHERE blob_key = ?", byte[].class, row.get("blob_key"));
+        assertThat(new String(stored, StandardCharsets.ISO_8859_1)).startsWith("JMB1").doesNotContain("Priya");
+
+        mockMvc.perform(signedIn(get(files)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].fileName").value("Priya Resume.pdf"))
+                .andExpect(jsonPath("$[0].uploadedByName").value("Integration Admin"));
+        mockMvc.perform(signedIn(get(files + "/" + fileId)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("Content-Disposition", containsString("inline")))
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(result -> assertThat(result.getResponse().getContentAsByteArray()).isEqualTo(resume));
+        mockMvc.perform(signedIn(get(files + "/" + fileId)).param("download", "true"))
+                .andExpect(header().string("Content-Disposition", containsString("attachment")));
+
+        mockMvc.perform(signedIn(post(files)).param("name", "setup.exe")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content(new byte[] {'M', 'Z'}))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(signedIn(post(files)).param("name", "fake.pdf")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content("hello".getBytes(StandardCharsets.UTF_8)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("That file isn't a real .pdf file"));
+        mockMvc.perform(signedIn(post(files)).param("name", "huge.txt")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content(new byte[10 * 1024 * 1024 + 1]))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("Files can be up to 10 MB"));
+
+        mockMvc.perform(signedIn(delete(files + "/" + fileId))).andExpect(status().isNoContent());
+        mockMvc.perform(signedIn(get(files + "/" + fileId))).andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM file_blob WHERE blob_key = ?", Long.class, row.get("blob_key")))
+                .isZero();
     }
 
     // Recruiting flow -----------------------------------------------------------

@@ -18,7 +18,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -36,6 +38,8 @@ import java.util.zip.GZIPOutputStream;
  *   00000000000000000007.jmcrm   a batch of changes, numbered from 1
  *   snapshot-00000000000000000006.jmcrm   everything, replacing batches 1 to 6
  * computer-2/ ...
+ * files/
+ *   0f3c...9a.jmfile          a candidate's file (a resume, say), already encrypted with the CRM key
  * </pre>
  *
  * Each computer writes only in its own folder, so two computers never edit the same file. Files
@@ -52,6 +56,9 @@ final class SyncFolder {
     private static final Pattern COMPUTER = Pattern.compile("computer-(\\d{1,9})");
     private static final Pattern BATCH = Pattern.compile("(\\d{20})\\.jmcrm");
     private static final Pattern SNAPSHOT = Pattern.compile("snapshot-(\\d{20})\\.jmcrm");
+    static final String FILES = "files";
+    private static final Pattern FILE = Pattern.compile("([0-9a-f]{32})\\.jmfile");
+    private static final Pattern FILE_KEY = Pattern.compile("[0-9a-f]{32}");
 
     /** Written once by the first computer. Only computers with the same key can open it. */
     record Check(int protocol, String app) {
@@ -201,6 +208,61 @@ final class SyncFolder {
         }
     }
 
+    // Files ---------------------------------------------------------------------------
+    // Shared by all computers: any computer that has a file may write it, and the contents are the
+    // same wherever they come from.
+
+    /** The keys of the files in the folder. */
+    Set<String> fileKeys() throws IOException {
+        Set<String> keys = new HashSet<>();
+        Path dir = root.resolve(FILES);
+        if (!Files.isDirectory(dir)) {
+            return keys;
+        }
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(dir)) {
+            for (Path entry : entries) {
+                Matcher matcher = FILE.matcher(entry.getFileName().toString());
+                if (matcher.matches()) {
+                    keys.add(matcher.group(1));
+                }
+            }
+        }
+        return keys;
+    }
+
+    void writeFile(String key, byte[] content) throws IOException {
+        Files.createDirectories(root.resolve(FILES));
+        writeSealed(filePath(key), fileName(key), content);
+    }
+
+    /** The file's contents, or null if it isn't here or hasn't fully arrived yet. */
+    byte[] readFile(String key) throws IOException {
+        Path file = filePath(key);
+        if (!Files.exists(file)) {
+            return null;
+        }
+        try {
+            return cipher.open(fileName(key), Files.readAllBytes(file));
+        } catch (NoSuchFileException | UnreadableException notReadyYet) {
+            return null;
+        }
+    }
+
+    void deleteFile(String key) throws IOException {
+        Files.deleteIfExists(filePath(key));
+    }
+
+    private Path filePath(String key) {
+        if (key == null || !FILE_KEY.matcher(key).matches()) {
+            throw new IllegalArgumentException("Not a file key: " + key);
+        }
+        return root.resolve(FILES).resolve(key + ".jmfile");
+    }
+
+    private static String fileName(String key) {
+        return FILES + "/" + key + ".jmfile";
+    }
+
     private List<Long> numbered(int node, Pattern pattern) throws IOException {
         List<Long> numbers = new ArrayList<>();
         Path dir = computerDir(node);
@@ -233,8 +295,12 @@ final class SyncFolder {
         try (OutputStream gzip = new GZIPOutputStream(packed)) {
             json.writeValue(gzip, value);
         }
-        byte[] sealed = cipher.seal(name, packed.toByteArray());
+        writeSealed(target, name, packed.toByteArray());
+    }
 
+    /** Seals and writes under a temporary name, then renames, so a half-written file is never read. */
+    private void writeSealed(Path target, String name, byte[] content) throws IOException {
+        byte[] sealed = cipher.seal(name, content);
         Path temporary = target.resolveSibling(".writing-" + UUID.randomUUID() + ".tmp");
         Files.write(temporary, sealed);
         try {

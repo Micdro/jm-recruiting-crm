@@ -35,6 +35,8 @@ public class FieldEncryptor implements InitializingBean {
     static final String PREFIX = "enc:v1:";
     private static final int IV_BYTES = 12;
     private static final int TAG_BITS = 128;
+    /** Starts every encrypted file, so a stored file is recognized as one. */
+    private static final byte[] BYTES_MAGIC = "JMB1".getBytes(StandardCharsets.US_ASCII);
     private static final int KEY_BYTES = 32;
 
     private static volatile FieldEncryptor current;
@@ -202,6 +204,42 @@ public class FieldEncryptor implements InitializingBean {
             return PREFIX + Base64.getEncoder().encodeToString(stored);
         } catch (GeneralSecurityException exception) {
             throw new IllegalStateException("Could not encrypt a field", exception);
+        }
+    }
+
+    /**
+     * Encrypts a file's contents with the CRM key, tied to {@code context} (such as the file's key)
+     * so the stored bytes can't be passed off as another file's.
+     */
+    public byte[] encryptBytes(byte[] plaintext, String context) {
+        try {
+            byte[] iv = new byte[IV_BYTES];
+            random.nextBytes(iv);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, keys().encryption(), new GCMParameterSpec(TAG_BITS, iv));
+            cipher.updateAAD(context.getBytes(StandardCharsets.UTF_8));
+            byte[] ciphertext = cipher.doFinal(plaintext);
+            return ByteBuffer.allocate(BYTES_MAGIC.length + IV_BYTES + ciphertext.length)
+                    .put(BYTES_MAGIC).put(iv).put(ciphertext).array();
+        } catch (GeneralSecurityException exception) {
+            throw new IllegalStateException("Could not encrypt a file", exception);
+        }
+    }
+
+    public byte[] decryptBytes(byte[] stored, String context) {
+        if (stored == null || stored.length < BYTES_MAGIC.length + IV_BYTES
+                || !Arrays.equals(Arrays.copyOf(stored, BYTES_MAGIC.length), BYTES_MAGIC)) {
+            throw new IllegalStateException("Not an encrypted file");
+        }
+        try {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, keys().encryption(),
+                    new GCMParameterSpec(TAG_BITS, stored, BYTES_MAGIC.length, IV_BYTES));
+            cipher.updateAAD(context.getBytes(StandardCharsets.UTF_8));
+            int start = BYTES_MAGIC.length + IV_BYTES;
+            return cipher.doFinal(stored, start, stored.length - start);
+        } catch (GeneralSecurityException exception) {
+            throw new IllegalStateException("Could not decrypt a file. It may be damaged.", exception);
         }
     }
 
