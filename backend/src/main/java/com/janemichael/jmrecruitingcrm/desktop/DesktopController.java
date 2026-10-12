@@ -29,7 +29,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The "This computer" page (sync, updates, start with Windows, the firewall and quitting) and unlocking. */
+/**
+ * The "This computer" page (sync, updates, start with Windows, the morning reminder, the firewall and
+ * quitting) and unlocking.
+ */
 @RestController
 @RequestMapping("/api/desktop")
 @ConditionalOnProperty(name = "app.desktop.enabled", havingValue = "true")
@@ -43,8 +46,12 @@ public class DesktopController {
             SyncService.Status sync,
             FolderSync.FolderStatus folder,
             DirectSync.DirectStatus direct,
-            AppUpdater.UpdateStatus update
+            AppUpdater.UpdateStatus update,
+            MorningReminder.ReminderStatus reminder
     ) {
+    }
+
+    public record ReminderRequest(boolean enabled, String time) {
     }
 
     public record DirectRequest(boolean enabled) {
@@ -84,6 +91,7 @@ public class DesktopController {
     private final DirectSync direct;
     private final SyncServer syncServer;
     private final AppUpdater updater;
+    private final MorningReminder reminder;
 
     public DesktopController(
             SyncService sync,
@@ -91,6 +99,7 @@ public class DesktopController {
             DirectSync direct,
             SyncServer syncServer,
             AppUpdater updater,
+            MorningReminder reminder,
             SyncIdentity identity,
             CurrentUserService currentUser,
             JdbcTemplate jdbc,
@@ -102,6 +111,7 @@ public class DesktopController {
         this.direct = direct;
         this.syncServer = syncServer;
         this.updater = updater;
+        this.reminder = reminder;
         this.identity = identity;
         this.currentUser = currentUser;
         this.jdbc = jdbc;
@@ -124,7 +134,7 @@ public class DesktopController {
         SyncService.Status syncStatus = sync.status();
         return new Status(syncStatus.name(), syncStatus.nodeId(), DesktopOs.isWindows(),
                 DesktopOs.startsWithWindows(), syncStatus, folderSync.status(), direct.status(),
-                updater.status());
+                updater.status(), reminder.status());
     }
 
     @GetMapping("/update")
@@ -178,6 +188,19 @@ public class DesktopController {
     public Status setStartup(@RequestBody StartupRequest request) {
         DesktopOs.setStartsWithWindows(request.enabled());
         return status();
+    }
+
+    /** Turns the morning reminder on or off and sets its time ("08:30"). */
+    @PutMapping("/reminder")
+    public Status setReminder(@RequestBody ReminderRequest request) {
+        reminder.update(request.enabled(), request.time());
+        return status();
+    }
+
+    /** Shows the signed-in person's reminder now, to see what it looks like. */
+    @PostMapping("/reminder/show")
+    public MorningReminder.Shown showReminder() {
+        return reminder.showNow(currentUser.get().getEmail());
     }
 
     @GetMapping("/firewall")

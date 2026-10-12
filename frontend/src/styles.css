@@ -1977,6 +1977,41 @@ a.cell-title:hover {
   overflow-wrap: anywhere;
 }
 
+.setting-text {
+  display: grid;
+  gap: 6px;
+}
+
+.setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.reminder-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.reminder-time input {
+  padding: 3px 6px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  font: inherit;
+  color: var(--ink);
+}
+
+.setting-row .reminder-preview {
+  padding: 8px 10px;
+  border-left: 2px solid var(--green);
+  background: var(--paper);
+  color: var(--ink);
+}
+
 .setting-row .computer-state {
   display: block;
 }

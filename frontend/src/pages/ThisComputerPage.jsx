@@ -216,6 +216,20 @@ export default function ThisComputerPage() {
           </div>
         )}
 
+        {data.reminder?.supported && (
+          <ReminderRow
+            reminder={data.reminder}
+            busy={busy === 'reminder'}
+            onSave={(enabled, time, done) => act('reminder', () => api.desktop.setReminder(enabled, time), done)}
+            onShow={() =>
+              act('reminder', async () => {
+                const result = await api.desktop.showReminder();
+                if (!result.shown) throw new Error('Windows didn’t show the notification. Restart the CRM and try again.');
+              }, 'Reminder sent. It shows by the clock.')
+            }
+          />
+        )}
+
         <div className="setting-row">
           <p>
             <strong>Close the CRM</strong>
@@ -255,6 +269,67 @@ export default function ThisComputerPage() {
         </ol>
       </section>
     </>
+  );
+}
+
+/** The weekday-morning Windows notification with what's due today. */
+function ReminderRow({ reminder, busy, onSave, onShow }) {
+  const [draft, setDraft] = useState(null);
+  const time = draft ?? reminder.time;
+  const changed = draft !== null && draft !== reminder.time;
+
+  return (
+    <div className="setting-row">
+      <div className="setting-text">
+        <p>
+          <strong>Morning reminder</strong>
+          {reminder.enabled
+            ? 'Each weekday, a Windows notification lists what’s due today for the last person to sign in here. Click it to open the CRM.'
+            : 'Off. Turn it on for a Windows notification each weekday morning with what’s due today.'}
+        </p>
+        {reminder.preview && (
+          <p className="reminder-preview" aria-label="Today’s reminder">
+            <strong>{reminder.preview.title}</strong>
+            {reminder.preview.body}
+          </p>
+        )}
+        {reminder.enabled && !reminder.ready && (
+          <p className="warn-note">Windows didn’t let the CRM add its icon by the clock, so the reminder can’t show. Restart the CRM.</p>
+        )}
+      </div>
+      <div className="setting-actions">
+        {reminder.enabled && (
+          <form
+            className="reminder-time"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSave(true, time, `Reminder set for ${time}`).then((ok) => ok && setDraft(null));
+            }}
+          >
+            <label htmlFor="reminder-time">At</label>
+            <input id="reminder-time" type="time" required value={time} onChange={(event) => setDraft(event.target.value)} />
+            {changed && (
+              <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+                Save
+              </button>
+            )}
+          </form>
+        )}
+        {reminder.enabled && (
+          <button type="button" className="btn btn-sm" disabled={busy} onClick={onShow}>
+            Show it now
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={busy}
+          onClick={() => onSave(!reminder.enabled, reminder.time, reminder.enabled ? 'Morning reminder off' : 'Morning reminder on')}
+        >
+          {reminder.enabled ? 'Turn off' : 'Turn on'}
+        </button>
+      </div>
+    </div>
   );
 }
 

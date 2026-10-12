@@ -429,6 +429,18 @@ jobs:
           Invoke-WebRequest -UseBasicParsing "$base/api/auth/csrf" -WebSession $session | Out-Null
           $token = ($session.Cookies.GetCookies($base) | Where-Object Name -eq 'XSRF-TOKEN').Value
 
+          # The morning reminder remembers who signed in here and says what's due for them.
+          $settings = Get-Content -Raw "$env:JMCRM_HOME\settings.properties"
+          if ($settings -notmatch 'reminder\.email=ci@jane-michael\.test') { throw "The reminder didn't remember who signed in" }
+          $desktop = Invoke-RestMethod "$base/api/desktop/status" -WebSession $session
+          if (-not $desktop.reminder.supported) { throw "The morning reminder isn't offered on Windows" }
+          if ($desktop.reminder.preview.title -notmatch '^Good morning') { throw "No reminder preview: $($desktop.reminder | ConvertTo-Json -Compress)" }
+          $shown = Invoke-RestMethod -Method Post -Uri "$base/api/desktop/reminder/show" -WebSession $session `
+            -Headers @{ 'X-XSRF-TOKEN' = $token }
+          if ($shown.message.body -notmatch 'Click to open JM CRM') { throw "Unexpected reminder: $($shown | ConvertTo-Json -Compress)" }
+          # A CI machine may have no notification area, so this is reported rather than required.
+          Write-Output "::notice title=Morning reminder::$($shown.message.title) $($shown.message.body) Icon: $($desktop.reminder.ready). Shown: $($shown.shown)."
+
           $check = Invoke-RestMethod -Method Post -Uri "$base/api/desktop/update/check" -WebSession $session `
             -Headers @{ 'X-XSRF-TOKEN' = $token }
           if (-not ($check.supported -and $check.available)) { throw "The newer build wasn't offered: $($check | ConvertTo-Json -Compress)" }

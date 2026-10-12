@@ -82,6 +82,7 @@ public final class DesktopLauncher {
         EmbeddedPostgres database = startDatabase(home, databasePort);
         ConfigurableApplicationContext[] started = new ConfigurableApplicationContext[1];
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            DesktopTray.remove();
             if (started[0] != null) {
                 started[0].close();
             }
@@ -115,7 +116,12 @@ public final class DesktopLauncher {
 
         SpringApplication application = new SpringApplication(JmRecruitingCrmApplication.class);
         application.setRegisterShutdownHook(false);
+        // Windows: the icon by the clock and its notifications need AWT, which Spring otherwise turns off.
+        application.setHeadless(!DesktopOs.isWindows());
         started[0] = application.run(springArgs);
+        Thread tray = new Thread(() -> DesktopTray.install(url), "desktop-tray");
+        tray.setDaemon(true);
+        tray.start();
 
         if (!settings.shortcutsCreated()) {
             DesktopOs.createShortcuts();

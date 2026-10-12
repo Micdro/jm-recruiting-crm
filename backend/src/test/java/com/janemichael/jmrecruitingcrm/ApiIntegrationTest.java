@@ -7,6 +7,7 @@ import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.EncryptionBackfill;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.KeyWrap;
+import com.janemichael.jmrecruitingcrm.desktop.MorningReminder;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -26,6 +27,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,6 +78,12 @@ class ApiIntegrationTest {
 
     @Autowired
     private FieldEncryptor encryptor;
+
+    @Autowired
+    private MorningReminder morningReminder;
+
+    @Autowired
+    private Clock clock;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -465,6 +473,31 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.weeklyTarget").value(nullValue()))
                 .andExpect(jsonPath("$.people[?(@.name == 'Integration Admin')].touches").value(3))
                 .andExpect(jsonPath("$.people[?(@.name == 'Integration Admin')].replies").value(1));
+    }
+
+    @Test
+    void theMorningReminderCountsWhatIsDueForThePersonOnThisComputer() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Harbor Ledger")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        String today = LocalDate.now(clock).toString();
+        mockMvc.perform(send(post("/api/contacts"), body("name", "Ava Chen", "companyId", companyId, "nextActionDate", today)))
+                .andExpect(status().isCreated());
+        long ben = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Ben Ortiz", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        mockMvc.perform(send(post("/api/contacts/" + ben + "/activities"), body("type", "REPLY")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REPLIED"));
+        entityManager.flush();
+
+        MorningReminder.Shown reminder = morningReminder.showNow(EMAIL);
+
+        // Not a Windows desktop here, so it isn't shown, but it says what it would.
+        assertThat(reminder.shown()).isFalse();
+        assertThat(reminder.message().title()).isEqualTo("Good morning. 2 contacts are due today.");
+        assertThat(reminder.message().body()).startsWith("1 sequence touch and 1 reply to answer.");
+        assertThat(morningReminder.showNow("nobody@jane-michael.test").message()).isNull();
     }
 
     // Recruiting flow -----------------------------------------------------------
