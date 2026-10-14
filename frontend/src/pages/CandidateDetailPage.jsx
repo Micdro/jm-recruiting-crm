@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, Empty, ErrorNote, ExternalLink, Loading, Pill } from '../components/Bits.jsx';
+import BlindProfileForm from '../components/BlindProfileForm.jsx';
 import CandidateFiles from '../components/CandidateFiles.jsx';
 import { SelectField } from '../components/Fields.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
@@ -34,6 +35,7 @@ export default function CandidateDetailPage() {
   const pipeline = useLoader(() => api.candidates.pipeline(id), [id], `candidate:${id}:pipeline`);
   const history = useLoader(() => api.activities.list({ candidateId: id }), [id], `candidate:${id}:history`);
   const [editing, setEditing] = useState(false);
+  const [profiling, setProfiling] = useState(false);
   const [error, setError] = useState('');
 
   const record = candidate.data;
@@ -74,6 +76,9 @@ export default function CandidateDetailPage() {
           </div>
         </div>
         <div className="page-actions">
+          <button type="button" className="btn" onClick={() => setProfiling(true)}>
+            Blind profile
+          </button>
           <button type="button" className="btn" onClick={() => setEditing(true)}>
             Edit
           </button>
@@ -160,6 +165,21 @@ export default function CandidateDetailPage() {
           <Timeline activities={history.data} loading={history.loading} show={['search']} />
         </section>
       </div>
+
+      {profiling && (
+        <Modal title="Blind profile for a client" onClose={() => setProfiling(false)} wide>
+          <BlindProfileForm
+            candidate={record}
+            entries={pipeline.data}
+            onCancel={() => setProfiling(false)}
+            onDone={(reference) => {
+              setProfiling(false);
+              toast(`Blind profile ${reference} downloaded. It's noted in the history.`);
+              history.reload();
+            }}
+          />
+        </Modal>
+      )}
 
       {editing && (
         <Modal title={`Edit ${record.name}`} onClose={() => setEditing(false)} wide>
