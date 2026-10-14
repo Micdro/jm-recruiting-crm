@@ -53,7 +53,7 @@ test.describe('Contacts API', () => {
 
     await test.step('touches 1 to 3 schedule the next touch', async () => {
       for (const [touch, type] of [
-        [1, 'EMAIL'],
+        [1, 'LINKEDIN'],
         [2, 'LINKEDIN'],
         [3, 'EMAIL'],
       ]) {
@@ -62,8 +62,8 @@ test.describe('Contacts API', () => {
         const body = await response.json();
         expect(body).toMatchObject({ touchCount: touch, status: 'IN_SEQUENCE', lastContactedDate: isoDate(0) });
         expect(body.nextActionDate > isoDate(0)).toBeTruthy();
-        // The sequence alternates: LinkedIn, email, LinkedIn, email.
-        expect(body.nextActionType).toBe(['EMAIL', 'LINKEDIN', 'EMAIL'][touch - 1]);
+        // Every touch of the sequence is on LinkedIn, whatever the last one was.
+        expect(body.nextActionType).toBe('LINKEDIN');
       }
     });
 
@@ -73,19 +73,19 @@ test.describe('Contacts API', () => {
     });
 
     await test.step('a fifth touch is refused', async () => {
-      const response = await log({ type: 'EMAIL' });
+      const response = await log({ type: 'LINKEDIN' });
       expect(response.status()).toBe(409);
     });
 
     await test.step('a reply moves them to Replied with a response due today', async () => {
       const response = await log({ type: 'REPLY', notes: 'Open to talking about an FDE search' });
-      expect(await response.json()).toMatchObject({ status: 'REPLIED', nextActionDate: isoDate(0), nextActionType: 'EMAIL' });
+      expect(await response.json()).toMatchObject({ status: 'REPLIED', nextActionDate: isoDate(0), nextActionType: 'LINKEDIN' });
     });
 
     await test.step('the history shows every step, newest first', async () => {
       const response = await request.get('/api/activities', { params: { contactId: contact.id } });
       const activities = await response.json();
-      expect(activities.map((activity) => activity.type)).toEqual(['REPLY', 'CALL', 'EMAIL', 'LINKEDIN', 'EMAIL']);
+      expect(activities.map((activity) => activity.type)).toEqual(['REPLY', 'CALL', 'EMAIL', 'LINKEDIN', 'LINKEDIN']);
       expect(activities[1].summary).toBe('Touch 4 of 4: Left a voicemail');
       expect(activities.filter((activity) => activity.touch)).toHaveLength(4);
     });

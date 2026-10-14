@@ -23,7 +23,7 @@ import {
 import { formatDate, formatLongDay, formatWeekday, money, plural } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 
-const QUICK_TYPES = ['EMAIL', 'LINKEDIN', 'CALL'];
+const QUICK_TYPES = ['LINKEDIN', 'CALL'];
 
 export default function TodayPage() {
   useTitle('Today');

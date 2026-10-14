@@ -16,7 +16,7 @@ const FIELDS = {
   buyingRole: '',
   lastContactedDate: '',
   nextActionDate: '',
-  // The sequence opens on LinkedIn, then alternates with email.
+  // Every touch of the sequence is on LinkedIn.
   nextActionType: 'LINKEDIN',
   notes: '',
   companyId: '',

@@ -1,7 +1,10 @@
 import { MAX_TOUCHES } from './labels.js';
 
-/** The channel for each touch of the sequence: LinkedIn, email, LinkedIn, email. */
-const SEQUENCE = ['LINKEDIN', 'EMAIL', 'LINKEDIN', 'EMAIL'];
+/** The channel for each touch of the sequence. The firm reaches out on LinkedIn only. */
+const SEQUENCE = ['LINKEDIN', 'LINKEDIN', 'LINKEDIN', 'LINKEDIN'];
+
+/** What each touch of the sequence is. */
+export const TOUCH_NAMES = ['Connection request', 'First message', 'Follow-up', 'Last message'];
 
 /** LinkedIn cuts connection request notes off at this many characters. */
 export const LINKEDIN_NOTE_LIMIT = 300;
@@ -79,26 +82,24 @@ export const STARTER_TEMPLATES = [
       'staffs its customer deployments.',
   },
   {
-    name: 'Intro email',
-    channel: 'EMAIL',
+    name: 'First message',
+    channel: 'LINKEDIN',
     touch: 2,
-    subject: 'Forward deployed engineers for {company}',
+    subject: null,
     body: [
-      'Hi {first name},',
+      'Thanks for connecting, {first name}.',
       '',
       'Deals with banks and insurers often stall after signing, when the product has to work inside the ' +
         'customer’s environment. We recruit the forward deployed and AI platform engineers who close that gap: ' +
         'people who have shipped production AI under bank-grade security and compliance.',
       '',
-      'Are you hiring for these roles this quarter? If so, do you have 15 minutes this week for a quick call?',
+      'Is {company} hiring for these roles this quarter? If so, do you have 15 minutes this week for a quick call?',
       '',
       '{my first name}',
-      'Jane Michael AI Talent Search',
-      'search.jane-michael.com',
     ].join('\n'),
   },
   {
-    name: 'Follow-up message',
+    name: 'Follow-up',
     channel: 'LINKEDIN',
     touch: 3,
     subject: null,
@@ -108,18 +109,12 @@ export const STARTER_TEMPLATES = [
       'Would a 15-minute call this week work?',
   },
   {
-    name: 'Last email',
-    channel: 'EMAIL',
+    name: 'Last message',
+    channel: 'LINKEDIN',
     touch: 4,
-    subject: 'Closing the loop',
-    body: [
-      'Hi {first name},',
-      '',
-      'I haven’t heard back, so I’ll assume the timing isn’t right. When {company} starts hiring forward ' +
-        'deployed or AI platform engineers, reply to this email and I’ll send you a shortlist within a week.',
-      '',
-      '{my first name}',
-      'Jane Michael AI Talent Search',
-    ].join('\n'),
+    subject: null,
+    body:
+      'Hi {first name}, I haven’t heard back, so I’ll assume the timing isn’t right. When {company} starts ' +
+      'hiring forward deployed or AI platform engineers, reply here and I’ll send you a shortlist within a week.',
   },
 ];

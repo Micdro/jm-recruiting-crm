@@ -31,12 +31,12 @@ test.describe('Contacts', () => {
     await page.goto(`/contacts/${contact.id}`);
     await expect(page.getByText('Touch 1 of 4. Next touch')).toBeVisible();
 
-    await page.getByLabel('Notes').first().fill('Intro email about FDE hiring');
-    await page.getByRole('button', { name: 'Log email' }).click();
+    await page.getByLabel('Notes').first().fill('Connection request about FDE hiring');
+    await page.getByRole('button', { name: 'Log LinkedIn message' }).click();
 
-    await expect(page.getByRole('status')).toContainText(`Email logged for ${contact.name}`);
+    await expect(page.getByRole('status')).toContainText(`LinkedIn logged for ${contact.name}`);
     await expect(page.getByRole('img', { name: '1 of 4 touches' })).toBeVisible();
-    await expect(page.getByText('Touch 1 of 4: Intro email about FDE hiring')).toBeVisible();
+    await expect(page.getByText('Touch 1 of 4: Connection request about FDE hiring')).toBeVisible();
 
     const saved = await crm.getJson(`/api/contacts/${contact.id}`);
     expect(saved).toMatchObject({ touchCount: 1, status: 'IN_SEQUENCE' });

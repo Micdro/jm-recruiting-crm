@@ -5,7 +5,7 @@ import { TextField } from '../components/Fields.jsx';
 import Modal from '../components/Modal.jsx';
 import { useAuth, useLoader, useTitle, useToast } from '../hooks.js';
 import { MAX_TOUCHES } from '../labels.js';
-import { LINKEDIN_NOTE_LIMIT, PLACEHOLDERS, STARTER_TEMPLATES, channelForTouch, fill } from '../templates.js';
+import { LINKEDIN_NOTE_LIMIT, PLACEHOLDERS, STARTER_TEMPLATES, TOUCH_NAMES, channelForTouch, fill } from '../templates.js';
 
 const CHANNEL = { LINKEDIN: 'LinkedIn', EMAIL: 'Email' };
 
@@ -16,7 +16,7 @@ const GROUPS = [
   ...Array.from({ length: MAX_TOUCHES }, (_, index) => ({
     touch: index + 1,
     title: `Touch ${index + 1}`,
-    sub: `${CHANNEL[channelForTouch(index + 1)]} in the sequence`,
+    sub: `${TOUCH_NAMES[index]} on ${CHANNEL[channelForTouch(index + 1)]}`,
   })),
   { touch: null, title: 'Any touch', sub: 'Replies, follow-ups and anything else' },
 ];
@@ -29,15 +29,20 @@ export default function TemplatesPage() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
 
-  async function addStarters() {
+  /** Adds starter messages: all four, or the one for a touch that has none. */
+  async function addStarters(starters) {
     setError('');
     setAdding(true);
     try {
-      for (const template of STARTER_TEMPLATES) {
+      for (const template of starters) {
         await api.templates.create(template);
       }
       templates.reload();
-      toast('Added four starter templates. Edit them to sound like you.');
+      toast(
+        starters.length === 1
+          ? `Added ${starters[0].name}. Edit it to sound like you.`
+          : 'Added four starter templates. Edit them to sound like you.',
+      );
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -63,7 +68,7 @@ export default function TemplatesPage() {
             Start with four starter messages, one for each touch, and make them your own.
           </Empty>
           <div className="form-actions form-actions-start">
-            <button type="button" className="btn btn-primary" disabled={adding} onClick={addStarters}>
+            <button type="button" className="btn btn-primary" disabled={adding} onClick={() => addStarters(STARTER_TEMPLATES)}>
               {adding ? 'Adding…' : 'Add starter templates'}
             </button>
           </div>
@@ -75,6 +80,9 @@ export default function TemplatesPage() {
         GROUPS.map((group) => {
           const inGroup = list.filter((template) => (template.touch ?? null) === group.touch);
           if (inGroup.length === 0 && group.touch === null) return null;
+          const channel = group.touch && channelForTouch(group.touch);
+          const starter = STARTER_TEMPLATES.find((template) => template.touch === group.touch);
+          const missing = channel && !inGroup.some((template) => template.channel === channel);
           return (
             <section key={group.title} className="panel" aria-labelledby={`group-${group.touch ?? 'any'}`}>
               <div className="panel-head">
@@ -82,9 +90,7 @@ export default function TemplatesPage() {
                   {group.title} <span className="panel-meta">{group.sub}</span>
                 </h2>
               </div>
-              {inGroup.length === 0 ? (
-                <p className="muted">No template for this touch yet.</p>
-              ) : (
+              {inGroup.length > 0 && (
                 <ul className="template-list">
                   {inGroup.map((template) => (
                     <li key={template.id} className="template-item">
@@ -117,6 +123,22 @@ export default function TemplatesPage() {
                   ))}
                 </ul>
               )}
+              {missing && (
+                <div className="template-missing">
+                  <p className="muted">No {CHANNEL[channel]} message for this touch yet.</p>
+                  {starter && (
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={adding}
+                      onClick={() => addStarters([starter])}
+                      aria-label={`Add the starter message for touch ${group.touch}`}
+                    >
+                      Add starter message
+                    </button>
+                  )}
+                </div>
+              )}
             </section>
           );
         })}
@@ -143,7 +165,7 @@ function TemplateForm({ template, onCancel, onSaved }) {
   const body = useRef(null);
   const [form, setForm] = useState({
     name: template.name ?? '',
-    channel: template.channel ?? 'EMAIL',
+    channel: template.channel ?? 'LINKEDIN',
     touch: template.touch ? String(template.touch) : '',
     subject: template.subject ?? '',
     body: template.body ?? '',
@@ -198,7 +220,7 @@ function TemplateForm({ template, onCancel, onSaved }) {
             <option value="">Any touch</option>
             {Array.from({ length: MAX_TOUCHES }, (_, index) => (
               <option key={index} value={String(index + 1)}>
-                Touch {index + 1} ({CHANNEL[channelForTouch(index + 1)]})
+                Touch {index + 1} ({TOUCH_NAMES[index].toLowerCase()})
               </option>
             ))}
           </select>

@@ -24,6 +24,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
@@ -32,7 +33,7 @@ import java.util.Map;
 
 /**
  * Contacts and the outbound rules the firm runs on: one row per person, track only the
- * next action, and at most four touches in a cold sequence: LinkedIn, email, LinkedIn, email.
+ * next action, and at most four touches in a cold sequence, all on LinkedIn.
  */
 @Service
 @Transactional(readOnly = true)
@@ -42,9 +43,9 @@ public class ContactService {
     public static final int TOUCH_GAP_BUSINESS_DAYS = 3;
     public static final int MAX_FILL_QUEUE = 100;
 
-    /** The channel for each touch in the cold sequence (the ClickUp Next Action Type order). */
+    /** The channel for each touch in the cold sequence. The firm reaches out on LinkedIn only. */
     public static final List<ActionType> SEQUENCE_CHANNELS =
-            List.of(ActionType.LINKEDIN, ActionType.EMAIL, ActionType.LINKEDIN, ActionType.EMAIL);
+            Collections.nCopies(MAX_SEQUENCE_TOUCHES, ActionType.LINKEDIN);
 
     private final ContactRepository contactRepository;
     private final CompanyRepository companyRepository;
@@ -72,7 +73,7 @@ public class ContactService {
         this.clock = clock;
     }
 
-    /** The channel for the touch after {@code touchesSent}, following LinkedIn, email, LinkedIn, email. */
+    /** The channel for the touch after {@code touchesSent}. */
     public static ActionType channelForTouch(int touchesSent) {
         int index = Math.max(0, Math.min(touchesSent, SEQUENCE_CHANNELS.size() - 1));
         return SEQUENCE_CHANNELS.get(index);
@@ -330,7 +331,7 @@ public class ContactService {
 
         if (type == ActivityType.REPLY) {
             contact.setNextActionDate(today);
-            contact.setNextActionType(ActionType.EMAIL);
+            contact.setNextActionType(ActionType.LINKEDIN);
             return;
         }
 

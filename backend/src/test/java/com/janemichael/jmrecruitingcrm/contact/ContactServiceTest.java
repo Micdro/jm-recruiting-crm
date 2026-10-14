@@ -76,7 +76,7 @@ class ContactServiceTest {
         assertThat(response.lastContactedDate()).isEqualTo(TODAY);
         // Thursday, Friday, then Monday: weekends are skipped.
         assertThat(response.nextActionDate()).isEqualTo(LocalDate.of(2026, 10, 19));
-        assertThat(response.nextActionType()).isEqualTo(ActionType.EMAIL);
+        assertThat(response.nextActionType()).isEqualTo(ActionType.LINKEDIN);
         verify(activityLogger).forContact(contact, ActivityType.EMAIL, true, "Touch 1 of 4", user);
     }
 
@@ -149,7 +149,7 @@ class ContactServiceTest {
         assertThat(response.status()).isEqualTo(OutreachStatus.REPLIED);
         assertThat(response.touchCount()).isEqualTo(2);
         assertThat(response.nextActionDate()).isEqualTo(TODAY);
-        assertThat(response.nextActionType()).isEqualTo(ActionType.EMAIL);
+        assertThat(response.nextActionType()).isEqualTo(ActionType.LINKEDIN);
         verify(activityLogger).forContact(eq(contact), eq(ActivityType.REPLY), eq(false), isNull(), eq(user));
     }
 
@@ -191,12 +191,10 @@ class ContactServiceTest {
     }
 
     @Test
-    void theSequenceAlternatesLinkedinAndEmail() {
-        assertThat(ContactService.channelForTouch(0)).isEqualTo(ActionType.LINKEDIN);
-        assertThat(ContactService.channelForTouch(1)).isEqualTo(ActionType.EMAIL);
-        assertThat(ContactService.channelForTouch(2)).isEqualTo(ActionType.LINKEDIN);
-        assertThat(ContactService.channelForTouch(3)).isEqualTo(ActionType.EMAIL);
-        assertThat(ContactService.channelForTouch(9)).isEqualTo(ActionType.EMAIL);
+    void everyTouchOfTheSequenceIsOnLinkedin() {
+        for (int touchesSent : new int[] {0, 1, 2, 3, 9}) {
+            assertThat(ContactService.channelForTouch(touchesSent)).isEqualTo(ActionType.LINKEDIN);
+        }
     }
 
     @Test

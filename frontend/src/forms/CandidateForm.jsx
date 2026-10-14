@@ -38,7 +38,7 @@ const FIELDS = {
   productionEvidence: '',
   lastContactedDate: '',
   nextActionDate: '',
-  nextActionType: 'EMAIL',
+  nextActionType: 'LINKEDIN',
   notes: '',
   ownerId: '',
 };
@@ -83,7 +83,7 @@ export default function CandidateForm({ candidate, onSaved, onCancel }) {
       productionEvidence: blankToNull(form.productionEvidence),
       lastContactedDate: form.lastContactedDate || null,
       nextActionDate: form.nextActionDate || null,
-      nextActionType: form.nextActionDate ? form.nextActionType || 'EMAIL' : null,
+      nextActionType: form.nextActionDate ? form.nextActionType || 'LINKEDIN' : null,
       notes: blankToNull(form.notes),
       ownerId: toId(form.ownerId),
     };

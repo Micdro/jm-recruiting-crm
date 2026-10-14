@@ -3038,6 +3038,23 @@ a.cell-title:hover {
   gap: 4px;
 }
 
+.template-missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.template-missing p {
+  margin: 0;
+}
+
+.template-list + .template-missing {
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
 .template-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);

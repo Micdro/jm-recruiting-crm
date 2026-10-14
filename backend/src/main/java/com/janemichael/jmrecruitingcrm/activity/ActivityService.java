@@ -67,14 +67,14 @@ public class ActivityService {
         return activities.stream().map(ActivityResponse::from).toList();
     }
 
-    /** Logs a note, call or meeting about a company or a search. */
+    /** Logs a note, call, meeting or message about a company or a search. */
     @Transactional
     public ActivityResponse logNote(NoteRequest request) {
         AppUser user = currentUserService.get();
         ActivityType type = request.type() == null ? ActivityType.NOTE : request.type();
 
         if (type != ActivityType.NOTE && type != ActivityType.CALL && type != ActivityType.MEETING
-                && type != ActivityType.EMAIL) {
+                && type != ActivityType.LINKEDIN && type != ActivityType.EMAIL) {
             throw new BadRequestException("Log replies and touches from the contact or candidate page");
         }
 
@@ -95,12 +95,12 @@ public class ActivityService {
     }
 
     /**
-     * A call, email or meeting with a company counts as contact and completes a follow-up that was due.
+     * A call, message or meeting with a company counts as contact and completes a follow-up that was due.
      * A new follow-up date can be set at the same time.
      */
     private void updateCompanyFollowUp(Company company, ActivityType type, NoteRequest request) {
         LocalDate today = LocalDate.now(clock);
-        boolean contact = type == ActivityType.CALL || type == ActivityType.EMAIL || type == ActivityType.MEETING;
+        boolean contact = type.isOutreach() || type == ActivityType.MEETING;
 
         if (contact) {
             company.setLastContactedDate(today);

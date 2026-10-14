@@ -6,7 +6,7 @@ test.describe('Today', () => {
     const contact = await crm.createContact(company.id, {
       title: 'CISO',
       nextActionDate: isoDate(0),
-      nextActionType: 'EMAIL',
+      nextActionType: 'LINKEDIN',
     });
 
     await page.goto('/');
@@ -18,13 +18,14 @@ test.describe('Today', () => {
     await expect(row).toContainText('Touch 1');
     await expect(row).toContainText('Today');
 
-    await row.getByRole('button', { name: `Log Email for ${contact.name}` }).click();
+    await expect(row.getByRole('button', { name: `Log Email for ${contact.name}` })).toHaveCount(0);
+    await row.getByRole('button', { name: `Log LinkedIn for ${contact.name}` }).click();
 
-    await expect(page.getByRole('status')).toContainText(`Email logged for ${contact.name}`);
+    await expect(page.getByRole('status')).toContainText(`LinkedIn logged for ${contact.name}`);
     await expect(row).toHaveCount(0);
 
     const saved = await crm.getJson(`/api/contacts/${contact.id}`);
-    expect(saved).toMatchObject({ touchCount: 1, status: 'IN_SEQUENCE' });
+    expect(saved).toMatchObject({ touchCount: 1, status: 'IN_SEQUENCE', nextActionType: 'LINKEDIN' });
     expect(saved.nextActionDate > isoDate(0)).toBeTruthy();
   });
 
@@ -48,6 +49,6 @@ test.describe('Today', () => {
 
     await expect(dialog).toHaveCount(0);
     const saved = await crm.getJson(`/api/contacts/${contact.id}`);
-    expect(saved).toMatchObject({ status: 'REPLIED', nextActionDate: isoDate(0) });
+    expect(saved).toMatchObject({ status: 'REPLIED', nextActionDate: isoDate(0), nextActionType: 'LINKEDIN' });
   });
 });

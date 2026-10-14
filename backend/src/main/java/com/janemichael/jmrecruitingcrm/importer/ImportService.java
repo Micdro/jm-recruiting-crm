@@ -424,7 +424,7 @@ public class ImportService {
             candidate.setNextActionDate(row.nextActionDate());
             candidate.setNextActionType(row.nextActionDate() == null
                     ? null
-                    : row.nextActionType() == null ? ActionType.EMAIL : row.nextActionType());
+                    : row.nextActionType() == null ? ActionType.LINKEDIN : row.nextActionType());
         }
     }
 

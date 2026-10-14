@@ -187,7 +187,7 @@ public class CandidateService {
                     : type.toActionType());
         } else if (type == ActivityType.REPLY) {
             candidate.setNextActionDate(today);
-            candidate.setNextActionType(ActionType.EMAIL);
+            candidate.setNextActionType(ActionType.LINKEDIN);
         } else if ((type.isOutreach() || type == ActivityType.MEETING)
                 && candidate.getNextActionDate() != null
                 && !candidate.getNextActionDate().isAfter(today)) {

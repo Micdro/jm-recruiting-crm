@@ -921,7 +921,60 @@ class ApiIntegrationTest {
         mockMvc.perform(signedIn(get("/api/contacts").param("q", "lee@importtest.test")))
                 .andExpect(jsonPath("$[0].name").value("Lee Park"))
                 .andExpect(jsonPath("$[0].status").value("IN_SEQUENCE"))
-                .andExpect(jsonPath("$[0].nextActionType").value("EMAIL"));
+                .andExpect(jsonPath("$[0].nextActionType").value("LINKEDIN"));
+    }
+
+    @Test
+    void aLinkedinMessageToACompanyCountsAsContactAndCompletesTheFollowUp() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body(
+                        "name", "LinkedIn Note Co", "followUpDate", LocalDate.now(clock).minusDays(1).toString())))
+                .andExpect(status().isCreated())
+                .andReturn());
+
+        mockMvc.perform(send(post("/api/activities"), body(
+                        "companyId", companyId, "type", "LINKEDIN", "summary", "Sent the shortlist on LinkedIn")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.type").value("LINKEDIN"));
+
+        mockMvc.perform(signedIn(get("/api/companies/" + companyId)))
+                .andExpect(jsonPath("$.lastContactedDate").value(LocalDate.now(clock).toString()))
+                .andExpect(jsonPath("$.followUpDate").value(nullValue()));
+    }
+
+    @Test
+    void theLinkedinOnlyMigrationMovesWaitingEmailTouchesWithoutSharingTheChange() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Migration Test Bank AI")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        long cold = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Cold Contact", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        long engaged = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Engaged Contact", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        entityManager.flush();
+        // As the old sequence left them: the next touch by email.
+        jdbc.update("UPDATE contact SET status = 'IN_SEQUENCE', next_action_type = 'EMAIL', next_action_date = current_date WHERE id = ?", cold);
+        jdbc.update("UPDATE contact SET status = 'ENGAGED', next_action_type = 'EMAIL', next_action_date = current_date WHERE id = ?", engaged);
+        entityManager.clear();
+        String versionSql = "SELECT version::text FROM sync_row WHERE table_name = 'contact' AND row_id = ?";
+        String versionBefore = jdbc.queryForObject(versionSql, String.class, cold);
+
+        String migration;
+        try (var in = getClass().getResourceAsStream("/db/migration/V13__linkedin_only.sql")) {
+            migration = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        jdbc.execute(migration);
+
+        String nextSql = "SELECT next_action_type FROM contact WHERE id = ?";
+        assertThat(jdbc.queryForObject(nextSql, String.class, cold)).isEqualTo("LINKEDIN");
+        // A conversation already under way keeps the channel someone chose.
+        assertThat(jdbc.queryForObject(nextSql, String.class, engaged)).isEqualTo("EMAIL");
+        // Every computer makes the change itself, so the row's sync version stays as it was...
+        assertThat(jdbc.queryForObject(versionSql, String.class, cold)).isEqualTo(versionBefore);
+        // ...and changes after it are shared again.
+        jdbc.update("UPDATE contact SET next_action_date = current_date + 1 WHERE id = ?", cold);
+        assertThat(jdbc.queryForObject(versionSql, String.class, cold)).isNotEqualTo(versionBefore);
     }
 
     @Test

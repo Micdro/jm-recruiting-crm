@@ -57,11 +57,11 @@ export default function LogActivityForm({ kind, record, onLogged, searches = [],
   const groupId = useId();
   const today = todayIso();
 
-  const [type, setType] = useState('EMAIL');
+  const [type, setType] = useState('LINKEDIN');
   const [notes, setNotes] = useState('');
   const [plan, setPlan] = useState('default');
   const [nextDate, setNextDate] = useState('');
-  const [nextType, setNextType] = useState('EMAIL');
+  const [nextType, setNextType] = useState('LINKEDIN');
   const [searchId, setSearchId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

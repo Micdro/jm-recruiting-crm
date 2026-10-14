@@ -94,16 +94,16 @@ export const BUYING_ROLE = {
 };
 
 export const ACTION_TYPE = {
-  EMAIL: 'Email',
   LINKEDIN: 'LinkedIn',
+  EMAIL: 'Email',
   CALL: 'Call',
   MEETING: 'Meeting',
   OTHER: 'Other',
 };
 
 export const ACTIVITY_TYPE = {
-  EMAIL: 'Email',
   LINKEDIN: 'LinkedIn',
+  EMAIL: 'Email',
   CALL: 'Call',
   MEETING: 'Meeting',
   REPLY: 'Reply',
@@ -113,8 +113,8 @@ export const ACTIVITY_TYPE = {
 };
 
 /** What a person can log by hand, in the order they appear in the log form. */
-export const LOGGABLE_TYPES = ['EMAIL', 'LINKEDIN', 'CALL', 'REPLY', 'MEETING', 'NOTE'];
-export const OUTREACH_TYPES = ['EMAIL', 'LINKEDIN', 'CALL'];
+export const LOGGABLE_TYPES = ['LINKEDIN', 'CALL', 'REPLY', 'MEETING', 'EMAIL', 'NOTE'];
+export const OUTREACH_TYPES = ['LINKEDIN', 'EMAIL', 'CALL'];
 
 export const TRACK = {
   PRODUCTION_AI_ENGINEERING: 'Production AI engineering',

@@ -42,7 +42,7 @@ test.describe('Message templates', () => {
     await page.getByRole('button', { name: 'Add template' }).click();
     const dialog = page.getByRole('dialog', { name: 'Add template' });
     await dialog.getByLabel('Name').fill(name);
-    await dialog.getByLabel('Touch').selectOption({ label: 'Touch 3 (LinkedIn)' });
+    await dialog.getByLabel('Touch').selectOption({ label: 'Touch 3 (follow-up)' });
     await dialog.getByText('LinkedIn', { exact: true }).click();
     await dialog.getByLabel('Message').fill('Hi {first name}, checking in about ');
     await dialog.getByRole('button', { name: '{company}' }).click();
@@ -53,5 +53,24 @@ test.describe('Message templates', () => {
     const saved = (await crm.getJson('/api/templates')).find((template) => template.name === name);
     crm.track('templates', saved.id);
     expect(saved).toMatchObject({ channel: 'LINKEDIN', touch: 3, body: 'Hi {first name}, checking in about {company}' });
+  });
+
+  test('offers the LinkedIn starter for a touch that only has an email template', async ({ page, crm }) => {
+    const email = await crm.createTemplate({ name: uniqueName('Old email'), channel: 'EMAIL', touch: 4, subject: 'Hello', body: 'Hi' });
+
+    await page.goto('/templates');
+    const touch = page.getByRole('region', { name: /Touch 4/ });
+    await expect(touch).toContainText('Last message on LinkedIn');
+    await expect(touch).toContainText(email.name);
+    await expect(touch).toContainText('No LinkedIn message for this touch yet.');
+    await touch.getByRole('button', { name: 'Add the starter message for touch 4' }).click();
+
+    await expect(page.getByRole('status')).toContainText('Added Last message.');
+    await expect(touch).not.toContainText('No LinkedIn message for this touch yet.');
+    const added = (await crm.getJson('/api/templates')).filter((template) => template.touch === 4 && template.channel === 'LINKEDIN');
+    added.forEach((template) => crm.track('templates', template.id));
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({ name: 'Last message', subject: null });
+    expect(added[0].body).toContain('reply here');
   });
 });

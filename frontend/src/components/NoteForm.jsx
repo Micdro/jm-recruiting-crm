@@ -41,6 +41,7 @@ export default function NoteForm({ onSave, withFollowUp = false }) {
           required
           options={[
             { value: 'NOTE', label: 'Note' },
+            { value: 'LINKEDIN', label: 'LinkedIn' },
             { value: 'CALL', label: 'Call' },
             { value: 'MEETING', label: 'Meeting' },
             { value: 'EMAIL', label: 'Email' },

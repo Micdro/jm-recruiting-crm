@@ -5,6 +5,7 @@ import { Empty, ErrorNote, Loading, PageHeader } from '../components/Bits.jsx';
 import WeekChart, { Legend } from '../components/WeekChart.jsx';
 import { formatDate } from '../format.js';
 import { useLoader, useTitle } from '../hooks.js';
+import { TOUCH_NAMES } from '../templates.js';
 
 /** One color per channel, the same everywhere on the page. */
 const CHANNELS = [
@@ -13,7 +14,6 @@ const CHANNELS = [
   { key: 'call', channel: 'CALL', label: 'Call', color: '#1baf7a' },
 ];
 const REPLIES = [{ key: 'replies', label: 'Replies', color: 'var(--green)' }];
-const SEQUENCE_CHANNEL = ['LinkedIn', 'Email', 'LinkedIn', 'Email'];
 
 const touchesIn = (week) => week.linkedin + week.email + week.call;
 const NUMBER = new Intl.NumberFormat('en-US');
@@ -65,6 +65,8 @@ function Report({ data, team }) {
   const thisWeek = weeks[weeks.length - 1];
   const lastWeek = weeks[weeks.length - 2];
   const anything = weeks.some((week) => touchesIn(week) || week.replies || week.meetings);
+  // The firm no longer emails, so email shows only while there are emails in these 12 weeks.
+  const channels = CHANNELS.filter((item) => item.channel !== 'EMAIL' || weeks.some((week) => week.email > 0));
 
   if (!anything) {
     return (
@@ -97,11 +99,11 @@ function Report({ data, team }) {
         <section className="panel numbers-wide" aria-labelledby="touches-chart">
           <div className="panel-head">
             <h2 id="touches-chart">Touches per week</h2>
-            <Legend series={CHANNELS} target={data.weeklyTarget} />
+            <Legend series={channels} target={data.weeklyTarget} />
           </div>
           <WeekChart
             weeks={weeks}
-            series={CHANNELS}
+            series={channels}
             target={data.weeklyTarget}
             label={`Touches per week by channel for the last 12 weeks. This week ${touchesIn(thisWeek)}. The table below has every number.`}
             describe={(week) => [`${counted(touchesIn(week), 'touch', 'touches')} in all`]}
@@ -174,7 +176,7 @@ function Report({ data, team }) {
               </tr>
             </thead>
             <tbody>
-              {CHANNELS.map((item) => {
+              {channels.map((item) => {
                 const row = data.byChannel.find((entry) => entry.channel === item.channel);
                 return (
                   <tr key={item.key}>
@@ -202,7 +204,7 @@ function Report({ data, team }) {
               <thead>
                 <tr>
                   <th scope="col">Week of</th>
-                  {CHANNELS.map((item) => (
+                  {channels.map((item) => (
                     <th key={item.key} scope="col" className="num">
                       {item.label}
                     </th>
@@ -220,7 +222,7 @@ function Report({ data, team }) {
                       {formatDate(week.start)}
                       {index === 0 ? ' (so far)' : ''}
                     </th>
-                    {CHANNELS.map((item) => (
+                    {channels.map((item) => (
                       <td key={item.key} className="num">
                         {week[item.key]}
                       </td>
@@ -259,7 +261,7 @@ function TouchRates({ rows }) {
       {rows.map((row, index) => (
         <li key={row.touch}>
           <span className="rate-label">
-            Touch {row.touch} <span className="muted">{SEQUENCE_CHANNEL[index]}</span>
+            Touch {row.touch} <span className="muted">{TOUCH_NAMES[index]}</span>
           </span>
           <span className="rate-track">
             {rates[index] > 0 && (

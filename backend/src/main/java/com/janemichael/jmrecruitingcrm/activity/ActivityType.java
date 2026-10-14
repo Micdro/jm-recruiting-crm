@@ -28,8 +28,9 @@ public enum ActivityType {
     /** The matching next-action type, used when scheduling the next touch. */
     public ActionType toActionType() {
         return switch (this) {
-            case EMAIL, REPLY -> ActionType.EMAIL;
-            case LINKEDIN -> ActionType.LINKEDIN;
+            case EMAIL -> ActionType.EMAIL;
+            // Replies come in on LinkedIn, so the answer goes there too.
+            case LINKEDIN, REPLY -> ActionType.LINKEDIN;
             case CALL -> ActionType.CALL;
             case MEETING -> ActionType.MEETING;
             default -> ActionType.OTHER;
