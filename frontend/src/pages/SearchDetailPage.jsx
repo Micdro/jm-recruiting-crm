@@ -6,6 +6,7 @@ import { ConfirmButton, Empty, ErrorNote, Loading, Pill } from '../components/Bi
 import { SelectField, TextArea } from '../components/Fields.jsx';
 import Modal from '../components/Modal.jsx';
 import NoteForm from '../components/NoteForm.jsx';
+import SearchMatches from '../components/SearchMatches.jsx';
 import Timeline from '../components/Timeline.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
 import PlacementForm from '../forms/PlacementForm.jsx';
@@ -27,6 +28,7 @@ import { useLoader, useTitle, useToast } from '../hooks.js';
 
 const TABS = [
   ['pipeline', 'Pipeline'],
+  ['matches', 'Matches'],
   ['brief', 'Brief'],
   ['shortlist', 'Shortlist'],
   ['history', 'History'],
@@ -200,6 +202,14 @@ export default function SearchDetailPage() {
               }
             }}
             onNewCandidate={() => setModal({ kind: 'candidate' })}
+          />
+        )}
+        {tab === 'matches' && (
+          <SearchMatches
+            search={record}
+            entries={pipeline.data}
+            onAdded={refreshAll}
+            onEditBrief={() => setModal({ kind: 'edit' })}
           />
         )}
         {tab === 'brief' && <BriefTab search={record} onEdit={() => setModal({ kind: 'edit' })} />}

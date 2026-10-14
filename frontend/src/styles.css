@@ -2154,6 +2154,100 @@ a.cell-title:hover {
   color: var(--ink-3);
 }
 
+/* Candidate matches ----------------------------------------------------------------- */
+
+.match-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: match;
+}
+
+.match-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+  counter-increment: match;
+}
+
+.match-list > li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.match-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+}
+
+.match-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.match-title::before {
+  content: counter(match) ".";
+  min-width: 1.4em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-name {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.match-level {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.match-strong {
+  color: var(--green);
+}
+
+.match-good-fit {
+  color: var(--blue);
+}
+
+.match-possible {
+  color: var(--ink-3);
+}
+
+.match-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.match-reasons li {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12.5px;
+}
+
+.match-plus {
+  background: var(--green-soft);
+  color: var(--green-strong);
+}
+
+.match-minus {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
 /* Invoices ------------------------------------------------------------------------ */
 
 .invoice-cell {
