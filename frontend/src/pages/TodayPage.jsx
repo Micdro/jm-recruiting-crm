@@ -479,6 +479,20 @@ function Money({ placements }) {
         </div>
       </dl>
       <p className="money-count">{plural(placements.placementsThisYear, 'placement')} this year.</p>
+      {placements.overdueInvoices?.length > 0 && (
+        <>
+          <h3 className="panel-subhead">Overdue invoices</h3>
+          <ul className="plain-list overdue-list">
+            {placements.overdueInvoices.map((placement) => (
+              <li key={placement.id}>
+                <Link to="/placements">{placement.companyName}</Link>, {money(placement.feeAmount)}
+                {placement.invoiceNumber ? ` (invoice ${placement.invoiceNumber})` : ''}, due{' '}
+                {formatDate(placement.invoiceDueDate)}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {placements.guaranteesEndingSoon.length > 0 && (
         <>
           <h3 className="panel-subhead">Guarantees ending in the next 30 days</h3>

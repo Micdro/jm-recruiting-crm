@@ -7,6 +7,7 @@ import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.candidate.Candidate;
 import com.janemichael.jmrecruitingcrm.candidate.CandidateEnums;
 import com.janemichael.jmrecruitingcrm.candidate.CandidateRepository;
+import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
@@ -14,6 +15,7 @@ import com.janemichael.jmrecruitingcrm.pipeline.PipelineEntry;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineRepository;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineService;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineStage;
+import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.InvoiceRequest;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementRequest;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementResponse;
 import com.janemichael.jmrecruitingcrm.search.Search;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +47,7 @@ public class PlacementService {
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
     private final TrashService trash;
+    private final Clock clock;
 
     public PlacementService(
             PlacementRepository placementRepository,
@@ -53,9 +57,11 @@ public class PlacementService {
             PipelineService pipelineService,
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
-            TrashService trash
+            TrashService trash,
+            Clock clock
     ) {
         this.trash = trash;
+        this.clock = clock;
         this.placementRepository = placementRepository;
         this.searchRepository = searchRepository;
         this.candidateRepository = candidateRepository;
@@ -124,6 +130,49 @@ public class PlacementService {
 
         apply(request, placement, placement.getSearch());
         return PlacementResponse.from(placement);
+    }
+
+    /**
+     * Records the invoice for a placement (its number, dates, who it's billed to and the line on it)
+     * and marks the placement invoiced. The amount is the placement's fee.
+     */
+    @Transactional
+    public PlacementResponse invoice(Long id, InvoiceRequest request) {
+        Placement placement = find(id);
+        if (placement.getFeeAmount() == null) {
+            throw new BadRequestException("Add the fee to the placement first");
+        }
+        if (request.dueDate().isBefore(request.invoiceDate())) {
+            throw new BadRequestException("The due date can't be before the invoice date");
+        }
+        String number = request.invoiceNumber().trim();
+        if (placementRepository.existsByInvoiceNumberAndIdNot(number, id)) {
+            throw new ConflictException("Invoice " + number + " is already used. Use the next number.");
+        }
+        placement.setInvoiceNumber(number);
+        placement.setInvoiceDate(request.invoiceDate());
+        placement.setInvoiceDueDate(request.dueDate());
+        placement.setBillToName(Text.clean(request.billToName()));
+        placement.setBillToEmail(Text.clean(request.billToEmail()));
+        placement.setBillToAddress(Text.clean(request.billToAddress()));
+        placement.setInvoiceDescription(Text.clean(request.description()));
+        if (placement.getInvoiceStatus() == Placement.InvoiceStatus.NOT_INVOICED) {
+            placement.setInvoiceStatus(Placement.InvoiceStatus.INVOICED);
+        }
+        return PlacementResponse.from(placement);
+    }
+
+    /** The next invoice number for this year: 2026-001, 2026-002 and so on, after the highest used. */
+    public String nextInvoiceNumber() {
+        String prefix = LocalDate.now(clock).getYear() + "-";
+        int highest = 0;
+        for (String number : placementRepository.findInvoiceNumbersStartingWith(prefix)) {
+            String rest = number.substring(prefix.length());
+            if (rest.matches("\\d{1,6}")) {
+                highest = Math.max(highest, Integer.parseInt(rest));
+            }
+        }
+        return prefix + String.format("%03d", highest + 1);
     }
 
     @Transactional

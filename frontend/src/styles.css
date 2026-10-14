@@ -2154,6 +2154,54 @@ a.cell-title:hover {
   color: var(--ink-3);
 }
 
+/* Invoices ------------------------------------------------------------------------ */
+
+.invoice-cell {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.invoice-cell .link-button {
+  font-size: 14px;
+}
+
+.invoice-overdue {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--red);
+}
+
+.invoice-from {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.invoice-amount {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.invoice-amount .field-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.invoice-amount strong {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.overdue-list li {
+  color: var(--red);
+}
+
+.overdue-list a {
+  color: inherit;
+}
+
 /* Add from LinkedIn ---------------------------------------------------------------- */
 
 .linkedin-steps li {

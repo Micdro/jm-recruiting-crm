@@ -35,11 +35,13 @@ public class EncryptionBackfill implements ApplicationRunner {
         ENCRYPTED_COLUMNS.put("job_search", List.of("title", "location", "base_min", "base_max",
                 "production_outcome", "technical_scope", "accountability", "regulatory_constraints", "notes"));
         ENCRYPTED_COLUMNS.put("pipeline_entry", List.of("rationale"));
-        ENCRYPTED_COLUMNS.put("placement", List.of("base_salary", "fee_amount", "notes"));
+        ENCRYPTED_COLUMNS.put("placement", List.of("base_salary", "fee_amount", "notes", "bill_to_name",
+                "bill_to_email", "bill_to_address", "invoice_description"));
         ENCRYPTED_COLUMNS.put("activity", List.of("summary"));
         ENCRYPTED_COLUMNS.put("message_template", List.of("name", "subject", "body"));
         ENCRYPTED_COLUMNS.put("candidate_file", List.of("file_name"));
         ENCRYPTED_COLUMNS.put("trash_item", List.of("label", "detail", "contents"));
+        ENCRYPTED_COLUMNS.put("firm_setting", List.of("value"));
     }
 
     private final JdbcTemplate jdbc;

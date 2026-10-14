@@ -159,7 +159,15 @@ export const api = {
     update: (id, body) => put(`/api/pipeline/${id}`, body),
     remove: (id) => del(`/api/pipeline/${id}`),
   },
-  placements: crud('/api/placements'),
+  placements: {
+    ...crud('/api/placements'),
+    invoice: (id, body) => put(`/api/placements/${id}/invoice`, body),
+    nextInvoiceNumber: () => get('/api/placements/next-invoice-number'),
+  },
+  firm: {
+    invoiceSettings: () => get('/api/firm/invoice-settings'),
+    saveInvoiceSettings: (body) => put('/api/firm/invoice-settings', body),
+  },
   templates: crud('/api/templates'),
   trash: {
     list: () => get('/api/trash'),

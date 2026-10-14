@@ -11,6 +11,7 @@ public final class SyncTables {
             "sync_node",
             "app_user",
             "message_template",
+            "firm_setting",
             "company",
             "contact",
             "candidate",
@@ -40,7 +41,8 @@ public final class SyncTables {
             "pipeline_entry", new NaturalKey("search_id = ?::bigint AND candidate_id = ?::bigint",
                     List.of("search_id", "candidate_id")),
             "placement", new NaturalKey("search_id = ?::bigint AND candidate_id = ?::bigint",
-                    List.of("search_id", "candidate_id")));
+                    List.of("search_id", "candidate_id")),
+            "firm_setting", new NaturalKey("name = ?::text", List.of("name")));
 
     private SyncTables() {
     }

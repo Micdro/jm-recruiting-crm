@@ -1,7 +1,9 @@
 package com.janemichael.jmrecruitingcrm.placement;
 
 import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -46,6 +48,38 @@ public final class PlacementDtos {
     ) {
     }
 
+    /** What goes on the invoice for a placement. The amount is the placement's fee. */
+    public record InvoiceRequest(
+            @NotBlank(message = "Enter the invoice number")
+            @Size(max = 40, message = "The invoice number must be 40 characters or fewer")
+            String invoiceNumber,
+
+            @NotNull(message = "Enter the invoice date")
+            LocalDate invoiceDate,
+
+            @NotNull(message = "Enter the due date")
+            LocalDate dueDate,
+
+            @NotBlank(message = "Enter who the invoice is for")
+            @Size(max = 200, message = "The name must be 200 characters or fewer")
+            String billToName,
+
+            @Email(message = "Enter a valid email address")
+            @Size(max = 255, message = "The email must be 255 characters or fewer")
+            String billToEmail,
+
+            @Size(max = 500, message = "The address must be 500 characters or fewer")
+            String billToAddress,
+
+            @NotBlank(message = "Describe what the invoice is for")
+            @Size(max = 500, message = "The description must be 500 characters or fewer")
+            String description
+    ) {
+    }
+
+    public record NextInvoiceNumber(String invoiceNumber) {
+    }
+
     public record PlacementResponse(
             Long id,
             Long searchId,
@@ -62,7 +96,14 @@ public final class PlacementDtos {
             LocalDate invoiceDate,
             LocalDate paidDate,
             LocalDate guaranteeEndDate,
-            String notes
+            String notes,
+            String invoiceNumber,
+            /** When it's due: the date set on the invoice, or 30 days after it was sent. */
+            LocalDate invoiceDueDate,
+            String billToName,
+            String billToEmail,
+            String billToAddress,
+            String invoiceDescription
     ) {
 
         public static PlacementResponse from(Placement placement) {
@@ -82,7 +123,13 @@ public final class PlacementDtos {
                     placement.getInvoiceDate(),
                     placement.getPaidDate(),
                     placement.getGuaranteeEndDate(),
-                    placement.getNotes()
+                    placement.getNotes(),
+                    placement.getInvoiceNumber(),
+                    placement.effectiveDueDate(),
+                    placement.getBillToName(),
+                    placement.getBillToEmail(),
+                    placement.getBillToAddress(),
+                    placement.getInvoiceDescription()
             );
         }
     }

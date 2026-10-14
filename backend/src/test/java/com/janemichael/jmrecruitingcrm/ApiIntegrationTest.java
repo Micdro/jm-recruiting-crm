@@ -678,6 +678,74 @@ class ApiIntegrationTest {
                 .andExpect(result -> assertThat(result.getResponse().getContentAsByteArray()).isEqualTo(resume));
     }
 
+    @Test
+    void invoicesAreNumberedSavedEncryptedAndShowWhenOverdue() throws Exception {
+        mockMvc.perform(signedIn(get("/api/firm/invoice-settings")))
+                .andExpect(jsonPath("$.firmName").value("Jane Michael LLC"))
+                .andExpect(jsonPath("$.termsDays").value(30));
+        mockMvc.perform(send(put("/api/firm/invoice-settings"), body(
+                        "firmName", "Jane Michael LLC", "address", "100 Example Street\nTampa, FL",
+                        "email", "billing@jane-michael.test", "paymentInstructions", "ACH routing 000000000",
+                        "termsDays", 45)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.termsDays").value(45))
+                .andExpect(jsonPath("$.paymentInstructions").value("ACH routing 000000000"));
+        assertThat(jdbc.queryForList("SELECT value FROM firm_setting WHERE name LIKE 'invoice.%' AND value IS NOT NULL", String.class))
+                .allSatisfy(value -> assertThat(value).startsWith("enc:v1:"))
+                .noneMatch(value -> value.contains("routing"));
+
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Tidewater Credit")))
+                .andExpect(status().isCreated()).andReturn());
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", companyId, "title", "AI Platform Engineer",
+                        "track", "PRODUCTION_AI_ENGINEERING", "feePercent", 25)))
+                .andExpect(status().isCreated()).andReturn());
+        long first = placement(searchId, "Kai Moreno");
+        long second = placement(searchId, "Lea Novak");
+        String year = String.valueOf(LocalDate.now(clock).getYear());
+
+        mockMvc.perform(signedIn(get("/api/placements/next-invoice-number")))
+                .andExpect(jsonPath("$.invoiceNumber").value(year + "-001"));
+        mockMvc.perform(send(put("/api/placements/" + first + "/invoice"), body(
+                        "invoiceNumber", year + "-001", "invoiceDate", "2026-01-05", "dueDate", "2026-02-04",
+                        "billToName", "Tidewater Credit, Attn: Accounts Payable", "billToEmail", "ap@tidewater.test",
+                        "billToAddress", "1 Harbor Way", "description", "Placement fee: Kai Moreno, AI Platform Engineer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.invoiceStatus").value("INVOICED"))
+                .andExpect(jsonPath("$.invoiceNumber").value(year + "-001"))
+                .andExpect(jsonPath("$.invoiceDueDate").value("2026-02-04"))
+                .andExpect(jsonPath("$.billToEmail").value("ap@tidewater.test"));
+        entityManager.flush();
+        Map<String, Object> row = jdbc.queryForMap("SELECT bill_to_name, invoice_description FROM placement WHERE id = ?", first);
+        assertThat((String) row.get("bill_to_name")).startsWith("enc:v1:").doesNotContain("Tidewater");
+        assertThat((String) row.get("invoice_description")).startsWith("enc:v1:").doesNotContain("Kai");
+
+        mockMvc.perform(signedIn(get("/api/placements/next-invoice-number")))
+                .andExpect(jsonPath("$.invoiceNumber").value(year + "-002"));
+        mockMvc.perform(send(put("/api/placements/" + second + "/invoice"), body(
+                        "invoiceNumber", year + "-001", "invoiceDate", "2026-01-05", "dueDate", "2026-02-04",
+                        "billToName", "Tidewater Credit", "description", "Placement fee")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.messages[0]").value("Invoice " + year + "-001 is already used. Use the next number."));
+        mockMvc.perform(send(put("/api/placements/" + second + "/invoice"), body(
+                        "invoiceNumber", year + "-002", "invoiceDate", "2026-03-05", "dueDate", "2026-03-01",
+                        "billToName", "Tidewater Credit", "description", "Placement fee")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("The due date can't be before the invoice date"));
+
+        // Due in the past and unpaid: it shows on Today.
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.placements.overdueInvoices[?(@.id == " + first + ")].invoiceNumber").value(year + "-001"));
+    }
+
+    private long placement(long searchId, String candidateName) throws Exception {
+        long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body("name", candidateName)))
+                .andExpect(status().isCreated()).andReturn());
+        return id(mockMvc.perform(send(post("/api/placements"), body(
+                        "searchId", searchId, "candidateId", candidateId, "startDate", "2026-01-05", "baseSalary", 180000)))
+                .andExpect(status().isCreated()).andReturn());
+    }
+
     // Recruiting flow -----------------------------------------------------------
 
     @Test

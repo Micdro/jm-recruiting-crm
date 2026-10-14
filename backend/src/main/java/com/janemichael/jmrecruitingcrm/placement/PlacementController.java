@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.placement;
 
+import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.InvoiceRequest;
+import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.NextInvoiceNumber;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementRequest;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementResponse;
 import jakarta.validation.Valid;
@@ -45,6 +47,18 @@ public class PlacementController {
     @PutMapping("/{id}")
     public PlacementResponse update(@PathVariable Long id, @Valid @RequestBody PlacementRequest request) {
         return placementService.update(id, request);
+    }
+
+    /** The number to suggest for a new invoice. */
+    @GetMapping("/next-invoice-number")
+    public NextInvoiceNumber nextInvoiceNumber() {
+        return new NextInvoiceNumber(placementService.nextInvoiceNumber());
+    }
+
+    /** Saves the invoice details and marks the placement invoiced. The PDF is made in the browser. */
+    @PutMapping("/{id}/invoice")
+    public PlacementResponse invoice(@PathVariable Long id, @Valid @RequestBody InvoiceRequest request) {
+        return placementService.invoice(id, request);
     }
 
     @DeleteMapping("/{id}")

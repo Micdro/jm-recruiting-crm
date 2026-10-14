@@ -4,6 +4,7 @@ import { api, errorMessage } from '../api.js';
 import { useUndoableDelete } from '../undo.js';
 import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
 import ExportButton from '../components/ExportButton.jsx';
+import InvoiceForm from '../components/InvoiceForm.jsx';
 import Modal from '../components/Modal.jsx';
 import PlacementForm from '../forms/PlacementForm.jsx';
 import { INVOICE_STATUS } from '../labels.js';
@@ -16,6 +17,7 @@ export default function PlacementsPage() {
   const undoable = useUndoableDelete();
   const placements = useLoader(() => api.placements.list(), [], 'placements');
   const [editing, setEditing] = useState(null);
+  const [invoicing, setInvoicing] = useState(null);
 
   const list = placements.data ?? [];
   const year = new Date().getFullYear();
@@ -98,7 +100,7 @@ export default function PlacementsPage() {
                       {placement.feePercent && <span className="cell-sub">{percent(placement.feePercent)}</span>}
                     </td>
                     <td>
-                      <Pill value={placement.invoiceStatus} labels={INVOICE_STATUS} />
+                      <InvoiceCell placement={placement} today={today} onInvoice={() => setInvoicing(placement)} />
                     </td>
                     <td>
                       {placement.guaranteeEndDate ? (
@@ -114,6 +116,24 @@ export default function PlacementsPage() {
           </table>
           <p className="table-count">Select a row to update the invoice or dates.</p>
         </div>
+      )}
+
+      {invoicing && (
+        <Modal
+          title={invoicing.invoiceNumber ? `Invoice ${invoicing.invoiceNumber}` : `Invoice for ${invoicing.candidateName}`}
+          onClose={() => setInvoicing(null)}
+          wide
+        >
+          <InvoiceForm
+            placement={invoicing}
+            onCancel={() => setInvoicing(null)}
+            onDone={(saved) => {
+              setInvoicing(null);
+              toast(`Invoice ${saved.invoiceNumber} saved and downloaded. Send it to ${saved.billToEmail || saved.billToName}.`);
+              placements.reload();
+            }}
+          />
+        </Modal>
       )}
 
       {editing && (
@@ -136,5 +156,38 @@ export default function PlacementsPage() {
         </Modal>
       )}
     </>
+  );
+}
+
+/** The invoice's status, its number (which reopens it) or a button to make one, and whether it's late. */
+function InvoiceCell({ placement, today, onInvoice }) {
+  const open = (event) => {
+    event.stopPropagation();
+    onInvoice();
+  };
+  const overdue =
+    placement.invoiceStatus === 'INVOICED' && placement.invoiceDueDate && placement.invoiceDueDate < today;
+  return (
+    <div className="invoice-cell">
+      <Pill value={placement.invoiceStatus} labels={INVOICE_STATUS} />
+      {placement.invoiceNumber ? (
+        <button type="button" className="link-button" onClick={open}>
+          Invoice {placement.invoiceNumber}
+        </button>
+      ) : (
+        placement.invoiceStatus === 'NOT_INVOICED' &&
+        placement.feeAmount != null && (
+          <button type="button" className="btn btn-sm" onClick={open}>
+            Create invoice
+          </button>
+        )
+      )}
+      {overdue ? (
+        <span className="invoice-overdue">Overdue since {formatDate(placement.invoiceDueDate)}</span>
+      ) : (
+        placement.invoiceStatus === 'INVOICED' &&
+        placement.invoiceDueDate && <span className="cell-sub">Due {formatDate(placement.invoiceDueDate)}</span>
+      )}
+    </div>
   );
 }

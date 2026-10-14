@@ -29,6 +29,11 @@ public interface PlacementRepository extends JpaRepository<Placement, Long> {
 
     boolean existsBySearchIdAndCandidateIdAndIdNot(Long searchId, Long candidateId, Long id);
 
+    boolean existsByInvoiceNumberAndIdNot(String invoiceNumber, Long id);
+
+    @Query("select p.invoiceNumber from Placement p where p.invoiceNumber like concat(:prefix, '%')")
+    List<String> findInvoiceNumbersStartingWith(@Param("prefix") String prefix);
+
     @Query("select p.candidate.id from Placement p where p.search.id = :searchId")
     List<Long> findCandidateIdsForSearch(@Param("searchId") Long searchId);
 

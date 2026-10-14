@@ -210,8 +210,15 @@ public class DashboardService {
                 .map(PlacementResponse::from)
                 .toList();
 
+        List<PlacementResponse> overdueInvoices = placements.stream()
+                .filter(placement -> placement.getInvoiceStatus() == Placement.InvoiceStatus.INVOICED)
+                .filter(placement -> placement.effectiveDueDate() != null && placement.effectiveDueDate().isBefore(today))
+                .sorted(Comparator.comparing(Placement::effectiveDueDate))
+                .map(PlacementResponse::from)
+                .toList();
+
         return new PlacementSummary(placementsThisYear, feesThisYear, collectedThisYear, outstanding,
-                guaranteesEndingSoon);
+                guaranteesEndingSoon, overdueInvoices);
     }
 
     private static boolean ownedBy(AppUser owner, AppUser me) {
@@ -236,7 +243,9 @@ public class DashboardService {
             BigDecimal feesThisYear,
             BigDecimal collectedThisYear,
             BigDecimal outstanding,
-            List<PlacementResponse> guaranteesEndingSoon
+            List<PlacementResponse> guaranteesEndingSoon,
+            /** Sent and unpaid past their due date, oldest first. */
+            List<PlacementResponse> overdueInvoices
     ) {
     }
 

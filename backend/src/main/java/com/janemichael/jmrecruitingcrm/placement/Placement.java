@@ -73,6 +73,29 @@ public class Placement extends Auditable {
     @Convert(converter = EncryptedString.class)
     private String notes;
 
+    @Column(name = "invoice_number")
+    private String invoiceNumber;
+
+    /** When the invoice is due. Older invoices without one are due 30 days after they were sent. */
+    @Column(name = "invoice_due_date")
+    private LocalDate invoiceDueDate;
+
+    @Column(name = "bill_to_name")
+    @Convert(converter = EncryptedString.class)
+    private String billToName;
+
+    @Column(name = "bill_to_email")
+    @Convert(converter = EncryptedString.class)
+    private String billToEmail;
+
+    @Column(name = "bill_to_address")
+    @Convert(converter = EncryptedString.class)
+    private String billToAddress;
+
+    @Column(name = "invoice_description")
+    @Convert(converter = EncryptedString.class)
+    private String invoiceDescription;
+
     public Long getId() {
         return id;
     }
@@ -167,5 +190,61 @@ public class Placement extends Auditable {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    /** The due date, or for an invoice sent without one, 30 days after it was sent. */
+    public LocalDate effectiveDueDate() {
+        if (invoiceDueDate != null) {
+            return invoiceDueDate;
+        }
+        return invoiceDate == null ? null : invoiceDate.plusDays(30);
+    }
+
+    public String getInvoiceNumber() {
+        return invoiceNumber;
+    }
+
+    public void setInvoiceNumber(String invoiceNumber) {
+        this.invoiceNumber = invoiceNumber;
+    }
+
+    public LocalDate getInvoiceDueDate() {
+        return invoiceDueDate;
+    }
+
+    public void setInvoiceDueDate(LocalDate invoiceDueDate) {
+        this.invoiceDueDate = invoiceDueDate;
+    }
+
+    public String getBillToName() {
+        return billToName;
+    }
+
+    public void setBillToName(String billToName) {
+        this.billToName = billToName;
+    }
+
+    public String getBillToEmail() {
+        return billToEmail;
+    }
+
+    public void setBillToEmail(String billToEmail) {
+        this.billToEmail = billToEmail;
+    }
+
+    public String getBillToAddress() {
+        return billToAddress;
+    }
+
+    public void setBillToAddress(String billToAddress) {
+        this.billToAddress = billToAddress;
+    }
+
+    public String getInvoiceDescription() {
+        return invoiceDescription;
+    }
+
+    public void setInvoiceDescription(String invoiceDescription) {
+        this.invoiceDescription = invoiceDescription;
     }
 }
