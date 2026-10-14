@@ -1,7 +1,5 @@
 package com.janemichael.jmrecruitingcrm.company;
 
-import com.janemichael.jmrecruitingcrm.trash.TrashKind;
-import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
@@ -15,6 +13,8 @@ import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

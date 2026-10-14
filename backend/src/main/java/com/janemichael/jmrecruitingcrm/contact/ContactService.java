@@ -1,7 +1,5 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
-import com.janemichael.jmrecruitingcrm.trash.TrashKind;
-import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -17,6 +15,8 @@ import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

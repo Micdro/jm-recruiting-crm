@@ -1,13 +1,13 @@
 package com.janemichael.jmrecruitingcrm.candidate;
 
-import com.janemichael.jmrecruitingcrm.trash.TrashKind;
-import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity;
+import com.janemichael.jmrecruitingcrm.trash.TrashKind;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;

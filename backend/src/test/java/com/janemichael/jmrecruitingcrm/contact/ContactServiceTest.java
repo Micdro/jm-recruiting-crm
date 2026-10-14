@@ -1,6 +1,5 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
-import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -13,6 +12,7 @@ import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
+import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
