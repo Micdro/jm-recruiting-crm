@@ -578,8 +578,12 @@ class ApiIntegrationTest {
 
         mockMvc.perform(signedIn(delete(files + "/" + fileId))).andExpect(status().isNoContent());
         mockMvc.perform(signedIn(get(files + "/" + fileId))).andExpect(status().isNotFound());
+        // The contents are kept while the file is in the Trash, so it can be restored.
         assertThat(jdbc.queryForObject("SELECT count(*) FROM file_blob WHERE blob_key = ?", Long.class, row.get("blob_key")))
-                .isZero();
+                .isEqualTo(1L);
+        mockMvc.perform(signedIn(get("/api/trash")))
+                .andExpect(jsonPath("$[0].kind").value("FILE"))
+                .andExpect(jsonPath("$[0].label").value("Priya Resume.pdf"));
     }
 
     @Test
