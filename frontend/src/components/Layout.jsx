@@ -18,6 +18,7 @@ const NAV = [
 
 const TOOLS = [
   { to: '/templates', label: 'Templates' },
+  { to: '/linkedin', label: 'Add from LinkedIn' },
   { to: '/import', label: 'Import' },
   { to: '/export', label: 'Export' },
   { to: '/team', label: 'Team' },

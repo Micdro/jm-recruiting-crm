@@ -2154,6 +2154,64 @@ a.cell-title:hover {
   color: var(--ink-3);
 }
 
+/* Add from LinkedIn ---------------------------------------------------------------- */
+
+.linkedin-steps li {
+  margin-bottom: 12px;
+}
+
+.linkedin-steps kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--paper);
+  font: inherit;
+  font-size: 13px;
+}
+
+.bookmarklet {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #ffffff;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: grab;
+}
+
+.bookmarklet:hover {
+  color: #ffffff;
+  background: #234b70;
+}
+
+.bookmarklet-hint {
+  display: block;
+  margin-top: 8px;
+}
+
+.linkedin-capture {
+  display: grid;
+  gap: 12px;
+}
+
+.linkedin-capture h2 {
+  font-size: 19px;
+}
+
+.linkedin-capture p {
+  margin-top: 2px;
+}
+
+.linkedin-company {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 /* Quick search (Ctrl+K) ---------------------------------------------------------- */
 
 .search-trigger {

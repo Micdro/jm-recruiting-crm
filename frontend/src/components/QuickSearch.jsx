@@ -16,6 +16,7 @@ const PAGES = [
   { title: 'Placements', path: '/placements' },
   { title: 'Numbers', path: '/numbers' },
   { title: 'Templates', path: '/templates' },
+  { title: 'Add from LinkedIn', path: '/linkedin' },
   { title: 'Import', path: '/import' },
   { title: 'Export', path: '/export' },
   { title: 'Team', path: '/team' },
