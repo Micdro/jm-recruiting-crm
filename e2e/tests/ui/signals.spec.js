@@ -27,5 +27,9 @@ test.describe('Hiring signals', () => {
     await expect(page.getByRole('heading', { name: 'Hiring signals', level: 1 })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Check boards now' })).toBeVisible();
     await expect(page.getByRole('radio', { name: /New roles/ })).toBeChecked();
+
+    await page.getByRole('link', { name: 'How to set up' }).click();
+    await expect(page.getByRole('heading', { name: 'Setting up hiring signals', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Add a board by hand' })).toBeVisible();
   });
 });

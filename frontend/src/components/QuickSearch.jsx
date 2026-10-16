@@ -12,6 +12,7 @@ const PAGES = [
   { title: 'Contacts', path: '/contacts' },
   { title: 'Companies', path: '/companies' },
   { title: 'Hiring signals', path: '/signals' },
+  { title: 'Hiring signals guide', path: '/signals/guide' },
   { title: 'Searches', path: '/searches' },
   { title: 'Candidates', path: '/candidates' },
   { title: 'Placements', path: '/placements' },

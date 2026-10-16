@@ -2963,6 +2963,37 @@ a.cell-title:hover {
   margin-top: 4px;
 }
 
+.guide p {
+  margin: 0 0 10px;
+  line-height: 1.55;
+}
+
+.guide p:last-child {
+  margin-bottom: 0;
+}
+
+.guide-steps li,
+.guide-notes li {
+  line-height: 1.55;
+}
+
+.guide-steps li + li,
+.guide-notes li + li {
+  margin-top: 10px;
+}
+
+.guide-notes {
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.guide code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--grey-soft);
+  font-size: 13px;
+}
+
 .board-form .form-actions {
   align-items: center;
 }

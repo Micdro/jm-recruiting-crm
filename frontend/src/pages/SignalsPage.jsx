@@ -88,6 +88,9 @@ export default function SignalsPage() {
         title="Hiring signals"
         sub="Open forward deployed and AI platform roles at companies in the CRM, from their Greenhouse, Lever and Ashby job boards."
       >
+        <Link to="/signals/guide" className="btn btn-quiet">
+          How to set up
+        </Link>
         <button type="button" className="btn" disabled={Boolean(running)} onClick={() => startJob('find')}>
           Find job boards
         </button>
@@ -200,7 +203,7 @@ function NothingYet({ overview, view, hasAny, onFind }) {
       <Empty title="No job boards on file yet">
         <p>
           Find job boards looks up each company’s Greenhouse, Lever or Ashby board from its website and name. You can
-          also paste a board link on a company’s page.
+          also paste a board link on a company’s page. <Link to="/signals/guide">Read the setup guide</Link>.
         </p>
         {!overview.running && (
           <button type="button" className="btn btn-sm" onClick={onFind}>
