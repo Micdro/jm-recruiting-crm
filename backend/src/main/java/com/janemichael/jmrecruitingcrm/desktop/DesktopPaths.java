@@ -28,6 +28,23 @@ public final class DesktopPaths {
         return Path.of(System.getProperty("user.home"), ".jmcrm");
     }
 
+    /**
+     * Where the Windows app belongs: %LOCALAPPDATA%\Programs\JM CRM, a folder no cloud service syncs.
+     * Updates move the app here when it was unzipped somewhere that keeps its files busy (OneDrive,
+     * Google Drive). JMCRM_INSTALL_DIR or -Djmcrm.install-dir overrides it, which tests use.
+     */
+    public static Path installFolder() {
+        String override = setting("jmcrm.install-dir", "JMCRM_INSTALL_DIR");
+        if (override != null) {
+            return Path.of(override);
+        }
+        String localAppData = System.getenv("LOCALAPPDATA");
+        Path base = localAppData != null && !localAppData.isBlank()
+                ? Path.of(localAppData)
+                : Path.of(System.getProperty("user.home"), "AppData", "Local");
+        return base.resolve("Programs").resolve("JM CRM");
+    }
+
     public static int port(String property, String environment, int fallback) {
         String value = setting(property, environment);
         if (value == null) {

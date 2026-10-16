@@ -72,8 +72,14 @@ public final class DesktopLauncher {
         instanceLock = FileChannel.open(home.resolve("app.lock"),
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE).tryLock();
         if (instanceLock == null || alreadyRunning(uiPort)) {
-            if (openBrowser && waitUntilRunning(uiPort, Duration.ofMinutes(3))) {
-                DesktopOs.openBrowser(url);
+            if (openBrowser) {
+                if (waitUntilRunning(uiPort, Duration.ofMinutes(3))) {
+                    DesktopOs.openBrowser(url);
+                } else {
+                    // The other copy holds on but never answers: say so rather than vanish.
+                    closeSplash();
+                    DesktopStartupError.notResponding();
+                }
             }
             closeSplash();
             return;
@@ -123,9 +129,15 @@ public final class DesktopLauncher {
         tray.setDaemon(true);
         tray.start();
 
-        if (!settings.shortcutsCreated()) {
-            DesktopOs.createShortcuts();
-            settings.markShortcutsCreated();
+        // Shortcuts follow the app: made on the first start, and pointed at its new place if it moved.
+        String exe = DesktopOs.executable();
+        if (exe != null && !exe.equalsIgnoreCase(settings.shortcutsTarget())) {
+            if (settings.shortcutsCreated()) {
+                DesktopOs.repointShortcuts();
+            } else {
+                DesktopOs.createShortcuts();
+            }
+            settings.saveShortcutsTarget(exe);
         }
         if (openBrowser) {
             DesktopOs.openBrowser(url);

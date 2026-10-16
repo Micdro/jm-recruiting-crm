@@ -60,6 +60,19 @@ public final class DesktopOs {
         waitFor(runPowerShell(shortcutScript("Programs", exe, "") + shortcutScript("Desktop", exe, ""), false));
     }
 
+    /**
+     * After the app moved: points the shortcuts that exist (Start menu, desktop, start with Windows)
+     * at it. Ones the person removed stay removed.
+     */
+    public static void repointShortcuts() {
+        String exe = executable();
+        if (!isWindows() || exe == null) {
+            return;
+        }
+        waitFor(runPowerShell(existingShortcutScript("Programs", exe, "") + existingShortcutScript("Desktop", exe, "")
+                + existingShortcutScript("Startup", exe, "--background"), false));
+    }
+
     public static boolean startsWithWindows() {
         return isWindows() && Files.exists(startupShortcut());
     }
@@ -158,6 +171,11 @@ public final class DesktopOs {
                 + "$s.WorkingDirectory = '" + quote(directory) + "'; "
                 + "$s.IconLocation = '" + quote(exe) + "'; "
                 + "$s.Save(); ";
+    }
+
+    private static String existingShortcutScript(String folder, String exe, String arguments) {
+        return "if (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('" + folder + "')) '"
+                + APP_NAME + ".lnk')) { " + shortcutScript(folder, exe, arguments) + "} ";
     }
 
     private static String quote(String value) {

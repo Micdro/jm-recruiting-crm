@@ -20,8 +20,10 @@ the same way if you'd rather use it.
 
 1. Download **JM-CRM-Windows.zip** from the repository's Releases page (the `windows-latest`
    release). Share the file with the others however you like (Drive, email, a USB stick).
-2. Unzip it somewhere permanent, such as `Documents\JM CRM`. Don't run it from the Downloads
-   preview: the shortcuts point at wherever it is when you first open it.
+2. Unzip it into `%LOCALAPPDATA%\Programs` (paste that into File Explorer's address bar), so the
+   app ends up in `%LOCALAPPDATA%\Programs\JM CRM`. Don't unzip it into OneDrive, Google Drive or
+   Dropbox (or a Documents folder that OneDrive backs up): they keep the app's files busy while they
+   sync them, which gets in the way of updates. Don't run it from the Downloads preview either.
 3. Open **JM CRM.exe** in that folder. A small "Starting" window shows while it loads (the first
    start takes up to a minute while it creates the database).
 4. Windows may say "Windows protected your PC", because the app isn't signed with a paid
@@ -126,7 +128,9 @@ usually within a minute or two.
 
 The CRM checks for a new version every few hours. When one is ready, a strip at the top of the page
 says so: click **Update now**. It downloads the new version, restarts in about a minute, and you
-sign in again. Your data and settings aren't touched. **This computer** shows each computer's
+sign in again. Your data and settings aren't touched. A copy that was unzipped into OneDrive or
+Google Drive moves itself to `%LOCALAPPDATA%\Programs\JM CRM` as it updates, and its shortcuts
+follow. **This computer** shows each computer's
 version and points out any that need updating, so update the others when they offer it too.
 
 Copies installed before October 12, 2026 can't update themselves yet. Update those once by hand:
@@ -152,4 +156,6 @@ on the others once the folder is shared with them.
   click **Change** and choose it again.
 
 Logs are in `%LOCALAPPDATA%\JMCRM\logs`. If the app won't start, it shows a message and writes
-`startup-error.txt` there.
+`startup-error.txt` there. If it stays on "Starting" and then says JM CRM isn't responding, open Task
+Manager (Ctrl+Shift+Esc), end **JM CRM**, and open it again. `update.log` there shows what each
+update did.

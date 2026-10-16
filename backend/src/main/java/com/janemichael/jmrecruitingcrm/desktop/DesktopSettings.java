@@ -26,6 +26,7 @@ public class DesktopSettings {
     private static final String LEGACY_KEY = "encryption.key";
     private static final String SYNC_TOKEN = "sync.token";
     private static final String SHORTCUTS = "shortcuts.created";
+    private static final String SHORTCUTS_TARGET = "shortcuts.target";
     private static final String REMINDER_ENABLED = "reminder.enabled";
     private static final String REMINDER_TIME = "reminder.time";
     private static final String REMINDER_EMAIL = "reminder.email";
@@ -66,8 +67,16 @@ public class DesktopSettings {
         return Boolean.parseBoolean(values.getProperty(SHORTCUTS, "false"));
     }
 
-    public void markShortcutsCreated() {
-        change(properties -> properties.setProperty(SHORTCUTS, "true"));
+    /** The .exe the shortcuts point at, or null if a version that didn't record it made them. */
+    public String shortcutsTarget() {
+        return value(SHORTCUTS_TARGET);
+    }
+
+    public void saveShortcutsTarget(String exe) {
+        change(properties -> {
+            properties.setProperty(SHORTCUTS, "true");
+            properties.setProperty(SHORTCUTS_TARGET, exe);
+        });
     }
 
     /** On unless turned off on the This computer page. */
