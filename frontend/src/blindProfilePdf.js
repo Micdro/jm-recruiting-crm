@@ -1,6 +1,6 @@
 // A one-page (or longer) candidate profile without the candidate's identity, for a client.
 // Loaded only when a profile is made.
-import { GREEN, INK_2, INK_3, MARGIN, PAGE, RIGHT, createPdf, fileName, longDate, savePdf } from './pdfText.js';
+import { BRAND, GOLD, INK_2, INK_3, MARGIN, PAGE, RIGHT, createPdf, fileName, longDate, savePdf } from './pdfText.js';
 
 const BOTTOM = MARGIN + 40; // room for the footer
 
@@ -11,24 +11,22 @@ const BOTTOM = MARGIN + 40; // room for the footer
  */
 export async function profilePdf({ firm, profile }) {
   const pdf = await createPdf({ title: `Candidate profile ${profile.reference}`, author: firm.firmName });
-  const { doc, bold, regular, draw, wrap, rule } = pdf;
+  const { doc, bold, regular, draw, wrap, rule, letterhead } = pdf;
   const contentWidth = RIGHT - MARGIN;
 
   // The firm and the reference, top.
-  let y = PAGE.height - MARGIN - 10;
-  draw(firm.firmName, MARGIN, y, { font: bold, size: 13 });
-  draw('Candidate profile', RIGHT, y - 2, { font: bold, size: 20, color: GREEN, align: 'right' });
-  y -= 16;
+  const top = PAGE.height - MARGIN - 10;
+  draw('Candidate profile', RIGHT, top - 2, { font: bold, size: 20, color: BRAND, align: 'right' });
+  draw(`Ref. ${profile.reference}   ${longDate(profile.date)}`, RIGHT, top - 26, { size: 9, color: INK_3, align: 'right' });
+  let y = letterhead(firm.firmName);
   const contact = [firm.website, firm.email, firm.phone].filter(Boolean).join('   ');
   if (contact) draw(contact, MARGIN, y, { size: 9, color: INK_3 });
-  y -= 2;
-  draw(`Ref. ${profile.reference}   ${longDate(profile.date)}`, RIGHT, y - 8, { size: 9, color: INK_3, align: 'right' });
-  y -= 22;
+  y -= 24;
   if (profile.preparedFor) {
     draw(`Prepared for ${profile.preparedFor}`, MARGIN, y, { color: INK_2 });
     y -= 14;
   }
-  rule(y, GREEN, 1.5);
+  rule(y, GOLD, 1.5);
   y -= 32;
 
   // Who they are, without saying who.
@@ -71,7 +69,7 @@ export async function profilePdf({ firm, profile }) {
     if (!text || !text.trim()) return;
     y -= 10;
     room(40);
-    draw(heading, MARGIN, y, { font: bold, size: 11, color: GREEN });
+    draw(heading, MARGIN, y, { font: bold, size: 11, color: BRAND });
     y -= 18;
     for (const line of wrap(text, regular, 10.5, contentWidth)) {
       room(14.5);

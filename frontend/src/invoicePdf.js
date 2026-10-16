@@ -1,5 +1,5 @@
 // Makes the invoice PDF for a placement, in the browser. Loaded only when an invoice is made.
-import { GREEN, INK_2, INK_3, MARGIN, PAGE, RIGHT, createPdf, fileName, longDate, savePdf } from './pdfText.js';
+import { BRAND, GOLD, INK_2, INK_3, MARGIN, PAGE, RIGHT, createPdf, fileName, longDate, savePdf } from './pdfText.js';
 
 export { longDate };
 
@@ -20,12 +20,15 @@ export function invoiceFileName(invoiceNumber, companyName) {
  */
 export async function invoicePdf({ firm, invoice, placement }) {
   const pdf = await createPdf({ title: `Invoice ${invoice.invoiceNumber}`, author: firm.firmName });
-  const { doc, regular, bold, draw, wrap, rule, width } = pdf;
+  const { doc, regular, bold, draw, wrap, rule, width, letterhead } = pdf;
 
   // From: the firm, top left.
-  let y = PAGE.height - MARGIN - 10;
-  draw(firm.firmName, MARGIN, y, { font: bold, size: 16 });
-  y -= 18;
+  // Under the logo, the firm's name: the invoice is from the company, by its legal name.
+  let y = letterhead(firm.firmName, 16);
+  if (pdf.hasLogo) {
+    draw(firm.firmName, MARGIN, y, { font: bold, size: 11 });
+    y -= 14;
+  }
   const contact = [firm.email, firm.phone, firm.website].filter(Boolean).join('   ');
   for (const line of [...wrap(firm.address ?? '', regular, 10, 250), ...(contact ? [contact] : [])].filter(Boolean)) {
     draw(line, MARGIN, y, { color: INK_2 });
@@ -35,7 +38,7 @@ export async function invoicePdf({ firm, invoice, placement }) {
 
   // The invoice's own details, top right.
   let right = PAGE.height - MARGIN - 12;
-  draw('Invoice', RIGHT, right, { font: bold, size: 24, color: GREEN, align: 'right' });
+  draw('Invoice', RIGHT, right, { font: bold, size: 24, color: BRAND, align: 'right' });
   right -= 26;
   for (const [label, value] of [
     ['Invoice number', invoice.invoiceNumber],
@@ -48,7 +51,7 @@ export async function invoicePdf({ firm, invoice, placement }) {
   }
 
   y = Math.min(fromBottom, right) - 18;
-  rule(y, GREEN, 1.5);
+  rule(y, GOLD, 1.5);
 
   // Bill to.
   y -= 26;

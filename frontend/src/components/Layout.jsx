@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth, useDesktop } from '../hooks.js';
+import logo from '../assets/jm-logo-reversed.png';
 import { shortcutLabel } from '../quickSearch.js';
 import QuickSearch from './QuickSearch.jsx';
 import SyncBadge from './SyncBadge.jsx';
@@ -57,7 +58,7 @@ export default function Layout() {
       <header className="sidebar">
         <div className="sidebar-top">
           <NavLink to="/" className="brand" end>
-            <span className="brand-name">Jane Michael</span>
+            <img className="brand-logo" src={logo} alt="Jane Michael AI Talent Search" width="168" height="32" />
             <span className="brand-sub">Recruiting CRM</span>
           </NavLink>
           <button

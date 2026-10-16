@@ -30,7 +30,7 @@ import { toIsoDate } from './format.js';
 const DATE = 'mmm d, yyyy';
 const DATE_TIME = 'mmm d, yyyy h:mm AM/PM';
 const MONEY = '"$"#,##0';
-const HEADER = { fontWeight: 'bold', backgroundColor: '#E2EFEA', bottomBorderStyle: 'thin', bottomBorderColor: '#1D6B57' };
+const HEADER = { fontWeight: 'bold', backgroundColor: '#E6EEF7', bottomBorderStyle: 'thin', bottomBorderColor: '#004080' };
 
 /** A YYYY-MM-DD date as Excel stores it (a day, no time zone). */
 function day(iso) {
