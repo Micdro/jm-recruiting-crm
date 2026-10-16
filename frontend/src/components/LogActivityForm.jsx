@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { ACTION_TYPE, ACTIVITY_TYPE, LOGGABLE_TYPES, MAX_TOUCHES, OUTREACH_TYPES, options } from '../labels.js';
 import { addBusinessDays, formatWeekday, todayIso } from '../format.js';
+import { revisitDate } from '../later.js';
 import { useUndoableChange } from '../undo.js';
 import { ErrorNote } from './Bits.jsx';
 import { SelectField, TextArea, TextField } from './Fields.jsx';
@@ -27,7 +28,9 @@ function preview(kind, record, type, today) {
       return { blocked: 'This contact already has 4 touches. Restart the sequence to reach out again.' };
     }
     if (touch === MAX_TOUCHES) {
-      return { text: `Touch 4 of 4. The sequence ends and ${firstName} moves to No response.` };
+      return {
+        text: `Touch 4 of 4. The sequence ends and ${firstName} moves to No response, back on Today ${formatWeekday(revisitDate(today))} to restart.`,
+      };
     }
     return { text: `Touch ${touch} of 4. Next touch ${formatWeekday(addBusinessDays(today, 3))}.` };
   }

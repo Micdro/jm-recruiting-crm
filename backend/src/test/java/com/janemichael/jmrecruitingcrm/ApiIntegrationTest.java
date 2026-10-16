@@ -8,6 +8,7 @@ import com.janemichael.jmrecruitingcrm.common.EncryptionBackfill;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.KeyWrap;
 import com.janemichael.jmrecruitingcrm.common.Later;
+import com.janemichael.jmrecruitingcrm.contact.ContactService;
 import com.janemichael.jmrecruitingcrm.desktop.MorningReminder;
 import com.janemichael.jmrecruitingcrm.pipeline.Interviews;
 import com.jayway.jsonpath.JsonPath;
@@ -1072,6 +1073,59 @@ class ApiIntegrationTest {
                     request.setRemoteAddr(address);
                     return request;
                 });
+    }
+
+    // Revisits after a sequence with no reply -----------------------------------------
+
+    @Test
+    void aSequenceWithNoReplyComesBackToTodayToRestart() throws Exception {
+        LocalDate today = LocalDate.now(clock);
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Revisit Test Bank AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long contactId = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Revisit Contact", "companyId", companyId)))
+                .andExpect(status().isCreated()).andReturn());
+
+        for (int touch = 1; touch <= 3; touch++) {
+            mockMvc.perform(send(post("/api/contacts/" + contactId + "/activities"), body("type", "LINKEDIN")))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(send(post("/api/contacts/" + contactId + "/activities"), body("type", "LINKEDIN")))
+                .andExpect(jsonPath("$.status").value("NO_RESPONSE"))
+                .andExpect(jsonPath("$.nextActionDate").value(ContactService.revisitDate(today).toString()))
+                .andExpect(jsonPath("$.nextActionType").value("LINKEDIN"));
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.contactsDue[?(@.id == " + contactId + ")]").isEmpty());
+
+        // Ninety days on, it's back on Today.
+        entityManager.flush();
+        jdbc.update("UPDATE contact SET next_action_date = ? WHERE id = ?", today, contactId);
+        entityManager.clear();
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.contactsDue[?(@.id == " + contactId + ")].status").value(hasItem("NO_RESPONSE")));
+
+        // Restart from the queue starts touch 1 today, and can be undone.
+        mockMvc.perform(signedIn(post("/api/contacts/" + contactId + "/restart-sequence")))
+                .andExpect(jsonPath("$.status").value("NEW"))
+                .andExpect(jsonPath("$.touchCount").value(0))
+                .andExpect(jsonPath("$.nextActionDate").value(today.toString()));
+        mockMvc.perform(signedIn(post("/api/contacts/" + contactId + "/undo")))
+                .andExpect(jsonPath("$.status").value("NO_RESPONSE"))
+                .andExpect(jsonPath("$.touchCount").value(4));
+
+        // A bulk restart sends them back to New with nothing scheduled, for Pull in to pace.
+        mockMvc.perform(send(post("/api/contacts/bulk"), body("ids", List.of(contactId), "action", "RESTART")))
+                .andExpect(jsonPath("$.changed").value(1));
+        mockMvc.perform(signedIn(get("/api/contacts/" + contactId)))
+                .andExpect(jsonPath("$.status").value("NEW"))
+                .andExpect(jsonPath("$.touchCount").value(0))
+                .andExpect(jsonPath("$.nextActionDate").value(nullValue()));
+        mockMvc.perform(send(post("/api/contacts/bulk"), body("ids", List.of(contactId), "action", "RESTART")))
+                .andExpect(jsonPath("$.changed").value(0))
+                .andExpect(jsonPath("$.skipped[0].reason").value("Not started yet"));
+        mockMvc.perform(send(post("/api/contacts/fill-queue"), body("count", 1)))
+                .andExpect(jsonPath("$.scheduled").value(1));
+        mockMvc.perform(signedIn(get("/api/contacts/" + contactId)))
+                .andExpect(jsonPath("$.nextActionDate").value(today.toString()));
     }
 
     // Guarantee check-ins ----------------------------------------------------------

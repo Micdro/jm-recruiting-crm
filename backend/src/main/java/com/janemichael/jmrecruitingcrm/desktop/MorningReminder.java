@@ -39,7 +39,7 @@ public class MorningReminder {
 
     /** What's due for one person today. {@code waiting}: new contacts not yet in anyone's queue. */
     public record Counts(int touches, int replies, int followUps, int candidates, int companies, int waiting,
-                         int interviews, int debriefs, int checkIns) {
+                         int interviews, int debriefs, int checkIns, int restarts) {
     }
 
     public record Message(String title, String body) {
@@ -160,7 +160,10 @@ public class MorningReminder {
                   (SELECT count(*) FROM contact WHERE owner_id = :user AND next_action_date <= :today
                      AND status = 'REPLIED') AS replies,
                   (SELECT count(*) FROM contact WHERE owner_id = :user AND next_action_date <= :today
-                     AND status NOT IN ('NEW', 'IN_SEQUENCE', 'REPLIED', 'NOT_INTERESTED', 'DO_NOT_CONTACT')) AS follow_ups,
+                     AND status NOT IN ('NEW', 'IN_SEQUENCE', 'REPLIED', 'NO_RESPONSE', 'NOT_INTERESTED', 'DO_NOT_CONTACT'))
+                     AS follow_ups,
+                  (SELECT count(*) FROM contact WHERE owner_id = :user AND next_action_date <= :today
+                     AND status = 'NO_RESPONSE') AS restarts,
                   (SELECT count(*) FROM candidate WHERE owner_id = :user AND next_action_date <= :today
                      AND status <> 'DO_NOT_CONTACT') AS candidates,
                   (SELECT count(*) FROM company WHERE owner_id = :user AND follow_up_date <= :today) AS companies,
@@ -187,12 +190,13 @@ public class MorningReminder {
                 """, params, (row, number) -> new Counts(
                 row.getInt("touches"), row.getInt("replies"), row.getInt("follow_ups"),
                 row.getInt("candidates"), row.getInt("companies"), row.getInt("waiting"),
-                row.getInt("interviews"), row.getInt("debriefs"), row.getInt("check_ins")));
+                row.getInt("interviews"), row.getInt("debriefs"), row.getInt("check_ins"),
+                row.getInt("restarts")));
         return compose(counts, dailyTouchTarget);
     }
 
     static Message compose(Counts counts, int target) {
-        int contacts = counts.touches() + counts.replies() + counts.followUps();
+        int contacts = counts.touches() + counts.replies() + counts.followUps() + counts.restarts();
         List<String> others = new ArrayList<>();
         if (counts.candidates() > 0) {
             others.add(count(counts.candidates(), "candidate", "candidates"));
@@ -231,6 +235,9 @@ public class MorningReminder {
             }
             if (counts.followUps() > 0) {
                 parts.add(count(counts.followUps(), "follow-up", "follow-ups"));
+            }
+            if (counts.restarts() > 0) {
+                parts.add(count(counts.restarts(), "sequence", "sequences") + " to restart");
             }
             sentences.add(join(parts) + ".");
         }

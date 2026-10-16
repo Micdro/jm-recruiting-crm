@@ -102,6 +102,16 @@ export default function ContactsPage() {
         >
           Add to today
         </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={bulk.busy}
+          onClick={() =>
+            bulk.run({ action: 'RESTART' }, (count) => `Restarted ${count}. Pull in on Today adds them a few companies at a time.`)
+          }
+        >
+          Restart sequence
+        </button>
         <ConfirmButton
           label="Delete"
           confirmLabel={`Delete ${selection.count}`}

@@ -45,6 +45,11 @@ public class ContactService {
     public static final int MAX_SEQUENCE_TOUCHES = 4;
     public static final int TOUCH_GAP_BUSINESS_DAYS = 3;
     public static final int MAX_FILL_QUEUE = 100;
+    /**
+     * Days after a sequence ends with no reply before the contact comes back to Today, ready to
+     * restart: long enough not to pester, short enough that budgets and teams will have moved on.
+     */
+    public static final int REVISIT_DAYS = 90;
 
     /** The channel for each touch in the cold sequence. The firm reaches out on LinkedIn only. */
     public static final List<ActionType> SEQUENCE_CHANNELS =
@@ -83,6 +88,15 @@ public class ContactService {
     public static ActionType channelForTouch(int touchesSent) {
         int index = Math.max(0, Math.min(touchesSent, SEQUENCE_CHANNELS.size() - 1));
         return SEQUENCE_CHANNELS.get(index);
+    }
+
+    /** When a contact whose sequence ended on this day comes back to Today: 90 days on, never a weekend. */
+    public static LocalDate revisitDate(LocalDate sequenceEnded) {
+        LocalDate date = sequenceEnded.plusDays(REVISIT_DAYS);
+        while (date.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || date.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            date = date.plusDays(1);
+        }
+        return date;
     }
 
     public List<ContactResponse> list(Long companyId, OutreachStatus status, Long ownerId, boolean dueOnly, String q) {
@@ -300,14 +314,18 @@ public class ContactService {
             throw new ConflictException("This contact is marked Do not contact");
         }
 
+        AppUser user = currentUserService.get();
+        OutreachState before = OutreachState.of(contact);
         OutreachStatus previousStatus = contact.getStatus();
         contact.setTouchCount(0);
         contact.setStatus(OutreachStatus.NEW);
         contact.setNextActionDate(LocalDate.now(clock));
         contact.setNextActionType(channelForTouch(0));
 
-        activityLogger.forContact(contact, ActivityType.STATUS_CHANGE, false,
-                "Sequence restarted (was " + Labels.of(previousStatus) + ")", currentUserService.get());
+        Activity activity = activityLogger.forContact(contact, ActivityType.STATUS_CHANGE, false,
+                "Sequence restarted (was " + Labels.of(previousStatus) + ")", user);
+        // Restarting from Today's queue is one click, so it can be undone like a touch.
+        rememberChange(contact, user, activity, before);
 
         return ContactResponse.from(contact);
     }
@@ -400,7 +418,9 @@ public class ContactService {
 
         if (sequenceTouch) {
             if (sequenceFinished) {
-                clearNextAction(contact);
+                // No reply after four touches: back on Today in 90 days, ready to restart.
+                contact.setNextActionDate(revisitDate(today));
+                contact.setNextActionType(ActionType.LINKEDIN);
             } else {
                 contact.setNextActionDate(BusinessDays.add(today, TOUCH_GAP_BUSINESS_DAYS));
                 contact.setNextActionType(request.nextActionType() != null

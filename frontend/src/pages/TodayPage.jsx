@@ -319,15 +319,14 @@ function CheckIns({ data, scope, onCheckIn }) {
 
 /** What logging a touch did, for the confirmation. */
 function touchLoggedMessage(contact, updated, type) {
+  if (type !== 'REPLY' && updated.status === 'NO_RESPONSE' && contact.status !== 'NO_RESPONSE') {
+    const back = updated.nextActionDate ? ` Back on Today ${formatWeekday(updated.nextActionDate)} to restart.` : '';
+    return `Touch 4 of 4 logged for ${contact.name}. Sequence complete.${back}`;
+  }
   const next = updated.nextActionDate
     ? ` Next: ${ACTION_TYPE[updated.nextActionType] ?? 'Follow-up'} on ${formatWeekday(updated.nextActionDate)}.`
     : '';
-  const what =
-    type === 'REPLY'
-      ? `Reply logged for ${contact.name}.`
-      : updated.status === 'NO_RESPONSE' && contact.status !== 'NO_RESPONSE'
-        ? `Touch 4 of 4 logged for ${contact.name}. Sequence complete.`
-        : `${ACTIVITY_TYPE[type]} logged for ${contact.name}.`;
+  const what = type === 'REPLY' ? `Reply logged for ${contact.name}.` : `${ACTIVITY_TYPE[type]} logged for ${contact.name}.`;
   return what + next;
 }
 
@@ -344,6 +343,21 @@ function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
     try {
       const updated = await api.contacts.logActivity(contact.id, { type });
       offerUndo('contacts', contact.id, touchLoggedMessage(contact, updated, type), onChanged);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** A contact back after a sequence with no reply: a fresh four touches, the first due today. */
+  async function restart(contact) {
+    setBusyId(contact.id);
+    setError('');
+    try {
+      await api.contacts.restartSequence(contact.id);
+      offerUndo('contacts', contact.id, `Restarted ${contact.name}'s sequence. Touch 1 is due today.`, onChanged);
       onChanged();
     } catch (err) {
       setError(errorMessage(err));
@@ -428,6 +442,8 @@ function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
             const cold = contact.status === 'NEW' || contact.status === 'IN_SEQUENCE';
             const capped =
               (cold && contact.touchCount >= MAX_TOUCHES) || contact.status === 'NO_RESPONSE' || contact.status === 'NOT_INTERESTED';
+            // Back 90 days after a sequence with no reply, ready to restart.
+            const revisit = contact.status === 'NO_RESPONSE';
             return (
               <li key={contact.id} className="queue-row" data-testid="queue-contact">
                 <div className="queue-who">
@@ -450,32 +466,50 @@ function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
                   )}
                   <span className="queue-due">
                     <DueTag date={contact.nextActionDate} today={data.today} />
-                    {contact.nextActionType && <span className="queue-type">{ACTION_TYPE[contact.nextActionType]}</span>}
+                    {revisit ? (
+                      <span className="queue-type">Revisit</span>
+                    ) : (
+                      contact.nextActionType && <span className="queue-type">{ACTION_TYPE[contact.nextActionType]}</span>
+                    )}
                   </span>
                   {scope === 'team' && contact.ownerName && <span className="queue-owner">{contact.ownerName}</span>}
                 </div>
                 <div className="queue-actions">
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    disabled={capped || contact.status === 'DO_NOT_CONTACT'}
-                    onClick={() => onWrite(contact)}
-                    aria-label={`Write a message to ${contact.name}`}
-                  >
-                    Write
-                  </button>
-                  {QUICK_TYPES.map((type) => (
+                  {revisit ? (
                     <button
-                      key={type}
                       type="button"
-                      className={`btn btn-sm ${contact.nextActionType === type ? 'btn-suggested' : ''}`}
-                      disabled={busyId === contact.id || capped}
-                      onClick={() => quickLog(contact, type)}
-                      aria-label={`Log ${ACTIVITY_TYPE[type]} for ${contact.name}`}
+                      className="btn btn-sm btn-suggested"
+                      disabled={busyId === contact.id}
+                      onClick={() => restart(contact)}
+                      aria-label={`Restart the sequence for ${contact.name}`}
                     >
-                      {ACTIVITY_TYPE[type]}
+                      Restart
                     </button>
-                  ))}
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={capped || contact.status === 'DO_NOT_CONTACT'}
+                        onClick={() => onWrite(contact)}
+                        aria-label={`Write a message to ${contact.name}`}
+                      >
+                        Write
+                      </button>
+                      {QUICK_TYPES.map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          className={`btn btn-sm ${contact.nextActionType === type ? 'btn-suggested' : ''}`}
+                          disabled={busyId === contact.id || capped}
+                          onClick={() => quickLog(contact, type)}
+                          aria-label={`Log ${ACTIVITY_TYPE[type]} for ${contact.name}`}
+                        >
+                          {ACTIVITY_TYPE[type]}
+                        </button>
+                      ))}
+                    </>
+                  )}
                   <button
                     type="button"
                     className="btn btn-sm"

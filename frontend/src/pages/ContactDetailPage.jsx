@@ -127,7 +127,11 @@ export default function ContactDetailPage() {
                 <dt>Next action</dt>
                 <dd>
                   <DueTag date={record.nextActionDate} today={todayIso()} />
-                  {record.nextActionType && record.nextActionDate && <span className="cell-sub">{ACTION_TYPE[record.nextActionType]}</span>}
+                  {record.nextActionType && record.nextActionDate && (
+                    <span className="cell-sub">
+                      {record.status === 'NO_RESPONSE' ? 'Revisit: restart the sequence' : ACTION_TYPE[record.nextActionType]}
+                    </span>
+                  )}
                 </dd>
               </div>
               <div>

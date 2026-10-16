@@ -111,8 +111,32 @@ class ContactServiceTest {
 
         assertThat(response.touchCount()).isEqualTo(4);
         assertThat(response.status()).isEqualTo(OutreachStatus.NO_RESPONSE);
-        assertThat(response.nextActionDate()).isNull();
-        assertThat(response.nextActionType()).isNull();
+        // Back on Today in 90 days to restart: Wednesday, October 14 plus 90 days is Tuesday, January 12.
+        assertThat(response.nextActionDate()).isEqualTo(LocalDate.of(2027, 1, 12));
+        assertThat(response.nextActionType()).isEqualTo(ActionType.LINKEDIN);
+    }
+
+    @Test
+    void aRevisitNeverFallsOnAWeekend() {
+        // Sunday, October 18 plus 90 days is a Saturday, so the revisit moves to Monday.
+        assertThat(ContactService.revisitDate(LocalDate.of(2026, 10, 18))).isEqualTo(LocalDate.of(2027, 1, 18));
+        assertThat(ContactService.revisitDate(TODAY)).isEqualTo(LocalDate.of(2027, 1, 12));
+    }
+
+    @Test
+    void restartingFromTodayCanBeUndone() {
+        Contact contact = contact(OutreachStatus.NO_RESPONSE, 4);
+        contact.setNextActionDate(TODAY);
+        contact.setNextActionType(ActionType.LINKEDIN);
+
+        contactService.restartSequence(1L);
+        assertThat(contact.getStatus()).isEqualTo(OutreachStatus.NEW);
+
+        ContactResponse undone = contactService.undo(1L);
+        assertThat(undone.status()).isEqualTo(OutreachStatus.NO_RESPONSE);
+        assertThat(undone.touchCount()).isEqualTo(4);
+        assertThat(undone.nextActionDate()).isEqualTo(TODAY);
+        verify(activityLogger).remove(100L);
     }
 
     @Test

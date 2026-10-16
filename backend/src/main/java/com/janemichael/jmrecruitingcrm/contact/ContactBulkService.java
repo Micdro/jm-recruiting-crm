@@ -38,7 +38,11 @@ import java.util.stream.Collectors;
 @Transactional
 public class ContactBulkService {
 
-    public enum Action { OWNER, STATUS, TODAY, DELETE }
+    /**
+     * RESTART puts contacts back to New with no touches and nothing scheduled, so Pull in on Today
+     * adds them a few companies at a time rather than all at once.
+     */
+    public enum Action { OWNER, STATUS, TODAY, RESTART, DELETE }
 
     /** ownerId is the new owner for OWNER (null for unassigned); status is the new status for STATUS. */
     public record Request(
@@ -52,9 +56,11 @@ public class ContactBulkService {
     }
 
     /** The fields a bulk action can change, kept so Undo can put them back. */
-    record State(OutreachStatus status, Long ownerId, LocalDate nextActionDate, ActionType nextActionType) {
+    record State(OutreachStatus status, int touchCount, Long ownerId, LocalDate nextActionDate,
+                 ActionType nextActionType) {
         static State of(Contact contact) {
-            return new State(contact.getStatus(), contact.getOwner() == null ? null : contact.getOwner().getId(),
+            return new State(contact.getStatus(), contact.getTouchCount(),
+                    contact.getOwner() == null ? null : contact.getOwner().getId(),
                     contact.getNextActionDate(), contact.getNextActionType());
         }
     }
@@ -117,6 +123,7 @@ public class ContactBulkService {
                 case OWNER -> sameOwner(contact.getOwner(), owner) ? alreadyOwned(owner) : null;
                 case STATUS -> contact.getStatus() == request.status() ? "Already " + Labels.of(request.status()) : null;
                 case TODAY -> whyNotToday(contact, today);
+                case RESTART -> whyNotRestart(contact);
                 case DELETE -> throw new IllegalStateException();
             };
             if (reason != null) {
@@ -143,6 +150,14 @@ public class ContactBulkService {
                     if (contact.getOwner() == null) {
                         contact.setOwner(user);
                     }
+                }
+                case RESTART -> {
+                    contact.setTouchCount(0);
+                    contact.setStatus(OutreachStatus.NEW);
+                    contact.setNextActionDate(null);
+                    contact.setNextActionType(null);
+                    activityId = activityLogger.forContact(contact, ActivityType.STATUS_CHANGE, false,
+                            "Sequence restarted (was " + Labels.of(before.status()) + ")", user).getId();
                 }
                 case DELETE -> throw new IllegalStateException();
             }
@@ -193,6 +208,7 @@ public class ContactBulkService {
             }
             State before = item.before();
             contact.setStatus(before.status());
+            contact.setTouchCount(before.touchCount());
             contact.setOwner(before.ownerId() == null ? null
                     : owners.computeIfAbsent(before.ownerId(), currentUserService::findOwner));
             contact.setNextActionDate(before.nextActionDate());
@@ -231,6 +247,13 @@ public class ContactBulkService {
         }
         if (contact.getCompany().getStatus() == CompanyStatus.AI_FOUND) return "Company not reviewed yet";
         if (contact.getNextActionDate() != null && !contact.getNextActionDate().isAfter(today)) return "Already due";
+        return null;
+    }
+
+    /** Why a contact's sequence can't be restarted, or null if it can. */
+    static String whyNotRestart(Contact contact) {
+        if (contact.getStatus() == OutreachStatus.DO_NOT_CONTACT) return "Marked Do not contact";
+        if (contact.getStatus() == OutreachStatus.NEW && contact.getTouchCount() == 0) return "Not started yet";
         return null;
     }
 

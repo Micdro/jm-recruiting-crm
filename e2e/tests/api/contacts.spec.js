@@ -69,7 +69,10 @@ test.describe('Contacts API', () => {
 
     await test.step('touch 4 ends the sequence', async () => {
       const response = await log({ type: 'CALL', notes: 'Left a voicemail' });
-      expect(await response.json()).toMatchObject({ touchCount: 4, status: 'NO_RESPONSE', nextActionDate: null });
+      const body = await response.json();
+      expect(body).toMatchObject({ touchCount: 4, status: 'NO_RESPONSE', nextActionType: 'LINKEDIN' });
+      // Back on Today in 90 days (moved off a weekend) to restart.
+      expect(body.nextActionDate >= isoDate(89) && body.nextActionDate <= isoDate(93)).toBeTruthy();
     });
 
     await test.step('a fifth touch is refused', async () => {

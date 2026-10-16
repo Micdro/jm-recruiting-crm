@@ -1,6 +1,30 @@
 import { test, expect, isoDate, laterFrom } from '../support/fixtures.js';
 
 test.describe('Today', () => {
+  test('restarts a sequence that came back with no reply, and undoes it', async ({ page, crm }) => {
+    const company = await crm.createCompany();
+    const contact = await crm.createContact(company.id, {
+      status: 'NO_RESPONSE',
+      nextActionDate: isoDate(0),
+      nextActionType: 'LINKEDIN',
+    });
+
+    await page.goto('/');
+    const row = page.getByTestId('queue-contact').filter({ hasText: contact.name });
+    await expect(row).toContainText('Revisit');
+    await expect(row.getByRole('button', { name: `Write a message to ${contact.name}` })).toHaveCount(0);
+
+    await row.getByRole('button', { name: `Restart the sequence for ${contact.name}` }).click();
+    const toast = page.locator('.toast-region');
+    await expect(toast).toContainText(`Restarted ${contact.name}'s sequence. Touch 1 is due today.`);
+    await expect(row).toContainText('Touch 1');
+    expect(await crm.getJson(`/api/contacts/${contact.id}`)).toMatchObject({ status: 'NEW', touchCount: 0, nextActionDate: isoDate(0) });
+
+    await toast.getByRole('button', { name: 'Undo' }).click();
+    await expect(row).toContainText('Revisit');
+    expect((await crm.getJson(`/api/contacts/${contact.id}`)).status).toBe('NO_RESPONSE');
+  });
+
   test('undoes a touch logged by mistake', async ({ page, crm }) => {
     const company = await crm.createCompany();
     const contact = await crm.createContact(company.id, { nextActionDate: isoDate(0), nextActionType: 'LINKEDIN' });
