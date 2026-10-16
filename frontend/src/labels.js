@@ -17,6 +17,7 @@ export const OUTREACH_STATUS = {
 
 /** The client stages, in the order a company moves through them (as in ClickUp's client list). */
 export const COMPANY_STATUS = {
+  AI_FOUND: 'AI found',
   LEAD: 'Lead',
   INITIAL_OUTREACH: 'Initial outreach',
   ENGAGED: 'Engaged',
@@ -260,6 +261,7 @@ const TONES = {
   NOT_INTERESTED: 'muted',
   DO_NOT_CONTACT: 'bad',
 
+  AI_FOUND: 'warn',
   LEAD: 'plain',
   INITIAL_OUTREACH: 'progress',
   DISCOVERY_SCHEDULED: 'warn',

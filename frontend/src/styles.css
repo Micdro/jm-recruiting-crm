@@ -3049,6 +3049,129 @@ a.cell-title:hover {
   font-size: 14px;
 }
 
+/* AI Found -------------------------------------------------------------------------- */
+
+.finder-line {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.finder-line strong {
+  color: var(--ink);
+}
+
+.finder-line + .finder-line,
+.finder-status .warn-note + .finder-line {
+  margin-top: 6px;
+}
+
+.prospect-list {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.prospect-list > .panel + .panel {
+  margin-top: 0;
+}
+
+.prospect-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.prospect-head h2 {
+  font-size: 18px;
+}
+
+.prospect-meta {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+.prospect-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.prospect-focus {
+  margin-top: 12px;
+  max-width: 72ch;
+}
+
+.prospect-why {
+  margin-top: 8px;
+  max-width: 72ch;
+  padding: 8px 12px;
+  border-left: 3px solid var(--green);
+  background: var(--green-soft);
+}
+
+.prospect-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.prospect-tags .tag {
+  margin-left: 0;
+}
+
+.prospect-people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prospect-people li {
+  display: grid;
+  grid-template-columns: minmax(10em, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 8px 0;
+  border-top: 1px solid var(--rule);
+  font-size: 15px;
+}
+
+.prospect-people li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.prospect-person {
+  font-weight: 500;
+}
+
+.prospect-reach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+
+.finder-form {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.waiting-note {
+  margin-bottom: 12px;
+}
+
+@media (max-width: 560px) {
+  .prospect-people li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast {
     animation: none;

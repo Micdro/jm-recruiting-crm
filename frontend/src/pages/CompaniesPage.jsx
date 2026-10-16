@@ -7,7 +7,7 @@ import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.
 import Modal from '../components/Modal.jsx';
 import CompanyForm from '../forms/CompanyForm.jsx';
 import { COMPANY_STATUS, INDUSTRY, PARKED_COMPANY_STAGES, PRIORITY, SEGMENT, options } from '../labels.js';
-import { todayIso } from '../format.js';
+import { plural, todayIso } from '../format.js';
 import { matchesQuery, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
 import { offLimitsLabel } from '../offLimits.js';
 
@@ -34,10 +34,13 @@ export default function CompaniesPage() {
   const showParked = filters.get('parked') === 'true' || PARKED_COMPANY_STAGES.includes(status);
   const today = todayIso();
 
+  const waiting = (companies.data ?? []).filter((company) => company.status === 'AI_FOUND').length;
   const rows = (companies.data ?? []).filter(
     (company) =>
       (!status || company.status === status) &&
       (showParked || !PARKED_COMPANY_STAGES.includes(company.status)) &&
+      // Companies the prospect finder found wait on the AI Found page until someone accepts them.
+      (status === 'AI_FOUND' || company.status !== 'AI_FOUND') &&
       (!priority || company.priority === priority) &&
       (!industry || company.industry === industry) &&
       (!segment || (company.segments ?? []).includes(segment)) &&
@@ -74,6 +77,12 @@ export default function CompaniesPage() {
 
       {companies.error && <ErrorNote>{errorMessage(companies.error)}</ErrorNote>}
       {!companies.data && companies.loading && <Loading label="Loading companies" />}
+      {waiting > 0 && status !== 'AI_FOUND' && (
+        <p className="panel-meta waiting-note">
+          {plural(waiting, 'company', 'companies')} found by the prospect finder {waiting === 1 ? 'is' : 'are'} waiting for review on{' '}
+          <Link to="/prospects">AI Found</Link>.
+        </p>
+      )}
 
       {companies.data && rows.length === 0 && (
         <Empty title={companies.data.length === 0 ? 'No companies yet' : 'No companies match these filters'}>

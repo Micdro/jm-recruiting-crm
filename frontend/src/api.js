@@ -178,6 +178,18 @@ export const api = {
     invoiceSettings: () => get('/api/firm/invoice-settings'),
     saveInvoiceSettings: (body) => put('/api/firm/invoice-settings', body),
   },
+  prospects: {
+    status: () => get('/api/prospects'),
+    summary: () => get('/api/prospects/summary'),
+    companies: () => get('/api/prospects/companies'),
+    run: () => post('/api/prospects/run'),
+    saveKey: (apiKey) => put('/api/prospects/key', { apiKey }),
+    removeKey: () => del('/api/prospects/key'),
+    saveSettings: (body) => put('/api/prospects/settings', body),
+    runHere: () => post('/api/prospects/run-here'),
+    accept: (id) => post(`/api/prospects/companies/${id}/accept`),
+    dismiss: (id) => post(`/api/prospects/companies/${id}/dismiss`),
+  },
   templates: crud('/api/templates'),
   signals: {
     list: () => get('/api/signals'),

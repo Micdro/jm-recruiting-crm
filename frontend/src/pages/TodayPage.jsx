@@ -92,6 +92,7 @@ export default function TodayPage() {
             </div>
 
             <aside className="today-side">
+              <NewProspects />
               <OpenSearches searches={data.openSearches} />
               <Money placements={data.placements} />
               <section className="panel">
@@ -628,6 +629,28 @@ function Money({ placements }) {
           </ul>
         </>
       )}
+    </section>
+  );
+}
+
+/** Companies the prospect finder found that nobody has reviewed yet. Hidden when there are none. */
+function NewProspects() {
+  const summary = useLoader(() => api.prospects.summary(), [], 'prospects:summary');
+  const data = summary.data;
+  if (!data || (data.waiting === 0 && !data.running)) return null;
+  return (
+    <section className="panel" aria-labelledby="new-prospects">
+      <div className="panel-head">
+        <h2 id="new-prospects">AI Found</h2>
+        <Link to="/prospects" className="panel-link">
+          Review
+        </Link>
+      </div>
+      <p className="panel-meta">
+        {data.waiting > 0
+          ? `${plural(data.waiting, 'new company', 'new companies')} found on the web, waiting for you to accept or dismiss.`
+          : 'Searching the web for new prospects now.'}
+      </p>
     </section>
   );
 }
