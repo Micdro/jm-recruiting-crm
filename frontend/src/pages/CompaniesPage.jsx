@@ -1,17 +1,24 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
-import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
+import { ConfirmButton, DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
+import { BulkBar, RowBox, SelectAllBox, SkippedNote } from '../components/Bulk.jsx';
+import { ownerChoices, useBulkAction } from '../bulk.js';
+import ChoiceMenu from '../components/ChoiceMenu.jsx';
 import ExportButton from '../components/ExportButton.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
 import CompanyForm from '../forms/CompanyForm.jsx';
 import { COMPANY_STATUS, INDUSTRY, PARKED_COMPANY_STAGES, PRIORITY, SEGMENT, options } from '../labels.js';
 import { plural, todayIso } from '../format.js';
-import { matchesQuery, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
+import { matchesQuery, useAuth, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
 import { offLimitsLabel } from '../offLimits.js';
+import { useSelection } from '../selection.js';
 
 const PAGE_SIZE = 200;
+const NOUN = ['company', 'companies'];
+// AI found is set by the prospect finder, so it isn't offered as a stage to move companies to.
+const STAGE_CHOICES = options(COMPANY_STATUS).filter((stage) => stage.value !== 'AI_FOUND');
 
 export default function CompaniesPage() {
   useTitle('Companies');
@@ -19,6 +26,7 @@ export default function CompaniesPage() {
   const toast = useToast();
   const companies = useLoader(() => api.companies.list(), [], 'companies');
   const users = useUsers();
+  const { user: me } = useAuth();
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -48,6 +56,9 @@ export default function CompaniesPage() {
       (!due || (company.followUpDate && company.followUpDate <= today)) &&
       matchesQuery(q, company.name, company.focus, company.location, company.website),
   );
+  const selection = useSelection(rows);
+  const bulk = useBulkAction('companies', NOUN, selection, companies.reload);
+  const owners = ownerChoices(users, me);
 
   return (
     <>
@@ -75,6 +86,56 @@ export default function CompaniesPage() {
         <FilterCheck label="Show parked" checked={showParked} onChange={filters.set('parked')} />
       </div>
 
+      <SkippedNote skipped={bulk.skipped} noun={NOUN} onDismiss={bulk.dismiss} />
+      <BulkBar selection={selection} noun={NOUN} busy={bulk.busy} error={bulk.error}>
+        <ChoiceMenu
+          label="Owner"
+          buttonLabel="Change owner"
+          groupLabel="Change owner to"
+          buttonClass="btn btn-sm"
+          disabled={bulk.busy}
+          choices={owners}
+          onPick={(ownerId) => {
+            const name = owners.find((choice) => choice.value === ownerId)?.label.replace(' (you)', '');
+            bulk.run({ action: 'OWNER', ownerId }, (count) => `${count} now ${ownerId ? `owned by ${name}` : 'unassigned'}.`);
+          }}
+        />
+        <ChoiceMenu
+          label="Stage"
+          buttonLabel="Change stage"
+          groupLabel="Move to stage"
+          buttonClass="btn btn-sm"
+          disabled={bulk.busy}
+          choices={STAGE_CHOICES}
+          onPick={(status) => bulk.run({ action: 'STAGE', status }, (count) => `${count} moved to ${COMPANY_STATUS[status]}.`)}
+        />
+        <ChoiceMenu
+          label="Priority"
+          buttonLabel="Change priority"
+          groupLabel="Set priority to"
+          buttonClass="btn btn-sm"
+          disabled={bulk.busy}
+          choices={options(PRIORITY)}
+          onPick={(priority) =>
+            bulk.run({ action: 'PRIORITY', priority }, (count) => `${count} set to ${PRIORITY[priority]} priority.`)
+          }
+        />
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={bulk.busy}
+          onClick={() => bulk.run({ action: 'FOLLOW_UP_TODAY' }, (count) => `${count} set to follow up today.`)}
+        >
+          Follow up today
+        </button>
+        <ConfirmButton
+          label="Delete"
+          confirmLabel={`Delete ${selection.count}`}
+          className="btn btn-sm btn-danger"
+          onConfirm={() => bulk.run({ action: 'DELETE' }, (count) => `Moved ${count} to the Trash.`)}
+        />
+      </BulkBar>
+
       {companies.error && <ErrorNote>{errorMessage(companies.error)}</ErrorNote>}
       {!companies.data && companies.loading && <Loading label="Loading companies" />}
       {waiting > 0 && status !== 'AI_FOUND' && (
@@ -96,6 +157,7 @@ export default function CompaniesPage() {
             <caption className="visually-hidden">Companies</caption>
             <thead>
               <tr>
+                <SelectAllBox selection={selection} total={rows.length} noun={NOUN} />
                 <th scope="col">Company</th>
                 <th scope="col">Stage</th>
                 <th scope="col">Priority</th>
@@ -107,7 +169,12 @@ export default function CompaniesPage() {
             </thead>
             <tbody>
               {rows.slice(0, limit).map((company) => (
-                <tr key={company.id} className="row-link" onClick={() => navigate(`/companies/${company.id}`)}>
+                <tr
+                  key={company.id}
+                  className={selection.has(company.id) ? 'row-link row-ticked' : 'row-link'}
+                  onClick={() => navigate(`/companies/${company.id}`)}
+                >
+                  <RowBox selection={selection} id={company.id} name={company.name} />
                   <td>
                     <Link to={`/companies/${company.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
                       {company.name}

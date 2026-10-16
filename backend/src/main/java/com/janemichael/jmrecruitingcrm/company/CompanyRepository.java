@@ -17,6 +17,10 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
     @Query("select c from Company c left join fetch c.owner where c.id = :id")
     Optional<Company> findWithOwnerById(@Param("id") Long id);
 
+    /** For bulk actions on the Companies list. */
+    @Query("select c from Company c left join fetch c.owner where c.id in :ids")
+    List<Company> findWithOwnerByIds(@Param("ids") java.util.Collection<Long> ids);
+
     boolean existsByNameHash(String nameHash);
 
     boolean existsByNameHashAndIdNot(String nameHash, Long id);

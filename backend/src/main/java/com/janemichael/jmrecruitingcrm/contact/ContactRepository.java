@@ -20,6 +20,10 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
     @Query("select c from Contact c join fetch c.company left join fetch c.owner where c.id = :id")
     Optional<Contact> findWithDetailsById(@Param("id") Long id);
 
+    /** For bulk actions on the Contacts list. */
+    @Query("select c from Contact c join fetch c.company left join fetch c.owner where c.id in :ids")
+    List<Contact> findWithDetailsByIds(@Param("ids") java.util.Collection<Long> ids);
+
     boolean existsByCompanyId(Long companyId);
 
     /** The people at these companies, for hiring signals. */

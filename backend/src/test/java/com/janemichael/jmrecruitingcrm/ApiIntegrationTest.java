@@ -1072,6 +1072,152 @@ class ApiIntegrationTest {
                 });
     }
 
+    // Bulk actions -----------------------------------------------------------------
+
+    @Test
+    void bulkActionsChangeManyContactsAtOnceAndUndoInOneStep() throws Exception {
+        AppUser teammate = new AppUser();
+        teammate.setEmail("bulk-teammate@jane-michael.test");
+        teammate.setDisplayName("Bulk Teammate");
+        teammate.setRole(UserRole.MEMBER);
+        teammate.setActive(true);
+        teammate.setPasswordHash(passwordEncoder.encode(PASSWORD));
+        long teammateId = userRepository.save(teammate).getId();
+        String today = LocalDate.now(clock).toString();
+
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Bulk Test Bank AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long first = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Bulk One", "companyId", companyId)))
+                .andExpect(status().isCreated()).andReturn());
+        long second = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Bulk Two", "companyId", companyId)))
+                .andExpect(status().isCreated()).andReturn());
+        long closed = id(mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Bulk Closed", "companyId", companyId, "status", "DO_NOT_CONTACT")))
+                .andExpect(status().isCreated()).andReturn());
+        List<Long> all = List.of(first, second, closed);
+
+        // Status: the one already at that status is left alone and named.
+        long undoStatus = undoId(mockMvc.perform(send(post("/api/contacts/bulk"), body(
+                        "ids", all, "action", "STATUS", "status", "DO_NOT_CONTACT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changed").value(2))
+                .andExpect(jsonPath("$.skipped[0].name").value("Bulk Closed"))
+                .andExpect(jsonPath("$.skipped[0].reason").value("Already Do not contact"))
+                .andReturn());
+        mockMvc.perform(signedIn(get("/api/contacts/" + first)))
+                .andExpect(jsonPath("$.status").value("DO_NOT_CONTACT"));
+        mockMvc.perform(signedIn(get("/api/activities").param("contactId", String.valueOf(first))))
+                .andExpect(jsonPath("$.length()").value(1));
+
+        mockMvc.perform(signedIn(post("/api/contacts/bulk/" + undoStatus + "/undo")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changed").value(2));
+        mockMvc.perform(signedIn(get("/api/contacts/" + first)))
+                .andExpect(jsonPath("$.status").value("NEW"));
+        mockMvc.perform(signedIn(get("/api/activities").param("contactId", String.valueOf(first))))
+                .andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(signedIn(post("/api/contacts/bulk/" + undoStatus + "/undo")))
+                .andExpect(status().isConflict());
+
+        // Owner, then unassigned.
+        mockMvc.perform(send(post("/api/contacts/bulk"), body(
+                        "ids", List.of(first, second), "action", "OWNER", "ownerId", teammateId)))
+                .andExpect(jsonPath("$.changed").value(2));
+        mockMvc.perform(signedIn(get("/api/contacts/" + second)))
+                .andExpect(jsonPath("$.ownerName").value("Bulk Teammate"));
+        mockMvc.perform(send(post("/api/contacts/bulk"), body("ids", List.of(first), "action", "OWNER", "ownerId", null)))
+                .andExpect(jsonPath("$.changed").value(1));
+
+        // Today: unassigned contacts become yours, as Pull in does; Do not contact is skipped.
+        mockMvc.perform(send(post("/api/contacts/bulk"), body("ids", all, "action", "TODAY")))
+                .andExpect(jsonPath("$.changed").value(2))
+                .andExpect(jsonPath("$.skipped[0].reason").value("Marked Do not contact"));
+        mockMvc.perform(signedIn(get("/api/contacts/" + first)))
+                .andExpect(jsonPath("$.nextActionDate").value(today))
+                .andExpect(jsonPath("$.nextActionType").value("LINKEDIN"))
+                .andExpect(jsonPath("$.ownerName").value("Integration Admin"));
+        mockMvc.perform(signedIn(get("/api/contacts/" + second)))
+                .andExpect(jsonPath("$.ownerName").value("Bulk Teammate"));
+        mockMvc.perform(send(post("/api/contacts/bulk"), body("ids", List.of(first), "action", "TODAY")))
+                .andExpect(jsonPath("$.changed").value(0))
+                .andExpect(jsonPath("$.skipped[0].reason").value("Already due"))
+                .andExpect(jsonPath("$.undoId").value(nullValue()));
+
+        // Delete goes to the Trash, and Undo brings them back.
+        long undoDelete = undoId(mockMvc.perform(send(post("/api/contacts/bulk"), body(
+                        "ids", List.of(first, second), "action", "DELETE")))
+                .andExpect(jsonPath("$.changed").value(2))
+                .andReturn());
+        mockMvc.perform(signedIn(get("/api/contacts/" + first))).andExpect(status().isNotFound());
+        mockMvc.perform(signedIn(post("/api/contacts/bulk/" + undoDelete + "/undo")))
+                .andExpect(jsonPath("$.changed").value(2));
+        mockMvc.perform(signedIn(get("/api/contacts/" + first)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Bulk One"));
+
+        // A status action needs a status, and something to act on.
+        mockMvc.perform(send(post("/api/contacts/bulk"), body("ids", List.of(first), "action", "STATUS")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(send(post("/api/contacts/bulk"), body("ids", List.of(), "action", "TODAY")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bulkActionsOnCompaniesLeaveAloneWhatCantChange() throws Exception {
+        String today = LocalDate.now(clock).toString();
+        long withContact = id(mockMvc.perform(send(post("/api/companies"), body("name", "Bulk Co With Contact AI")))
+                .andExpect(status().isCreated()).andReturn());
+        mockMvc.perform(send(post("/api/contacts"), body("name", "Bulk Co Person", "companyId", withContact)))
+                .andExpect(status().isCreated());
+        long empty = id(mockMvc.perform(send(post("/api/companies"), body("name", "Bulk Co Empty AI")))
+                .andExpect(status().isCreated()).andReturn());
+        List<Long> both = List.of(withContact, empty);
+
+        long undoStage = undoId(mockMvc.perform(send(post("/api/companies/bulk"), body(
+                        "ids", both, "action", "STAGE", "status", "DORMANT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changed").value(2))
+                .andReturn());
+        mockMvc.perform(signedIn(get("/api/companies/" + empty)))
+                .andExpect(jsonPath("$.status").value("DORMANT"));
+        mockMvc.perform(signedIn(post("/api/companies/bulk/" + undoStage + "/undo")))
+                .andExpect(jsonPath("$.changed").value(2));
+        mockMvc.perform(signedIn(get("/api/companies/" + empty)))
+                .andExpect(jsonPath("$.status").value("LEAD"));
+
+        mockMvc.perform(send(post("/api/companies/bulk"), body("ids", List.of(empty), "action", "PRIORITY", "priority", "URGENT")))
+                .andExpect(jsonPath("$.changed").value(1));
+        mockMvc.perform(signedIn(get("/api/companies/" + empty)))
+                .andExpect(jsonPath("$.priority").value("URGENT"));
+
+        mockMvc.perform(send(post("/api/companies/bulk"), body("ids", both, "action", "FOLLOW_UP_TODAY")))
+                .andExpect(jsonPath("$.changed").value(2));
+        mockMvc.perform(signedIn(get("/api/companies/" + withContact)))
+                .andExpect(jsonPath("$.followUpDate").value(today));
+        mockMvc.perform(send(post("/api/companies/bulk"), body("ids", both, "action", "FOLLOW_UP_TODAY")))
+                .andExpect(jsonPath("$.changed").value(0))
+                .andExpect(jsonPath("$.skipped.length()").value(2));
+
+        // Only the company with nothing in it is deleted.
+        long undoDelete = undoId(mockMvc.perform(send(post("/api/companies/bulk"), body("ids", both, "action", "DELETE")))
+                .andExpect(jsonPath("$.changed").value(1))
+                .andExpect(jsonPath("$.skipped[0].name").value("Bulk Co With Contact AI"))
+                .andExpect(jsonPath("$.skipped[0].reason").value(containsString("Has contacts")))
+                .andReturn());
+        mockMvc.perform(signedIn(get("/api/companies/" + empty))).andExpect(status().isNotFound());
+        mockMvc.perform(signedIn(post("/api/companies/bulk/" + undoDelete + "/undo")))
+                .andExpect(jsonPath("$.changed").value(1));
+        mockMvc.perform(signedIn(get("/api/companies/" + empty))).andExpect(status().isOk());
+
+        mockMvc.perform(send(post("/api/companies/bulk"), body("ids", both, "action", "STAGE")))
+                .andExpect(status().isBadRequest());
+    }
+
+    private static long undoId(MvcResult result) throws Exception {
+        Number undoId = JsonPath.read(result.getResponse().getContentAsString(), "$.undoId");
+        return undoId.longValue();
+    }
+
     // Undo and Later ---------------------------------------------------------------
 
     @Test

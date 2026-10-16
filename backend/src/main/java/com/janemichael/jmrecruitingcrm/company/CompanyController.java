@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.company;
 
 import com.janemichael.jmrecruitingcrm.common.Later;
+import com.janemichael.jmrecruitingcrm.common.BulkResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,9 +22,11 @@ import java.util.List;
 public class CompanyController {
 
     private final CompanyService companyService;
+    private final CompanyBulkService bulkService;
 
-    public CompanyController(CompanyService companyService) {
+    public CompanyController(CompanyService companyService, CompanyBulkService bulkService) {
         this.companyService = companyService;
+        this.bulkService = bulkService;
     }
 
     @GetMapping
@@ -66,5 +69,17 @@ public class CompanyController {
     @PostMapping("/{id}/undo")
     public CompanyResponse undo(@PathVariable Long id) {
         return companyService.undo(id);
+    }
+
+    /** Changes, schedules or deletes many companies at once (the bulk actions on the list). */
+    @PostMapping("/bulk")
+    public BulkResult bulk(@Valid @RequestBody CompanyBulkService.Request request) {
+        return bulkService.apply(request);
+    }
+
+    /** Undoes a bulk action from the last few minutes. */
+    @PostMapping("/bulk/{undoId}/undo")
+    public BulkResult undoBulk(@PathVariable long undoId) {
+        return bulkService.undo(undoId);
     }
 }

@@ -62,6 +62,34 @@ class RecentChangesTest {
     }
 
     @Test
+    void aBatchGetsItsOwnNumberAndCanBeTakenOnceByThePersonWhoMadeIt() {
+        long first = changes.rememberBatch(RecentChanges.Kind.CONTACT_BATCH, 7L, "first batch");
+        long second = changes.rememberBatch(RecentChanges.Kind.CONTACT_BATCH, 7L, "second batch");
+        assertThat(second).isNotEqualTo(first);
+
+        assertThatThrownBy(() -> changes.takeBatch(RecentChanges.Kind.CONTACT_BATCH, first, 8L, String.class))
+                .isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> changes.takeBatch(RecentChanges.Kind.COMPANY_BATCH, first, 7L, String.class))
+                .isInstanceOf(ConflictException.class);
+
+        assertThat(changes.takeBatch(RecentChanges.Kind.CONTACT_BATCH, first, 7L, String.class)).isEqualTo("first batch");
+        assertThatThrownBy(() -> changes.takeBatch(RecentChanges.Kind.CONTACT_BATCH, first, 7L, String.class))
+                .isInstanceOf(ConflictException.class);
+        assertThat(changes.takeBatch(RecentChanges.Kind.CONTACT_BATCH, second, 7L, String.class)).isEqualTo("second batch");
+    }
+
+    @Test
+    void batchesExpireLikeSingleChanges() {
+        long batch = changes.rememberBatch(RecentChanges.Kind.COMPANY_BATCH, 7L, "batch");
+
+        clock.advance(RecentChanges.WINDOW.plusSeconds(1));
+
+        assertThatThrownBy(() -> changes.takeBatch(RecentChanges.Kind.COMPANY_BATCH, batch, 7L, String.class))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage(RecentChanges.NOTHING_TO_UNDO);
+    }
+
+    @Test
     void tomorrowIsTheNextBusinessDay() {
         LocalDate wednesday = LocalDate.of(2026, 10, 14);
         LocalDate friday = LocalDate.of(2026, 10, 16);

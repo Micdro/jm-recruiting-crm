@@ -3,6 +3,7 @@ package com.janemichael.jmrecruitingcrm.contact;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
 import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.contact.ContactService.FillQueueResponse;
+import com.janemichael.jmrecruitingcrm.common.BulkResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -23,9 +24,11 @@ import java.util.List;
 public class ContactController {
 
     private final ContactService contactService;
+    private final ContactBulkService bulkService;
 
-    public ContactController(ContactService contactService) {
+    public ContactController(ContactService contactService, ContactBulkService bulkService) {
         this.contactService = contactService;
+        this.bulkService = bulkService;
     }
 
     @GetMapping
@@ -90,5 +93,17 @@ public class ContactController {
     }
 
     public record FillQueueRequest(Integer count) {
+    }
+
+    /** Changes, schedules or deletes many contacts at once (the bulk actions on the list). */
+    @PostMapping("/bulk")
+    public BulkResult bulk(@Valid @RequestBody ContactBulkService.Request request) {
+        return bulkService.apply(request);
+    }
+
+    /** Undoes a bulk action from the last few minutes. */
+    @PostMapping("/bulk/{undoId}/undo")
+    public BulkResult undoBulk(@PathVariable long undoId) {
+        return bulkService.undo(undoId);
     }
 }

@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
-import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore, TouchPips } from '../components/Bits.jsx';
+import { ConfirmButton, DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore, TouchPips } from '../components/Bits.jsx';
+import { BulkBar, RowBox, SelectAllBox, SkippedNote } from '../components/Bulk.jsx';
+import { ownerChoices, useBulkAction } from '../bulk.js';
+import ChoiceMenu from '../components/ChoiceMenu.jsx';
 import ExportButton from '../components/ExportButton.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
 import Modal from '../components/Modal.jsx';
@@ -9,11 +12,12 @@ import ContactForm from '../forms/ContactForm.jsx';
 import { ACTION_TYPE, BUYING_ROLE, OUTREACH_STATUS, options } from '../labels.js';
 import { todayIso } from '../format.js';
 import { matchesQuery, useAuth, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
+import { useSelection } from '../selection.js';
 
 const CLOSED = ['NOT_INTERESTED', 'DO_NOT_CONTACT'];
-
-
+const NOUN = ['contact', 'contacts'];
 const PAGE_SIZE = 200;
+
 export default function ContactsPage() {
   useTitle('Contacts');
   const navigate = useNavigate();
@@ -38,6 +42,9 @@ export default function ContactsPage() {
       (!due || (contact.nextActionDate && contact.nextActionDate <= today && !CLOSED.includes(contact.status))) &&
       matchesQuery(q, contact.name, contact.email, contact.title, contact.companyName),
   );
+  const selection = useSelection(rows);
+  const bulk = useBulkAction('contacts', NOUN, selection, contacts.reload);
+  const owners = ownerChoices(users, user);
 
   return (
     <>
@@ -64,6 +71,45 @@ export default function ContactsPage() {
         <FilterCheck label="Due now" checked={due} onChange={filters.set('due')} />
       </div>
 
+      <SkippedNote skipped={bulk.skipped} noun={NOUN} onDismiss={bulk.dismiss} />
+      <BulkBar selection={selection} noun={NOUN} busy={bulk.busy} error={bulk.error}>
+        <ChoiceMenu
+          label="Owner"
+          buttonLabel="Change owner"
+          groupLabel="Change owner to"
+          buttonClass="btn btn-sm"
+          disabled={bulk.busy}
+          choices={owners}
+          onPick={(ownerId) => {
+            const name = owners.find((choice) => choice.value === ownerId)?.label.replace(' (you)', '');
+            bulk.run({ action: 'OWNER', ownerId }, (count) => `${count} now ${ownerId ? `owned by ${name}` : 'unassigned'}.`);
+          }}
+        />
+        <ChoiceMenu
+          label="Status"
+          buttonLabel="Change status"
+          groupLabel="Change status to"
+          buttonClass="btn btn-sm"
+          disabled={bulk.busy}
+          choices={options(OUTREACH_STATUS)}
+          onPick={(status) => bulk.run({ action: 'STATUS', status }, (count) => `${count} set to ${OUTREACH_STATUS[status]}.`)}
+        />
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={bulk.busy}
+          onClick={() => bulk.run({ action: 'TODAY' }, (count) => `Added ${count} to today.`)}
+        >
+          Add to today
+        </button>
+        <ConfirmButton
+          label="Delete"
+          confirmLabel={`Delete ${selection.count}`}
+          className="btn btn-sm btn-danger"
+          onConfirm={() => bulk.run({ action: 'DELETE' }, (count) => `Moved ${count} to the Trash.`)}
+        />
+      </BulkBar>
+
       {contacts.error && <ErrorNote>{errorMessage(contacts.error)}</ErrorNote>}
       {!contacts.data && contacts.loading && <Loading label="Loading contacts" />}
 
@@ -83,6 +129,7 @@ export default function ContactsPage() {
             <caption className="visually-hidden">Contacts</caption>
             <thead>
               <tr>
+                <SelectAllBox selection={selection} total={rows.length} noun={NOUN} />
                 <th scope="col">Name</th>
                 <th scope="col">Company</th>
                 <th scope="col">Status</th>
@@ -93,7 +140,12 @@ export default function ContactsPage() {
             </thead>
             <tbody>
               {rows.slice(0, limit).map((contact) => (
-                <tr key={contact.id} className="row-link" onClick={() => navigate(`/contacts/${contact.id}`)}>
+                <tr
+                  key={contact.id}
+                  className={selection.has(contact.id) ? 'row-link row-ticked' : 'row-link'}
+                  onClick={() => navigate(`/contacts/${contact.id}`)}
+                >
+                  <RowBox selection={selection} id={contact.id} name={contact.name} />
                   <td>
                     <Link to={`/contacts/${contact.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
                       {contact.name}

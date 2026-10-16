@@ -132,6 +132,9 @@ export const api = {
     /** Moves the follow-up date: until is 'TOMORROW' (next business day) or 'NEXT_WEEK'. */
     snooze: (id, until) => post(`/api/companies/${id}/snooze`, { until }),
     undo: (id) => post(`/api/companies/${id}/undo`),
+    /** Bulk action on the list: { ids, action: OWNER | STAGE | PRIORITY | FOLLOW_UP_TODAY | DELETE, ... }. */
+    bulk: (body) => post('/api/companies/bulk', body),
+    undoBulk: (undoId) => post(`/api/companies/bulk/${undoId}/undo`),
   },
   contacts: {
     ...crud('/api/contacts'),
@@ -141,6 +144,9 @@ export const api = {
     snooze: (id, until) => post(`/api/contacts/${id}/snooze`, { until }),
     /** Undoes your last touch, reply, note or snooze on this contact, within a few minutes. */
     undo: (id) => post(`/api/contacts/${id}/undo`),
+    /** Bulk action on the list: { ids, action: OWNER | STATUS | TODAY | DELETE, ownerId, status }. */
+    bulk: (body) => post('/api/contacts/bulk', body),
+    undoBulk: (undoId) => post(`/api/contacts/bulk/${undoId}/undo`),
   },
   searches: {
     ...crud('/api/searches'),
