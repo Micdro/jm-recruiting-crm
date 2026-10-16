@@ -11,6 +11,7 @@ import ContactForm from '../forms/ContactForm.jsx';
 import SearchForm from '../forms/SearchForm.jsx';
 import {
   BUYING_ROLE,
+  CANDIDATE_STATUS,
   COMPANY_STATUS,
   HIRING_NEED,
   INDUSTRY,
@@ -25,6 +26,7 @@ import {
 } from '../labels.js';
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
+import { offLimitsLabel, offLimitsNote, sameCompany } from '../offLimits.js';
 
 export default function CompanyDetailPage() {
   const { id } = useParams();
@@ -66,6 +68,7 @@ export default function CompanyDetailPage() {
           <div className="page-sub page-sub-row">
             <Pill value={record.status} labels={COMPANY_STATUS} />
             <Pill value={record.priority} labels={PRIORITY} />
+            {record.offLimits && <span className="tag tag-warn">{offLimitsLabel(record)}</span>}
             {record.followUpDate && (
               <span>
                 Follow up <DueTag date={record.followUpDate} today={today} />
@@ -154,6 +157,8 @@ export default function CompanyDetailPage() {
             )}
           </section>
 
+          <WorksHere company={record} />
+
           <section className="panel">
             <div className="panel-head">
               <h2>Details</h2>
@@ -172,6 +177,7 @@ export default function CompanyDetailPage() {
                 { label: 'LinkedIn', value: record.linkedinProfile && <ExternalLink href={href(record.linkedinProfile)}>Company page</ExternalLink> },
                 { label: 'Location', value: record.location },
                 { label: 'Size', value: record.companySize },
+                { label: 'Off-limits until', value: record.offLimitsUntil && `${formatDate(record.offLimitsUntil)} (set by hand)` },
                 { label: 'Owner', value: record.ownerName ?? 'Unassigned' },
               ]}
             />
@@ -237,5 +243,37 @@ export default function CompanyDetailPage() {
         </Modal>
       )}
     </>
+  );
+}
+
+/** Candidates whose current employer is this company, and whether they're off-limits. */
+function WorksHere({ company }) {
+  const candidates = useLoader(() => api.candidates.list(), [], 'candidates');
+  const here = (candidates.data ?? []).filter((candidate) => sameCompany(company.name, candidate.currentCompany));
+  if (!company.offLimits && here.length === 0) return null;
+
+  return (
+    <section className="panel" aria-labelledby="company-works-here">
+      <div className="panel-head">
+        <h2 id="company-works-here">Candidates who work here</h2>
+      </div>
+      {company.offLimits && <p className="warn-note">{offLimitsNote(company)}</p>}
+      {candidates.data && here.length === 0 && <p className="muted">None of your candidates work here.</p>}
+      {here.length > 0 && (
+        <ul className="people">
+          {here.map((candidate) => (
+            <li key={candidate.id}>
+              <div>
+                <Link to={`/candidates/${candidate.id}`} className="cell-title">
+                  {candidate.name}
+                </Link>
+                <span className="cell-sub">{candidate.currentTitle}</span>
+              </div>
+              <Pill value={candidate.status} labels={CANDIDATE_STATUS} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

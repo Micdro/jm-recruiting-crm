@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { useLoader, useToast } from '../hooks.js';
 import { matchCandidates } from '../matching.js';
+import { candidateOffLimits } from '../offLimits.js';
 import { Empty, ErrorNote, Loading, ShowMore } from './Bits.jsx';
 
 const LEVEL_CLASS = { 'Strong match': 'match-strong', 'Good match': 'match-good-fit', 'Possible match': 'match-possible' };
@@ -18,15 +19,21 @@ const thinBrief = (search) =>
 export default function SearchMatches({ search, entries, onAdded, onEditBrief }) {
   const toast = useToast();
   const candidates = useLoader(() => api.candidates.list(), [], 'candidates');
+  const companies = useLoader(() => api.companies.list(), [], 'companies');
   const [shown, setShown] = useState(10);
   const [adding, setAdding] = useState(null);
   const [error, setError] = useState('');
 
   const inSearch = useMemo(() => new Set((entries ?? []).map((entry) => entry.candidateId)), [entries]);
-  const matches = useMemo(
-    () => matchCandidates(search, candidates.data, inSearch),
-    [search, candidates.data, inSearch],
-  );
+  // People at off-limits companies (this client among them) aren't suggested; they're named instead.
+  const { matches, leftOut } = useMemo(() => {
+    const all = matchCandidates(search, candidates.data, inSearch);
+    const blocked = (match) => candidateOffLimits(match.candidate, companies.data);
+    return {
+      matches: all.filter((match) => !blocked(match)),
+      leftOut: all.filter(blocked).map((match) => ({ candidate: match.candidate, company: blocked(match) })),
+    };
+  }, [search, candidates.data, companies.data, inSearch]);
 
   async function add(candidate) {
     setAdding(candidate.id);
@@ -61,7 +68,7 @@ export default function SearchMatches({ search, entries, onAdded, onEditBrief })
       )}
       <ErrorNote>{error}</ErrorNote>
       {matches.length === 0 ? (
-        <Empty title="No one in the CRM fits yet">
+        <Empty title={leftOut.length ? 'No one else in the CRM fits yet' : 'No one in the CRM fits yet'}>
           Nobody open to a move matches this brief. Add candidates you’ve mapped in the market, or from LinkedIn, and they show
           up here.
         </Empty>
@@ -97,6 +104,18 @@ export default function SearchMatches({ search, entries, onAdded, onEditBrief })
           </ol>
           <ShowMore shown={shown} total={matches.length} onMore={() => setShown((count) => count + 10)} />
         </>
+      )}
+      {leftOut.length > 0 && (
+        <p className="muted match-left-out">
+          Left out because they work at off-limits companies:{' '}
+          {leftOut.map(({ candidate, company }, index) => (
+            <span key={candidate.id}>
+              {index > 0 && ', '}
+              <Link to={`/candidates/${candidate.id}`}>{candidate.name}</Link> ({company.name})
+            </span>
+          ))}
+          .
+        </p>
       )}
     </section>
   );

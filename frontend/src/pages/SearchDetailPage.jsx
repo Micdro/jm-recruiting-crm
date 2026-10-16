@@ -25,6 +25,7 @@ import {
 } from '../labels.js';
 import { formatDate, formatTimestamp, percent, salaryRange, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
+import { candidateOffLimits, offLimitsWarning } from '../offLimits.js';
 
 const TABS = [
   ['pipeline', 'Pipeline'],
@@ -416,6 +417,7 @@ function PipelineCard({ entry, onStage, onEditRationale, onPlace, onRemove }) {
 function AddToSearch({ search, entries, onAdded, onNewCandidate }) {
   const toast = useToast();
   const candidates = useLoader(() => api.candidates.list(), [], 'candidates');
+  const companies = useLoader(() => api.companies.list(), [], 'companies');
   const [candidateId, setCandidateId] = useState('');
   const [stage, setStage] = useState('SOURCED');
   const [busy, setBusy] = useState(false);
@@ -426,8 +428,11 @@ function AddToSearch({ search, entries, onAdded, onNewCandidate }) {
     .filter((candidate) => !inSearch.has(candidate.id) && candidate.status !== 'DO_NOT_CONTACT')
     .map((candidate) => ({
       value: String(candidate.id),
-      label: [candidate.name, candidate.currentTitle].filter(Boolean).join(', '),
+      label: [candidate.name, candidate.currentTitle].filter(Boolean).join(', ') +
+        (candidateOffLimits(candidate, companies.data) ? ' (off-limits)' : ''),
     }));
+  const chosen = (candidates.data ?? []).find((candidate) => String(candidate.id) === candidateId);
+  const offLimits = chosen && candidateOffLimits(chosen, companies.data);
 
   return (
     <form
@@ -459,12 +464,17 @@ function AddToSearch({ search, entries, onAdded, onNewCandidate }) {
       <SelectField label="At stage" value={stage} onChange={setStage} options={STAGE_OPTIONS} required />
       <div className="add-to-search-actions">
         <button type="submit" className="btn btn-primary" disabled={busy || !candidateId}>
-          Add to search
+          {offLimits ? 'Add anyway' : 'Add to search'}
         </button>
         <button type="button" className="btn" onClick={onNewCandidate}>
           New candidate
         </button>
       </div>
+      {offLimits && (
+        <p className="warn-note add-to-search-warning" role="note">
+          {offLimitsWarning(chosen.name, offLimits)}
+        </p>
+      )}
       <ErrorNote>{error}</ErrorNote>
     </form>
   );

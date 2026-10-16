@@ -925,6 +925,49 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void aClientsPeopleAreOffLimitsWhileTheFirmWorksForThemAndForAYearAfter() throws Exception {
+        LocalDate today = LocalDate.now(clock);
+        String name = "Off Limits Test Bank AI";
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", name)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.offLimits").value(nullValue()))
+                .andReturn());
+
+        // An open search makes them a client.
+        Map<String, Object> search = body("companyId", companyId, "title", "Forward Deployed Engineer",
+                "track", "PRODUCTION_AI_ENGINEERING");
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), search))
+                .andExpect(status().isCreated())
+                .andReturn());
+        mockMvc.perform(signedIn(get("/api/companies/" + companyId)))
+                .andExpect(jsonPath("$.offLimits.client").value(true))
+                .andExpect(jsonPath("$.offLimits.until").value(nullValue()));
+
+        // Placed two months ago, the search filled and the work done: off-limits for a year from the start.
+        long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Off Limits Placed")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        mockMvc.perform(send(post("/api/placements"), body("searchId", searchId, "candidateId", candidateId,
+                        "startDate", today.minusMonths(2).toString(), "baseSalary", 180000)))
+                .andExpect(status().isCreated());
+        search.put("status", "FILLED");
+        mockMvc.perform(send(put("/api/searches/" + searchId), search)).andExpect(status().isOk());
+        mockMvc.perform(send(put("/api/companies/" + companyId), body("name", name, "status", "COMPLETE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.offLimits.client").value(false))
+                .andExpect(jsonPath("$.offLimits.until").value(today.minusMonths(2).plusMonths(12).toString()));
+        mockMvc.perform(signedIn(get("/api/companies")))
+                .andExpect(jsonPath("$[?(@.id == " + companyId + ")].offLimits.client").value(hasItem(false)));
+
+        // A date set by hand replaces the year; today ends it.
+        mockMvc.perform(send(put("/api/companies/" + companyId), body(
+                        "name", name, "status", "COMPLETE", "offLimitsUntil", today.toString())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.offLimitsUntil").value(today.toString()))
+                .andExpect(jsonPath("$.offLimits").value(nullValue()));
+    }
+
+    @Test
     void aLinkedinMessageToACompanyCountsAsContactAndCompletesTheFollowUp() throws Exception {
         long companyId = id(mockMvc.perform(send(post("/api/companies"), body(
                         "name", "LinkedIn Note Co", "followUpDate", LocalDate.now(clock).minusDays(1).toString())))

@@ -9,6 +9,7 @@ import CandidateForm from '../forms/CandidateForm.jsx';
 import { CANDIDATE_STATUS, EMPLOYMENT_TYPE, ROLE_AREA, TRACK, WORK_MODEL, options } from '../labels.js';
 import { todayIso } from '../format.js';
 import { matchesQuery, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
+import { candidateOffLimits } from '../offLimits.js';
 
 
 const PAGE_SIZE = 200;
@@ -18,6 +19,7 @@ export default function CandidatesPage() {
   const toast = useToast();
   const users = useUsers();
   const candidates = useLoader(() => api.candidates.list(), [], 'candidates');
+  const companies = useLoader(() => api.companies.list(), [], 'companies');
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -108,6 +110,7 @@ export default function CandidatesPage() {
                     </Link>
                     <span className="cell-sub">
                       {[candidate.currentTitle, candidate.currentCompany].filter(Boolean).join(', ')}
+                      {candidateOffLimits(candidate, companies.data) && <span className="tag tag-warn">Off-limits</span>}
                       {candidate.regulatedExperience && <span className="tag">Regulated</span>}
                       {(candidate.roleAreas ?? []).map((area) => (
                         <span key={area} className="tag">

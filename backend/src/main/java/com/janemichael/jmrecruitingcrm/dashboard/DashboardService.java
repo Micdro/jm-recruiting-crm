@@ -162,7 +162,7 @@ public class DashboardService {
                 dueContacts.size(),
                 dueCandidates.stream().limit(MAX_DUE_ITEMS).map(candidate -> CandidateResponse.summary(candidate, 0L)).toList(),
                 dueCandidates.size(),
-                dueCompanies.stream().limit(MAX_DUE_ITEMS).map(company -> CompanyResponse.summary(company, 0L, 0L)).toList(),
+                dueCompanies.stream().limit(MAX_DUE_ITEMS).map(company -> CompanyResponse.summary(company, 0L, 0L, null)).toList(),
                 dueCompanies.size(),
                 contactRepository.countUnscheduled(OutreachStatus.NEW, me.getId()),
                 openSearches,

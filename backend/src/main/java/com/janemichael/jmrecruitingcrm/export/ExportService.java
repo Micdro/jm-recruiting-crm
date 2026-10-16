@@ -74,7 +74,7 @@ public class ExportService {
                 contactCounts.put((Long) row[0], (Long) row[1]);
             }
             companyRows = companies.findAllWithOwner().stream()
-                    .map(company -> CompanyResponse.from(company, contactCounts.getOrDefault(company.getId(), 0L), 0L))
+                    .map(company -> CompanyResponse.from(company, contactCounts.getOrDefault(company.getId(), 0L), 0L, null))
                     .toList();
         }
         return new ExportData(

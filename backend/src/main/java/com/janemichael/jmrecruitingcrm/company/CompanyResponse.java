@@ -25,6 +25,10 @@ public record CompanyResponse(
         CompanyEnums.LeadSource leadSource,
         LocalDate lastContactedDate,
         LocalDate followUpDate,
+        /** The off-limits end date set by hand, if any. */
+        LocalDate offLimitsUntil,
+        /** Whether the company's people are off-limits now, or null. */
+        OffLimits offLimits,
         String linkedinProfile,
         String notes,
         Long ownerId,
@@ -35,16 +39,17 @@ public record CompanyResponse(
         Instant updatedAt
 ) {
 
-    public static CompanyResponse from(Company company, long contactCount, long openSearchCount) {
-        return build(company, company.getNotes(), contactCount, openSearchCount);
+    public static CompanyResponse from(Company company, long contactCount, long openSearchCount, OffLimits offLimits) {
+        return build(company, company.getNotes(), contactCount, openSearchCount, offLimits);
     }
 
     /** For lists: everything except the notes, which can be long research memos. */
-    public static CompanyResponse summary(Company company, long contactCount, long openSearchCount) {
-        return build(company, null, contactCount, openSearchCount);
+    public static CompanyResponse summary(Company company, long contactCount, long openSearchCount, OffLimits offLimits) {
+        return build(company, null, contactCount, openSearchCount, offLimits);
     }
 
-    private static CompanyResponse build(Company company, String notes, long contactCount, long openSearchCount) {
+    private static CompanyResponse build(
+            Company company, String notes, long contactCount, long openSearchCount, OffLimits offLimits) {
         return new CompanyResponse(
                 company.getId(),
                 company.getName(),
@@ -63,6 +68,8 @@ public record CompanyResponse(
                 company.getLeadSource(),
                 company.getLastContactedDate(),
                 company.getFollowUpDate(),
+                company.getOffLimitsUntil(),
+                offLimits,
                 company.getLinkedinProfile(),
                 notes,
                 company.getOwner() == null ? null : company.getOwner().getId(),

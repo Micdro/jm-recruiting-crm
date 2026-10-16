@@ -9,6 +9,7 @@ import CompanyForm from '../forms/CompanyForm.jsx';
 import { COMPANY_STATUS, INDUSTRY, PARKED_COMPANY_STAGES, PRIORITY, SEGMENT, options } from '../labels.js';
 import { todayIso } from '../format.js';
 import { matchesQuery, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
+import { offLimitsLabel } from '../offLimits.js';
 
 const PAGE_SIZE = 200;
 
@@ -102,6 +103,7 @@ export default function CompaniesPage() {
                     <Link to={`/companies/${company.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
                       {company.name}
                     </Link>
+                    {company.offLimits && <span className="tag tag-warn">{offLimitsLabel(company)}</span>}
                     {company.focus && <span className="cell-sub">{company.focus}</span>}
                     {company.location && <span className="cell-sub">{company.location}</span>}
                   </td>

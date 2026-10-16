@@ -13,7 +13,8 @@ import {
   WORK_MODEL,
   options,
 } from '../labels.js';
-import { useAuth, useUsers } from '../hooks.js';
+import { useAuth, useLoader, useUsers } from '../hooks.js';
+import { offLimitsEmployer, offLimitsWarning } from '../offLimits.js';
 import { asForm, blankToNull, toId } from './formUtils.js';
 
 const FIELDS = {
@@ -55,6 +56,8 @@ export default function CandidateForm({ candidate, onSaved, onCancel }) {
   const [error, setError] = useState('');
 
   const set = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
+  const companies = useLoader(() => api.companies.list(), [], 'companies');
+  const offLimits = offLimitsEmployer(form.currentCompany, companies.data);
 
   async function submit(event) {
     event.preventDefault();
@@ -107,6 +110,11 @@ export default function CandidateForm({ candidate, onSaved, onCancel }) {
         <TextField label="Current title" value={form.currentTitle} onChange={set('currentTitle')} maxLength={255} />
         <TextField label="Current company" value={form.currentCompany} onChange={set('currentCompany')} maxLength={255} />
       </div>
+      {offLimits && (
+        <p className="warn-note" role="note">
+          {offLimitsWarning(form.name, offLimits)}
+        </p>
+      )}
       <div className="form-row">
         <SelectField label="Track" value={form.track} onChange={set('track')} options={options(TRACK)} placeholder="Not set" />
         <SelectField label="Status" value={form.status} onChange={set('status')} options={options(CANDIDATE_STATUS)} required />

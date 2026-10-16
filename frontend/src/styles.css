@@ -499,6 +499,12 @@ textarea {
   color: var(--ink-2);
 }
 
+.tag-warn {
+  border-color: var(--amber);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
 .count {
   margin-left: 4px;
   color: var(--ink-3);
@@ -1561,8 +1567,10 @@ a.cell-title:hover {
   background: var(--surface);
 }
 
-.add-to-search .error-note {
+.add-to-search .error-note,
+.add-to-search .warn-note {
   grid-column: 1 / -1;
+  margin: 0;
 }
 
 .add-to-search-actions {
@@ -2155,6 +2163,11 @@ a.cell-title:hover {
 }
 
 /* Candidate matches ----------------------------------------------------------------- */
+
+.match-left-out {
+  margin: 14px 0 0;
+  font-size: 14px;
+}
 
 .match-list {
   margin: 0;

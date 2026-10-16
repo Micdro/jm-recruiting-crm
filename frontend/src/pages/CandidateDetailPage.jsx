@@ -25,6 +25,7 @@ import {
 } from '../labels.js';
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
+import { candidateOffLimits, offLimitsWarning } from '../offLimits.js';
 
 export default function CandidateDetailPage() {
   const { id } = useParams();
@@ -34,6 +35,7 @@ export default function CandidateDetailPage() {
   const candidate = useLoader(() => api.candidates.get(id), [id], `candidate:${id}`);
   const pipeline = useLoader(() => api.candidates.pipeline(id), [id], `candidate:${id}:pipeline`);
   const history = useLoader(() => api.activities.list({ candidateId: id }), [id], `candidate:${id}:history`);
+  const companies = useLoader(() => api.companies.list(), [], 'companies');
   const [editing, setEditing] = useState(false);
   const [profiling, setProfiling] = useState(false);
   const [error, setError] = useState('');
@@ -52,6 +54,8 @@ export default function CandidateDetailPage() {
     );
   }
   if (!record) return <Loading label="Loading candidate" />;
+
+  const offLimits = candidateOffLimits(record, companies.data);
 
   const refresh = (updated) => {
     if (updated) candidate.setData(updated);
@@ -96,6 +100,12 @@ export default function CandidateDetailPage() {
         </div>
       </div>
       <ErrorNote>{error}</ErrorNote>
+      {offLimits && (
+        <p className="warn-note" role="note">
+          {offLimitsWarning(record.name, offLimits)}{' '}
+          <Link to={`/companies/${offLimits.id}`}>Open {offLimits.name}</Link>
+        </p>
+      )}
 
       <div className="detail-grid">
         <div className="detail-main">
@@ -118,7 +128,7 @@ export default function CandidateDetailPage() {
 
           <CandidateFiles candidateId={record.id} />
 
-          <CandidateSearches candidate={record} entries={pipeline.data} onChanged={() => refresh()} />
+          <CandidateSearches candidate={record} entries={pipeline.data} offLimits={offLimits} onChanged={() => refresh()} />
 
           <section className="panel" aria-labelledby="candidate-log">
             <div className="panel-head">
@@ -198,7 +208,7 @@ export default function CandidateDetailPage() {
   );
 }
 
-function CandidateSearches({ candidate, entries, onChanged }) {
+function CandidateSearches({ candidate, entries, offLimits, onChanged }) {
   const toast = useToast();
   const searches = useLoader(() => api.searches.list(), [], 'searches');
   const [searchId, setSearchId] = useState('');
@@ -280,7 +290,7 @@ function CandidateSearches({ candidate, entries, onChanged }) {
             required
           />
           <button type="submit" className="btn btn-sm" disabled={!searchId}>
-            Add
+            {offLimits ? 'Add anyway' : 'Add'}
           </button>
         </form>
       )}

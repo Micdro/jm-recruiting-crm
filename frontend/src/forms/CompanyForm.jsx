@@ -33,6 +33,7 @@ const FIELDS = {
   leadSource: '',
   lastContactedDate: '',
   followUpDate: '',
+  offLimitsUntil: '',
   linkedinProfile: '',
   notes: '',
   ownerId: '',
@@ -73,6 +74,7 @@ export default function CompanyForm({ company, onSaved, onCancel }) {
       leadSource: blankToNull(form.leadSource),
       lastContactedDate: blankToNull(form.lastContactedDate),
       followUpDate: blankToNull(form.followUpDate),
+      offLimitsUntil: blankToNull(form.offLimitsUntil),
       linkedinProfile: blankToNull(form.linkedinProfile),
       notes: blankToNull(form.notes),
       ownerId: toId(form.ownerId),
@@ -152,7 +154,16 @@ export default function CompanyForm({ company, onSaved, onCancel }) {
           maxLength={500}
         />
       </div>
-      <TextField label="Location" value={form.location} onChange={set('location')} placeholder="New York, NY" maxLength={255} />
+      <div className="form-row">
+        <TextField label="Location" value={form.location} onChange={set('location')} placeholder="New York, NY" maxLength={255} />
+        <TextField
+          label="Off-limits until"
+          type="date"
+          value={form.offLimitsUntil}
+          onChange={set('offLimitsUntil')}
+          hint="Blank means a year after the last placement starts. Pick today to end it."
+        />
+      </div>
       <TextArea
         label="Notes"
         value={form.notes}

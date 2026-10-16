@@ -11,6 +11,7 @@ import com.janemichael.jmrecruitingcrm.common.Labels;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
+import com.janemichael.jmrecruitingcrm.placement.PlacementRepository;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
@@ -18,6 +19,8 @@ import com.janemichael.jmrecruitingcrm.trash.TrashService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -36,24 +39,30 @@ public class CompanyService {
     private final CompanyRepository companyRepository;
     private final ContactRepository contactRepository;
     private final SearchRepository searchRepository;
+    private final PlacementRepository placementRepository;
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
     private final FieldEncryptor encryptor;
     private final TrashService trash;
+    private final Clock clock;
 
     public CompanyService(
             CompanyRepository companyRepository,
             ContactRepository contactRepository,
             SearchRepository searchRepository,
+            PlacementRepository placementRepository,
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
             FieldEncryptor encryptor,
-            TrashService trash
+            TrashService trash,
+            Clock clock
     ) {
         this.trash = trash;
+        this.clock = clock;
         this.companyRepository = companyRepository;
         this.contactRepository = contactRepository;
         this.searchRepository = searchRepository;
+        this.placementRepository = placementRepository;
         this.currentUserService = currentUserService;
         this.activityLogger = activityLogger;
         this.encryptor = encryptor;
@@ -63,6 +72,8 @@ public class CompanyService {
         String query = Text.key(q);
         Map<Long, Long> contactCounts = contactCounts();
         Map<Long, Long> openSearchCounts = openSearchCounts();
+        Map<Long, LocalDate> lastPlacementStarts = lastPlacementStarts();
+        LocalDate today = LocalDate.now(clock);
 
         return companyRepository.findAllWithOwner()
                 .stream()
@@ -70,17 +81,18 @@ public class CompanyService {
                 .filter(company -> query == null || matches(company, query))
                 // Names are encrypted in the database, so they're sorted here.
                 .sorted(Comparator.comparing((Company company) -> company.getName().toLowerCase()))
-                .map(company -> CompanyResponse.summary(company,
-                        contactCounts.getOrDefault(company.getId(), 0L),
-                        openSearchCounts.getOrDefault(company.getId(), 0L)))
+                .map(company -> {
+                    long openSearches = openSearchCounts.getOrDefault(company.getId(), 0L);
+                    return CompanyResponse.summary(company,
+                            contactCounts.getOrDefault(company.getId(), 0L),
+                            openSearches,
+                            OffLimits.of(company, openSearches, lastPlacementStarts.get(company.getId()), today));
+                })
                 .toList();
     }
 
     public CompanyResponse get(Long id) {
-        Company company = find(id);
-        return CompanyResponse.from(company,
-                contactCounts().getOrDefault(id, 0L),
-                openSearchCounts().getOrDefault(id, 0L));
+        return response(find(id));
     }
 
     @Transactional
@@ -97,7 +109,7 @@ public class CompanyService {
         company.setStatus(request.status() == null ? CompanyStatus.LEAD : request.status());
         company.setOwner(request.ownerId() == null ? user : currentUserService.findOwner(request.ownerId()));
 
-        return CompanyResponse.from(companyRepository.save(company), 0L, 0L);
+        return response(companyRepository.save(company));
     }
 
     @Transactional
@@ -123,9 +135,7 @@ public class CompanyService {
                     currentUserService.get());
         }
 
-        return CompanyResponse.from(company,
-                contactCounts().getOrDefault(id, 0L),
-                openSearchCounts().getOrDefault(id, 0L));
+        return response(company);
     }
 
     @Transactional
@@ -140,6 +150,24 @@ public class CompanyService {
         if (companyRepository.deleteCompanyById(id) == 0) {
             throw new NotFoundException("Company not found");
         }
+    }
+
+    private CompanyResponse response(Company company) {
+        Long id = company.getId();
+        long openSearches = openSearchCounts().getOrDefault(id, 0L);
+        return CompanyResponse.from(company,
+                contactCounts().getOrDefault(id, 0L),
+                openSearches,
+                OffLimits.of(company, openSearches, lastPlacementStarts().get(id), LocalDate.now(clock)));
+    }
+
+    /** The day the most recent placement at each company starts. */
+    private Map<Long, LocalDate> lastPlacementStarts() {
+        Map<Long, LocalDate> starts = new HashMap<>();
+        for (Object[] row : placementRepository.findLastStartByCompany()) {
+            starts.put((Long) row[0], (LocalDate) row[1]);
+        }
+        return starts;
     }
 
     private Map<Long, Long> contactCounts() {
@@ -189,6 +217,7 @@ public class CompanyService {
         company.setLeadSource(request.leadSource());
         company.setLastContactedDate(request.lastContactedDate());
         company.setFollowUpDate(request.followUpDate());
+        company.setOffLimitsUntil(request.offLimitsUntil());
         company.setLinkedinProfile(Text.clean(request.linkedinProfile()));
         company.setNotes(Text.clean(request.notes()));
     }

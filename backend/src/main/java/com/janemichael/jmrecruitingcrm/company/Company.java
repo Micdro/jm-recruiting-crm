@@ -87,6 +87,10 @@ public class Company extends Auditable {
     @Column(name = "follow_up_date")
     private LocalDate followUpDate;
 
+    /** Set by hand: replaces the usual year of off-limits after the last placement. */
+    @Column(name = "off_limits_until")
+    private LocalDate offLimitsUntil;
+
     @Column(name = "linkedin_profile")
     @Convert(converter = EncryptedString.class)
     private String linkedinProfile;
@@ -241,6 +245,14 @@ public class Company extends Auditable {
 
     public void setFollowUpDate(LocalDate followUpDate) {
         this.followUpDate = followUpDate;
+    }
+
+    public LocalDate getOffLimitsUntil() {
+        return offLimitsUntil;
+    }
+
+    public void setOffLimitsUntil(LocalDate offLimitsUntil) {
+        this.offLimitsUntil = offLimitsUntil;
     }
 
     public String getLinkedinProfile() {

@@ -48,6 +48,9 @@ public record CompanyRequest(
 
         LocalDate followUpDate,
 
+        /** Replaces the usual year of off-limits after the last placement. */
+        LocalDate offLimitsUntil,
+
         @Size(max = 500, message = "LinkedIn profile must be 500 characters or fewer")
         String linkedinProfile,
 
