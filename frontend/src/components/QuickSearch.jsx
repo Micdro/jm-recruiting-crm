@@ -11,6 +11,7 @@ const PAGES = [
   { title: 'Today', path: '/' },
   { title: 'Contacts', path: '/contacts' },
   { title: 'Companies', path: '/companies' },
+  { title: 'Hiring signals', path: '/signals' },
   { title: 'Searches', path: '/searches' },
   { title: 'Candidates', path: '/candidates' },
   { title: 'Placements', path: '/placements' },

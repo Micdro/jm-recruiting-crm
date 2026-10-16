@@ -9,6 +9,8 @@ import ContactsPage from './pages/ContactsPage.jsx';
 import ContactDetailPage from './pages/ContactDetailPage.jsx';
 import CompaniesPage from './pages/CompaniesPage.jsx';
 import CompanyDetailPage from './pages/CompanyDetailPage.jsx';
+// Hiring signals load when the page opens, which keeps the main bundle small.
+const SignalsPage = lazy(() => import('./pages/SignalsPage.jsx'));
 import SearchesPage from './pages/SearchesPage.jsx';
 import SearchDetailPage from './pages/SearchDetailPage.jsx';
 import CandidatesPage from './pages/CandidatesPage.jsx';
@@ -62,6 +64,14 @@ export default function App() {
         <Route path="contacts/:id" element={<ContactDetailPage />} />
         <Route path="companies" element={<CompaniesPage />} />
         <Route path="companies/:id" element={<CompanyDetailPage />} />
+        <Route
+          path="signals"
+          element={
+            <Suspense fallback={<Loading label="Opening hiring signals" />}>
+              <SignalsPage />
+            </Suspense>
+          }
+        />
         <Route path="searches" element={<SearchesPage />} />
         <Route path="searches/:id" element={<SearchDetailPage />} />
         <Route path="candidates" element={<CandidatesPage />} />

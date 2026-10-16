@@ -74,6 +74,20 @@ export const HIRING_NEED = {
   NOT_SURE: 'Not sure yet',
 };
 
+/** Where a company posts its open roles, for hiring signals. */
+export const JOB_BOARD = {
+  GREENHOUSE: 'Greenhouse',
+  LEVER: 'Lever',
+  ASHBY: 'Ashby',
+  NONE: 'No job board',
+};
+
+/** The kinds of open roles hiring signals look for. */
+export const ROLE_TRACK = {
+  FDE: 'Forward deployed',
+  AI_PLATFORM: 'AI platform',
+};
+
 export const LEAD_SOURCE = {
   AI_RESEARCH: 'AI research',
   LINKEDIN: 'LinkedIn',

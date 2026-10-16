@@ -75,6 +75,7 @@ export default function TodayPage() {
                 onWrite={setWriting}
               />
               <CompanyFollowUps data={data} />
+              <HiringSignals />
               <CandidateQueue data={data} onLog={(candidate) => setLogging({ kind: 'candidate', record: candidate })} />
             </div>
 
@@ -370,6 +371,55 @@ function CompanyFollowUps({ data }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** Companies that posted forward deployed or AI platform roles since the team last looked. */
+function HiringSignals() {
+  const summary = useLoader(() => api.signals.summary(), [], 'signals:summary');
+  const data = summary.data;
+  if (!data || data.companies === 0) return null;
+
+  return (
+    <section className="panel" aria-labelledby="queue-signals">
+      <div className="panel-head">
+        <h2 id="queue-signals">
+          Hiring signals <span className="count">{data.companies}</span>
+        </h2>
+        <Link to="/signals" className="panel-link">
+          All signals
+        </Link>
+      </div>
+      <ul className="queue">
+        {data.top.map((item) => (
+          <li key={item.companyId} className="queue-row">
+            <div className="queue-who">
+              <Link to={`/companies/${item.companyId}`} className="queue-name">
+                {item.name}
+              </Link>
+              <span className="queue-org">
+                {item.firstRole}
+                {item.unreviewedRoles > 1 ? ` and ${plural(item.unreviewedRoles - 1, 'more role')}` : ''}
+              </span>
+            </div>
+            <div className="queue-state">
+              <Pill value={item.status} labels={COMPANY_STATUS} />
+              <span className="queue-type">New since last review</span>
+            </div>
+            <div className="queue-actions">
+              <Link to="/signals" className="btn btn-sm">
+                Review
+              </Link>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {data.companies > data.top.length && (
+        <p className="panel-foot">
+          Showing {data.top.length} of {data.companies}. <Link to="/signals">See them all</Link>
+        </p>
+      )}
     </section>
   );
 }

@@ -41,6 +41,12 @@ export function formatLongDay(iso) {
   return date ? LONG_DAY.format(date) : '';
 }
 
+/** The calendar day of a timestamp, like formatDate: "Oct 12". */
+export function formatDay(instant) {
+  if (!instant) return '';
+  return formatDate(toIsoDate(new Date(instant)));
+}
+
 export function formatTimestamp(instant) {
   if (!instant) return '';
   const date = new Date(instant);

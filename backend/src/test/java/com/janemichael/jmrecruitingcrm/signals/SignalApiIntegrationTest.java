@@ -218,6 +218,13 @@ class SignalApiIntegrationTest {
 
         mockMvc.perform(signedIn(get("/api/signals")))
                 .andExpect(jsonPath("$.withoutBoard[*].companyId").value(not(hasItem(acme.getId().intValue()))));
+
+        // Clearing it lets the finder look again.
+        mockMvc.perform(send(put("/api/signals/companies/" + acme.getId() + "/board"), Map.of()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provider").isEmpty());
+        mockMvc.perform(signedIn(get("/api/signals")))
+                .andExpect(jsonPath("$.withoutBoard[*].companyId").value(hasItem(acme.getId().intValue())));
     }
 
     private Company company(String name, String website) {

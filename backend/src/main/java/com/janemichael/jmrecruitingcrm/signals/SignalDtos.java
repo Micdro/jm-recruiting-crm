@@ -129,7 +129,12 @@ public final class SignalDtos {
     public record BoardRequest(
             @Size(max = 500, message = "The link must be 500 characters or fewer")
             String link,
-            boolean none
+            // A Boolean, so a request that leaves it out reads as false rather than being turned away.
+            Boolean none
     ) {
+
+        public boolean noBoard() {
+            return Boolean.TRUE.equals(none);
+        }
     }
 }

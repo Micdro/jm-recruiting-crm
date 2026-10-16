@@ -169,6 +169,18 @@ export const api = {
     saveInvoiceSettings: (body) => put('/api/firm/invoice-settings', body),
   },
   templates: crud('/api/templates'),
+  signals: {
+    list: () => get('/api/signals'),
+    summary: () => get('/api/signals/summary'),
+    check: () => post('/api/signals/check'),
+    findBoards: () => post('/api/signals/find-boards'),
+    company: (id) => get(`/api/signals/companies/${id}`),
+    /** `{ link }` sets the board, `{ none: true }` marks the company as having none, `{}` clears it. */
+    setBoard: (id, body) => put(`/api/signals/companies/${id}/board`, body),
+    confirm: (id) => post(`/api/signals/companies/${id}/confirm`),
+    checkCompany: (id) => post(`/api/signals/companies/${id}/check`),
+    reviewed: (id) => post(`/api/signals/companies/${id}/reviewed`),
+  },
   trash: {
     list: () => get('/api/trash'),
     restore: (id) => post(`/api/trash/${id}/restore`),

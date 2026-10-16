@@ -2809,6 +2809,144 @@ a.cell-title:hover {
   overflow-x: auto;
 }
 
+/* Hiring signals ------------------------------------------------------------------- */
+
+.signals-status {
+  margin: -8px 0 16px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.signals-bar {
+  margin-bottom: 12px;
+}
+
+.signals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signal {
+  padding: 16px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.signal:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+
+.signal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.signal-who {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.signal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.signal-actions,
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 14px;
+}
+
+.signal-confirm,
+.signal-problem {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.signal-confirm {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.signal-confirm .link-button {
+  margin-left: 4px;
+}
+
+.signal-problem {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.signal-roles {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signal-roles li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 16px;
+  padding: 6px 0;
+  border-top: 1px dashed var(--rule);
+}
+
+.signal-roles li:first-child {
+  border-top: 0;
+}
+
+.signal-role {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-weight: 500;
+}
+
+.signal-role .pill {
+  font-size: 12px;
+}
+
+.signal-role-meta {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.signal-people {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.board-form {
+  margin-top: 4px;
+}
+
+.board-form .form-actions {
+  align-items: center;
+}
+
+.boardless .muted {
+  font-size: 14px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast {
     animation: none;

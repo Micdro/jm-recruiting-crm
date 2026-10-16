@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, Empty, ErrorNote, ExternalLink, Loading, Pill, TouchPips } from '../components/Bits.jsx';
+import JobBoardPanel from '../components/JobBoardPanel.jsx';
 import NoteForm from '../components/NoteForm.jsx';
 import Modal from '../components/Modal.jsx';
 import Timeline from '../components/Timeline.jsx';
@@ -158,6 +159,8 @@ export default function CompanyDetailPage() {
           </section>
 
           <WorksHere company={record} />
+
+          <JobBoardPanel companyId={record.id} companyName={record.name} />
 
           <section className="panel">
             <div className="panel-head">

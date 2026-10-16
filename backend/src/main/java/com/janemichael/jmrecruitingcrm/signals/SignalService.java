@@ -352,7 +352,7 @@ public class SignalService {
     public CompanyBoard setBoard(long companyId, BoardRequest request) {
         companies.findById(companyId).orElseThrow(() -> new NotFoundException("Company not found"));
 
-        if (request.none()) {
+        if (request.noBoard()) {
             saveBoard(companyId, JobBoardProvider.NONE, null, true);
             forget(companyId, false);
             return companyBoard(companyId);
