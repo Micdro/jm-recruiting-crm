@@ -28,7 +28,8 @@ public class EncryptionBackfill implements ApplicationRunner {
     static final Map<String, List<String>> ENCRYPTED_COLUMNS = new LinkedHashMap<>();
 
     static {
-        ENCRYPTED_COLUMNS.put("company", List.of("name", "website", "location", "focus", "linkedin_profile", "notes"));
+        ENCRYPTED_COLUMNS.put("company", List.of("name", "website", "location", "focus", "linkedin_profile", "notes",
+                "job_board_token"));
         ENCRYPTED_COLUMNS.put("contact", List.of("name", "title", "email", "phone", "linkedin_url", "notes"));
         ENCRYPTED_COLUMNS.put("candidate", List.of("name", "email", "phone", "linkedin_url", "location",
                 "current_title", "current_company", "comp_expectation", "resume_url", "production_evidence", "notes"));
@@ -42,6 +43,8 @@ public class EncryptionBackfill implements ApplicationRunner {
         ENCRYPTED_COLUMNS.put("candidate_file", List.of("file_name"));
         ENCRYPTED_COLUMNS.put("trash_item", List.of("label", "detail", "contents"));
         ENCRYPTED_COLUMNS.put("firm_setting", List.of("value"));
+        // A local cache (not synced), encrypted by SignalService rather than by an entity converter.
+        ENCRYPTED_COLUMNS.put("job_posting", List.of("title", "location", "url"));
     }
 
     private final JdbcTemplate jdbc;

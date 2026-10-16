@@ -19,6 +19,10 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
 
     boolean existsByCompanyId(Long companyId);
 
+    /** The people at these companies, for hiring signals. */
+    @Query("select c from Contact c join fetch c.company where c.company.id in :companyIds")
+    List<Contact> findByCompanyIds(@Param("companyIds") java.util.Collection<Long> companyIds);
+
     boolean existsByEmailHash(String emailHash);
 
     boolean existsByEmailHashAndIdNot(String emailHash, Long id);

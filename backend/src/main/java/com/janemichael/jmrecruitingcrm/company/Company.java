@@ -5,6 +5,7 @@ import com.janemichael.jmrecruitingcrm.common.Auditable;
 import com.janemichael.jmrecruitingcrm.common.EncryptedString;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
+import com.janemichael.jmrecruitingcrm.signals.JobBoardProvider;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
@@ -19,6 +20,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 /** A client or prospect: an AI-native vendor selling into regulated financial institutions. */
@@ -101,6 +103,24 @@ public class Company extends Auditable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id")
     private AppUser owner;
+
+    /** Where the company posts its open roles, for hiring signals. Null until someone (or the finder) sets it. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "job_board_provider")
+    private JobBoardProvider jobBoardProvider;
+
+    /** The board's name at that provider, for example "acme" for job-boards.greenhouse.io/acme. */
+    @Column(name = "job_board_token")
+    @Convert(converter = EncryptedString.class)
+    private String jobBoardToken;
+
+    /** False when the board was found automatically and nobody has checked it yet. */
+    @Column(name = "job_board_confirmed", nullable = false)
+    private boolean jobBoardConfirmed;
+
+    /** When the team last went through this company's hiring signals. Roles posted since then are new. */
+    @Column(name = "signals_reviewed_at")
+    private Instant signalsReviewedAt;
 
     public Company() {
     }
@@ -277,5 +297,36 @@ public class Company extends Auditable {
 
     public void setOwner(AppUser owner) {
         this.owner = owner;
+    }
+
+    public JobBoardProvider getJobBoardProvider() {
+        return jobBoardProvider;
+    }
+
+    public String getJobBoardToken() {
+        return jobBoardToken;
+    }
+
+    public boolean isJobBoardConfirmed() {
+        return jobBoardConfirmed;
+    }
+
+    /** Sets the board. {@code provider} NONE (with a null token) records that there's no board to read. */
+    public void setJobBoard(JobBoardProvider provider, String token, boolean confirmed) {
+        this.jobBoardProvider = provider;
+        this.jobBoardToken = token;
+        this.jobBoardConfirmed = confirmed;
+    }
+
+    public void setJobBoardConfirmed(boolean jobBoardConfirmed) {
+        this.jobBoardConfirmed = jobBoardConfirmed;
+    }
+
+    public Instant getSignalsReviewedAt() {
+        return signalsReviewedAt;
+    }
+
+    public void setSignalsReviewedAt(Instant signalsReviewedAt) {
+        this.signalsReviewedAt = signalsReviewedAt;
     }
 }
