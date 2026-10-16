@@ -2,6 +2,11 @@ package com.janemichael.jmrecruitingcrm.company;
 
 /** The client pipeline, the same stages as the Client List in ClickUp. */
 public enum CompanyStatus {
+    /**
+     * Found by the prospect finder and not reviewed yet. Kept apart from the pipeline: its contacts
+     * stay out of the outreach queue until someone accepts it (it becomes a lead) or dismisses it.
+     */
+    AI_FOUND,
     LEAD,
     INITIAL_OUTREACH,
     ENGAGED,

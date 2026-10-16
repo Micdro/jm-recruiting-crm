@@ -1,6 +1,9 @@
 package com.janemichael.jmrecruitingcrm.common;
 
-/** Readable names for enum values in activity summaries, for example IN_SEQUENCE becomes "In sequence". */
+/**
+ * Readable names for enum values in activity summaries, for example IN_SEQUENCE becomes "In sequence"
+ * and AI_FOUND becomes "AI found".
+ */
 public final class Labels {
 
     private Labels() {
@@ -11,6 +14,7 @@ public final class Labels {
             return "None";
         }
         String text = value.name().replace('_', ' ').toLowerCase();
-        return Character.toUpperCase(text.charAt(0)) + text.substring(1);
+        text = Character.toUpperCase(text.charAt(0)) + text.substring(1);
+        return text.replaceAll("\\b[Aa]i\\b", "AI");
     }
 }

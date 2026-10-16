@@ -164,7 +164,8 @@ public class MorningReminder {
                      AND status <> 'DO_NOT_CONTACT') AS candidates,
                   (SELECT count(*) FROM company WHERE owner_id = :user AND follow_up_date <= :today) AS companies,
                   (SELECT count(*) FROM contact WHERE status = 'NEW' AND next_action_date IS NULL
-                     AND (owner_id IS NULL OR owner_id = :user)) AS waiting
+                     AND (owner_id IS NULL OR owner_id = :user)
+                     AND company_id NOT IN (SELECT id FROM company WHERE status = 'AI_FOUND')) AS waiting
                 """, params, (row, number) -> new Counts(
                 row.getInt("touches"), row.getInt("replies"), row.getInt("follow_ups"),
                 row.getInt("candidates"), row.getInt("companies"), row.getInt("waiting")));
