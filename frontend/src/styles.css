@@ -290,6 +290,15 @@ textarea {
   max-width: 70ch;
 }
 
+.affirmation {
+  margin-top: 10px;
+  padding-left: 10px;
+  border-left: 3px solid var(--green-mark);
+  color: var(--green-strong);
+  font-style: italic;
+  max-width: 70ch;
+}
+
 .page-sub-row {
   display: flex;
   flex-wrap: wrap;

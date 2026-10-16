@@ -29,6 +29,18 @@ test.describe('Today', () => {
     expect(saved.nextActionDate > isoDate(0)).toBeTruthy();
   });
 
+  test('shows the day’s affirmation under the date', async ({ page }) => {
+    await page.goto('/');
+    const affirmation = page.getByTestId('affirmation');
+    await expect(affirmation).toBeVisible();
+    await expect(affirmation).toHaveText(/\w.*[.”]$/);
+
+    await page.reload();
+    const first = await affirmation.textContent();
+    await page.reload();
+    await expect(page.getByTestId('affirmation')).toHaveText(first);
+  });
+
   test('logs a reply with notes from the queue', async ({ page, crm }) => {
     const company = await crm.createCompany();
     const contact = await crm.createContact(company.id, {

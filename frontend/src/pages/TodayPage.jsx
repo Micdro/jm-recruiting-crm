@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { affirmationFor } from '../affirmations.js';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, Pill, TouchPips } from '../components/Bits.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
@@ -41,6 +42,11 @@ export default function TodayPage() {
         <div className="page-heading">
           <h1>Today</h1>
           {data && <div className="page-sub">{formatLongDay(data.today)}</div>}
+          {data && (
+            <p className="affirmation" data-testid="affirmation">
+              {affirmationFor(data.today)}
+            </p>
+          )}
         </div>
         <div className="page-actions">
           <fieldset className="segmented segmented-small">
