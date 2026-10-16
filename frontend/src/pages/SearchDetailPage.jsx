@@ -26,6 +26,7 @@ import {
 import { formatDate, formatTimestamp, percent, salaryRange, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 import { candidateOffLimits, offLimitsWarning } from '../offLimits.js';
+import ProgressReportForm from '../components/ProgressReportForm.jsx';
 
 const TABS = [
   ['pipeline', 'Pipeline'],
@@ -107,6 +108,9 @@ export default function SearchDetailPage() {
           </div>
         </div>
         <div className="page-actions">
+          <button type="button" className="btn" onClick={() => setModal({ kind: 'report' })} disabled={!pipeline.data || !history.data}>
+            Progress report
+          </button>
           <button type="button" className="btn" onClick={() => setModal({ kind: 'edit' })}>
             Edit
           </button>
@@ -265,6 +269,22 @@ export default function SearchDetailPage() {
               setModal(null);
               toast('Placement recorded');
               refreshAll();
+            }}
+          />
+        </Modal>
+      )}
+
+      {modal?.kind === 'report' && (
+        <Modal title={`Progress report for ${record.companyName}`} onClose={() => setModal(null)} wide>
+          <ProgressReportForm
+            search={record}
+            entries={pipeline.data}
+            history={history.data}
+            onCancel={() => setModal(null)}
+            onDone={() => {
+              setModal(null);
+              toast('Progress report downloaded. It’s noted in the history.');
+              history.reload();
             }}
           />
         </Modal>
