@@ -25,8 +25,11 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -35,8 +38,9 @@ import java.util.zip.ZipInputStream;
  * Keeps the Windows app up to date. Every few hours it looks at the newest build on the release
  * page; when there's a newer one, "Update now" downloads it, checks it, unpacks it next to the app,
  * and hands over to a small script that swaps the folders once the app has closed and starts the
- * new version. The database and settings live elsewhere ({@code %LOCALAPPDATA%\JMCRM}), so they
- * carry over untouched.
+ * new version. An app unzipped into OneDrive or Google Drive moves to
+ * {@code %LOCALAPPDATA%\Programs\JM CRM} on its next update, since those keep its files busy. The
+ * database and settings live elsewhere ({@code %LOCALAPPDATA%\JMCRM}), so they carry over untouched.
  */
 @Component
 public class AppUpdater {
@@ -47,6 +51,10 @@ public class AppUpdater {
             "https://github.com/Micdro/jm-recruiting-crm/releases/download/windows-latest/latest.json";
     static final String EXE = "JM CRM.exe";
     static final String APP_FOLDER = "JM CRM";
+    /** Folders that OneDrive, Google Drive, Dropbox or iCloud keep in sync, by name. */
+    private static final List<String> SYNCED_FOLDER_PREFIXES = List.of("onedrive", "dropbox");
+    private static final List<String> SYNCED_FOLDER_NAMES =
+            List.of("my drive", "shared drives", "google drive", "icloud drive", "iclouddrive");
 
     /** What the release page says about the newest build. {@code zip} is relative to the page. */
     record Latest(int build, String sha256, String zip) {
@@ -190,10 +198,20 @@ public class AppUpdater {
     private void install(Latest target) {
         try {
             Path appDir = Path.of(DesktopOs.executable()).toAbsolutePath().getParent();
+            Path standard = DesktopPaths.installFolder().toAbsolutePath().normalize();
+            boolean inStandardFolder = sameFolder(appDir, standard);
             Path parent = appDir.getParent();
-            if (parent == null || !Files.isWritable(parent)) {
-                throw new UpdateException("The CRM can't update itself where it's installed (" + appDir
-                        + "). Move the JM CRM folder into Documents, then try again.");
+            // OneDrive and Google Drive keep the app's files open while they sync them, so the folder
+            // can't be swapped. An app there (or somewhere it can't write) moves to the standard folder.
+            boolean move = !inStandardFolder && (inSyncedFolder(appDir.toString(), syncedRoots())
+                    || parent == null || !Files.isWritable(parent));
+            Path destination = move ? standard : appDir;
+            Files.createDirectories(destination.getParent());
+            if (!Files.isWritable(destination.getParent())) {
+                throw new UpdateException("The CRM can't update itself where it's installed (" + appDir + ").");
+            }
+            if (move) {
+                log.info("Moving the app from {} to {}, where its files aren't kept busy", appDir, destination);
             }
             Path updates = Files.createDirectories(home().resolve("updates"));
             Path zip = updates.resolve("JM-CRM-Windows-" + target.build() + ".zip");
@@ -204,7 +222,8 @@ public class AppUpdater {
             }
 
             phase = Phase.INSTALLING;
-            Path staging = parent.resolve(appDir.getFileName() + " update " + target.build());
+            // Unpacked next to where it will go, so moving it into place is a quick rename.
+            Path staging = destination.getParent().resolve(destination.getFileName() + " update " + target.build());
             deleteRecursively(staging);
             extract(zip, staging);
             Path newApp = staging.resolve(APP_FOLDER);
@@ -213,8 +232,8 @@ public class AppUpdater {
             }
             Files.deleteIfExists(zip);
 
-            String script = installScript(ProcessHandle.current().pid(), appDir, newApp, staging,
-                    home().resolve("logs").resolve("update.log"), AppVersion.name(target.build()));
+            String script = installScript(ProcessHandle.current().pid(), appDir, move, inStandardFolder ? null : standard,
+                    newApp, staging, home().resolve("logs").resolve("update.log"), AppVersion.name(target.build()));
             phase = Phase.RESTARTING;
             if (!DesktopOs.runDetachedPowerShell(script)) {
                 deleteRecursively(staging);
@@ -328,10 +347,16 @@ public class AppUpdater {
     }
 
     /**
-     * Run once the app has closed: swaps the app folder for the new one (keeping the old one until
-     * the swap worked), or copies the new files over if a folder is held open, then starts the CRM.
+     * Run once the app has closed. Swaps the app folder for the new one, keeping the old one until the
+     * swap worked. When the folder is kept busy (OneDrive or Google Drive syncing it), or {@code move}
+     * says to skip it, the new version goes into {@code standard} instead and the old copy is removed.
+     * It never copies over files in use: a copy that stops halfway leaves an app that can't start.
+     * Then it starts the CRM, or the version that was there if nothing worked.
+     *
+     * @param standard where the app goes when it can't stay put, or null when it's already there
      */
-    static String installScript(long pid, Path appDir, Path newApp, Path staging, Path logFile, String version) {
+    static String installScript(long pid, Path appDir, boolean move, Path standard, Path newApp, Path staging,
+                                Path logFile, String version) {
         String app = quote(appDir.toString());
         return String.join("\n",
                 "$ErrorActionPreference = 'Continue'",
@@ -344,33 +369,106 @@ public class AppUpdater {
                 "$new = '" + quote(newApp.toString()) + "'",
                 "$old = '" + app + ".old'",
                 "$staging = '" + quote(staging.toString()) + "'",
-                "if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue }",
-                "$swapped = $false",
-                "for ($i = 0; $i -lt 15 -and -not $swapped; $i++) {",
-                "  try {",
-                "    Move-Item -LiteralPath $app -Destination $old -ErrorAction Stop",
+                "$standard = '" + (standard == null ? "" : quote(standard.toString())) + "'",
+                "$installed = $null",
+                move
+                        ? "Note ('Moving the app out of ' + $app + ', where its files are kept busy, to ' + $standard)"
+                        : String.join("\n",
+                        "if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue }",
+                        "for ($i = 0; $i -lt 15 -and -not $installed; $i++) {",
+                        "  try {",
+                        "    Move-Item -LiteralPath $app -Destination $old -ErrorAction Stop",
+                        "    try {",
+                        "      Move-Item -LiteralPath $new -Destination $app -ErrorAction Stop",
+                        "      $installed = $app",
+                        "    } catch {",
+                        "      Move-Item -LiteralPath $old -Destination $app -ErrorAction SilentlyContinue",
+                        "      throw",
+                        "    }",
+                        "  } catch {",
+                        "    Note ('Waiting for the app folder to be free: ' + $_.Exception.Message)",
+                        "    Start-Sleep -Seconds 2",
+                        "  }",
+                        "}",
+                        "if (-not $installed -and $standard) { Note ('The app folder stays busy; installing in ' + $standard + ' instead') }"),
+                "if (-not $installed -and $standard) {",
+                "  if (Test-Path -LiteralPath $standard) { Remove-Item -LiteralPath $standard -Recurse -Force -ErrorAction SilentlyContinue }",
+                "  if (Test-Path -LiteralPath $standard) {",
+                "    Note ('Could not clear ' + $standard)",
+                "  } else {",
+                "    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $standard) | Out-Null",
                 "    try {",
-                "      Move-Item -LiteralPath $new -Destination $app -ErrorAction Stop",
-                "      $swapped = $true",
+                "      Move-Item -LiteralPath $new -Destination $standard -ErrorAction Stop",
+                "      $installed = $standard",
                 "    } catch {",
-                "      Move-Item -LiteralPath $old -Destination $app -ErrorAction SilentlyContinue",
-                "      throw",
+                "      robocopy $new $standard /E /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null",
+                "      if ($LASTEXITCODE -lt 8) { $installed = $standard } else {",
+                "        Note ('Copying failed with code ' + $LASTEXITCODE)",
+                "        Remove-Item -LiteralPath $standard -Recurse -Force -ErrorAction SilentlyContinue",
+                "      }",
                 "    }",
-                "  } catch {",
-                "    Note ('Waiting for the app folder to be free: ' + $_.Exception.Message)",
-                "    Start-Sleep -Seconds 2",
                 "  }",
                 "}",
-                "if (-not $swapped) {",
-                "  Note 'Copying the new version over the old one instead'",
-                "  robocopy $new $app /MIR /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null",
-                "  if ($LASTEXITCODE -lt 8) { $swapped = $true } else { Note ('Copying failed with code ' + $LASTEXITCODE) }",
+                "if ($installed) { Note ('Updated in ' + $installed) } else {",
+                "  Note 'The update failed; starting the version that was there'",
+                "  $installed = $app",
                 "}",
-                "if ($swapped) { Note 'Updated' } else { Note 'The update failed; starting the version that was there' }",
-                "Start-Process -FilePath (Join-Path $app '" + EXE + "') -ArgumentList '--background'",
+                "Start-Process -FilePath (Join-Path $installed '" + EXE + "') -ArgumentList '--background'",
                 "Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue",
                 "Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue",
+                // The app moved: remove the copy left behind, its .exe first so a half-removed folder
+                // can't be opened. If the .exe is held open, the old copy stays whole.
+                "if ($installed -ne $app) {",
+                "  try {",
+                "    Remove-Item -LiteralPath (Join-Path $app '" + EXE + "') -Force -ErrorAction Stop",
+                "    Remove-Item -LiteralPath $app -Recurse -Force -ErrorAction SilentlyContinue",
+                "    Note ('Removed the old copy in ' + $app)",
+                "  } catch {",
+                "    Note ('Left the old copy in ' + $app + ': ' + $_.Exception.Message)",
+                "  }",
+                "}",
                 "");
+    }
+
+    /**
+     * Whether a folder is inside one that a cloud service syncs: under one of {@code syncedRoots}
+     * (where Windows says OneDrive is), or with a synced folder's name in its path.
+     */
+    static boolean inSyncedFolder(String folder, Collection<String> syncedRoots) {
+        String path = folder.replace('/', '\\').toLowerCase(Locale.ROOT);
+        for (String root : syncedRoots) {
+            if (root == null || root.isBlank()) {
+                continue;
+            }
+            String prefix = root.replace('/', '\\').toLowerCase(Locale.ROOT);
+            if (!prefix.endsWith("\\")) {
+                prefix += "\\";
+            }
+            if ((path + "\\").startsWith(prefix)) {
+                return true;
+            }
+        }
+        for (String name : path.split("\\\\")) {
+            String trimmed = name.trim();
+            if (SYNCED_FOLDER_NAMES.contains(trimmed)
+                    || SYNCED_FOLDER_PREFIXES.stream().anyMatch(trimmed::startsWith)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Where Windows says this person's OneDrive folders are. */
+    private static List<String> syncedRoots() {
+        return Stream.of("OneDrive", "OneDriveConsumer", "OneDriveCommercial")
+                .map(System::getenv)
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+    }
+
+    static boolean sameFolder(Path one, Path other) {
+        return one.toAbsolutePath().normalize().toString()
+                .equalsIgnoreCase(other.toAbsolutePath().normalize().toString());
     }
 
     private Path home() {

@@ -18,6 +18,17 @@ public final class DesktopStartupError {
     private DesktopStartupError() {
     }
 
+    /** Another copy is open but hasn't answered for minutes, usually stuck after an update. */
+    public static void notResponding() {
+        if (!GraphicsEnvironment.isHeadless() && DesktopPaths.setting("jmcrm.no-browser", "JMCRM_NO_BROWSER") == null) {
+            JOptionPane.showMessageDialog(null,
+                    "JM CRM is already open but isn't responding.\n\n"
+                            + "Open Task Manager (Ctrl+Shift+Esc), select JM CRM and click End task.\n"
+                            + "Then open JM CRM again.",
+                    "JM CRM", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
     public static void report(Throwable problem) {
         StringWriter trace = new StringWriter();
         problem.printStackTrace(new PrintWriter(trace));

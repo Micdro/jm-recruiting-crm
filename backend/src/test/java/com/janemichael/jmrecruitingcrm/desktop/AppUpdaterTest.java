@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -77,7 +78,9 @@ class AppUpdaterTest {
     @Test
     void theInstallScriptSwapsTheFoldersSafelyAndRestartsTheApp() {
         Path app = Path.of("C:\\Users\\Mike O'Neil\\Documents\\JM CRM\\JM CRM");
-        String script = AppUpdater.installScript(4242, app, Path.of("C:\\Users\\Mike O'Neil\\Documents\\JM CRM\\JM CRM update 61\\JM CRM"),
+        String script = AppUpdater.installScript(4242, app, false,
+                Path.of("C:\\Users\\Mike O'Neil\\AppData\\Local\\Programs\\JM CRM"),
+                Path.of("C:\\Users\\Mike O'Neil\\Documents\\JM CRM\\JM CRM update 61\\JM CRM"),
                 Path.of("C:\\Users\\Mike O'Neil\\Documents\\JM CRM\\JM CRM update 61"),
                 Path.of("C:\\Users\\Mike O'Neil\\AppData\\Local\\JMCRM\\logs\\update.log"), "1.0.61");
 
@@ -86,9 +89,65 @@ class AppUpdaterTest {
                 // An apostrophe in the path is doubled, so it can't end the PowerShell string early.
                 .contains("$app = 'C:\\Users\\Mike O''Neil\\Documents\\JM CRM\\JM CRM'")
                 .contains("Move-Item -LiteralPath $app -Destination $old")
-                .contains("robocopy $new $app /MIR")
-                .contains("Start-Process -FilePath (Join-Path $app 'JM CRM.exe') -ArgumentList '--background'")
+                // If the folder stays busy, the new version goes to the standard folder instead.
+                .contains("$standard = 'C:\\Users\\Mike O''Neil\\AppData\\Local\\Programs\\JM CRM'")
+                .contains("Move-Item -LiteralPath $new -Destination $standard")
+                .contains("Start-Process -FilePath (Join-Path $installed 'JM CRM.exe') -ArgumentList '--background'")
                 .contains("Note 'Updating JM CRM to 1.0.61'");
+        // Copying over the app while its files are in use left a half-updated app that couldn't start.
+        assertThat(script).doesNotContain("$app /MIR").doesNotContain("robocopy $new $app");
+    }
+
+    @Test
+    void anAppInOneDriveMovesToTheStandardFolderAndItsOldCopyIsRemovedExeFirst() {
+        Path app = Path.of("C:\\Users\\sehse\\OneDrive\\Recruiting Agency\\JM CRM");
+        Path standard = Path.of("C:\\Users\\sehse\\AppData\\Local\\Programs\\JM CRM");
+        String script = AppUpdater.installScript(7, app, true, standard,
+                Path.of("C:\\Users\\sehse\\AppData\\Local\\Programs\\JM CRM update 80\\JM CRM"),
+                Path.of("C:\\Users\\sehse\\AppData\\Local\\Programs\\JM CRM update 80"),
+                Path.of("C:\\Users\\sehse\\AppData\\Local\\JMCRM\\logs\\update.log"), "1.0.80");
+
+        assertThat(script)
+                .contains("Moving the app out of")
+                .doesNotContain("Move-Item -LiteralPath $app -Destination $old")
+                .contains("Move-Item -LiteralPath $new -Destination $standard");
+        int exe = script.indexOf("Remove-Item -LiteralPath (Join-Path $app 'JM CRM.exe')");
+        int folder = script.indexOf("Remove-Item -LiteralPath $app -Recurse");
+        assertThat(exe).isPositive();
+        assertThat(folder).isGreaterThan(exe);
+    }
+
+    @Test
+    void anAppAlreadyInTheStandardFolderHasNowhereElseToGo() {
+        Path app = Path.of("C:\\Users\\sehse\\AppData\\Local\\Programs\\JM CRM");
+        String script = AppUpdater.installScript(7, app, false, null,
+                Path.of("C:\\Users\\sehse\\AppData\\Local\\Programs\\JM CRM update 80\\JM CRM"),
+                Path.of("C:\\Users\\sehse\\AppData\\Local\\Programs\\JM CRM update 80"),
+                Path.of("C:\\Users\\sehse\\AppData\\Local\\JMCRM\\logs\\update.log"), "1.0.80");
+
+        assertThat(script).contains("$standard = ''").contains("Move-Item -LiteralPath $app -Destination $old");
+    }
+
+    @Test
+    void recognisesFoldersThatCloudServicesSync() {
+        List<String> none = List.of();
+        assertThat(AppUpdater.inSyncedFolder("C:\\Users\\sehse\\OneDrive\\Recruiting Agency\\JM CRM", none)).isTrue();
+        assertThat(AppUpdater.inSyncedFolder("C:\\Users\\jane\\OneDrive - Jane Michael LLC\\Documents\\JM CRM", none)).isTrue();
+        assertThat(AppUpdater.inSyncedFolder("G:\\My Drive\\JM CRM", none)).isTrue();
+        assertThat(AppUpdater.inSyncedFolder("C:\\Users\\dimitrios\\Dropbox\\JM CRM", none)).isTrue();
+        // Where Windows says OneDrive is, whatever the folder is called.
+        assertThat(AppUpdater.inSyncedFolder("D:\\Cloud\\Work\\JM CRM", List.of("D:\\Cloud"))).isTrue();
+        assertThat(AppUpdater.inSyncedFolder("D:\\Cloudy\\JM CRM", List.of("D:\\Cloud"))).isFalse();
+
+        assertThat(AppUpdater.inSyncedFolder("C:\\Users\\sehse\\Documents\\JM CRM", none)).isFalse();
+        assertThat(AppUpdater.inSyncedFolder("C:\\Users\\sehse\\AppData\\Local\\Programs\\JM CRM", none)).isFalse();
+        assertThat(AppUpdater.inSyncedFolder("D:\\a\\jm-recruiting-crm\\dist\\JM CRM", none)).isFalse();
+    }
+
+    @Test
+    void comparesFoldersRegardlessOfCase() {
+        assertThat(AppUpdater.sameFolder(folder.resolve("JM CRM"), folder.resolve("x").resolve("..").resolve("JM CRM"))).isTrue();
+        assertThat(AppUpdater.sameFolder(folder.resolve("JM CRM"), folder.resolve("Other"))).isFalse();
     }
 
     @Test
