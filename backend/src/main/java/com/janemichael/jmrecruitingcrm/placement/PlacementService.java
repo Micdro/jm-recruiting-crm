@@ -15,6 +15,7 @@ import com.janemichael.jmrecruitingcrm.pipeline.PipelineEntry;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineRepository;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineService;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineStage;
+import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.CheckInRequest;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.InvoiceRequest;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementRequest;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementResponse;
@@ -74,12 +75,12 @@ public class PlacementService {
     public List<PlacementResponse> list() {
         return placementRepository.findAllWithDetails()
                 .stream()
-                .map(PlacementResponse::from)
+                .map(placement -> PlacementResponse.from(placement, LocalDate.now(clock)))
                 .toList();
     }
 
     public PlacementResponse get(Long id) {
-        return PlacementResponse.from(find(id));
+        return PlacementResponse.from(find(id), LocalDate.now(clock));
     }
 
     /** Records a hire. The candidate's pipeline entry moves to Placed and they are marked placed. */
@@ -111,7 +112,7 @@ public class PlacementService {
                 + (saved.getStartDate() == null ? "" : ", starting " + saved.getStartDate());
         activityLogger.forCandidate(candidate, search, ActivityType.NOTE, false, summary, user);
 
-        return PlacementResponse.from(saved);
+        return PlacementResponse.from(saved, LocalDate.now(clock));
     }
 
     @Transactional
@@ -129,7 +130,7 @@ public class PlacementService {
         }
 
         apply(request, placement, placement.getSearch());
-        return PlacementResponse.from(placement);
+        return PlacementResponse.from(placement, LocalDate.now(clock));
     }
 
     /**
@@ -159,10 +160,44 @@ public class PlacementService {
         if (placement.getInvoiceStatus() == Placement.InvoiceStatus.NOT_INVOICED) {
             placement.setInvoiceStatus(Placement.InvoiceStatus.INVOICED);
         }
-        return PlacementResponse.from(placement);
+        return PlacementResponse.from(placement, LocalDate.now(clock));
     }
 
     /** The next invoice number for this year: 2026-001, 2026-002 and so on, after the highest used. */
+    /**
+     * Records a guarantee check-in with the candidate and the client, with notes for the history.
+     * It covers every check-in point that has come, so Today stops asking until the next one.
+     */
+    @Transactional
+    public PlacementResponse checkIn(Long id, CheckInRequest request) {
+        AppUser user = currentUserService.get();
+        Placement placement = find(id);
+        LocalDate today = LocalDate.now(clock);
+        GuaranteeCheckIns.CheckIn due = GuaranteeCheckIns.next(placement, today)
+                .filter(GuaranteeCheckIns.CheckIn::due)
+                .orElseThrow(() -> new ConflictException("No guarantee check-in is due for this placement"));
+
+        placement.setCheckedInOn(today);
+        Candidate candidate = placement.getCandidate();
+        candidate.setLastContactedDate(today);
+        String notes = Text.clean(request.notes());
+        String summary = due.days() + "-day guarantee check-in with " + candidate.getName() + " and "
+                + placement.getSearch().getCompany().getName();
+        activityLogger.forCandidate(candidate, placement.getSearch(), ActivityType.NOTE, false,
+                notes == null ? summary : summary + ": " + notes, user);
+        return PlacementResponse.from(placement, today);
+    }
+
+    /** Placements with a guarantee check-in due today, for Today. */
+    public List<PlacementResponse> checkInsDue() {
+        LocalDate today = LocalDate.now(clock);
+        return placementRepository.findAllWithDetails().stream()
+                .map(placement -> PlacementResponse.from(placement, today))
+                .filter(PlacementResponse::checkInDue)
+                .sorted(java.util.Comparator.comparing(PlacementResponse::checkInDate))
+                .toList();
+    }
+
     public String nextInvoiceNumber() {
         String prefix = LocalDate.now(clock).getYear() + "-";
         int highest = 0;

@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.placement;
 
+import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.DecimalMin;
@@ -80,6 +81,12 @@ public final class PlacementDtos {
     public record NextInvoiceNumber(String invoiceNumber) {
     }
 
+    public record CheckInRequest(
+            @Size(max = 4000, message = "Check-in notes must be 4000 characters or fewer")
+            String notes
+    ) {
+    }
+
     public record PlacementResponse(
             Long id,
             Long searchId,
@@ -103,10 +110,27 @@ public final class PlacementDtos {
             String billToName,
             String billToEmail,
             String billToAddress,
-            String invoiceDescription
+            String invoiceDescription,
+            LocalDate checkedInOn,
+            /** The guarantee check-in due now, or the next one: 30 or 60 days after the start. Null when none is left. */
+            Integer checkInDays,
+            LocalDate checkInDate,
+            boolean checkInDue,
+            /** Who runs the search (or owns the candidate, when the search has no owner), for Today. */
+            Long ownerId,
+            String ownerName
     ) {
 
         public static PlacementResponse from(Placement placement) {
+            return from(placement, null);
+        }
+
+        /** With {@code today}, the response says which guarantee check-in is due or next. */
+        public static PlacementResponse from(Placement placement, LocalDate today) {
+            GuaranteeCheckIns.CheckIn checkIn = GuaranteeCheckIns.next(placement, today).orElse(null);
+            AppUser owner = placement.getSearch().getOwner() != null
+                    ? placement.getSearch().getOwner()
+                    : placement.getCandidate().getOwner();
             return new PlacementResponse(
                     placement.getId(),
                     placement.getSearch().getId(),
@@ -129,7 +153,13 @@ public final class PlacementDtos {
                     placement.getBillToName(),
                     placement.getBillToEmail(),
                     placement.getBillToAddress(),
-                    placement.getInvoiceDescription()
+                    placement.getInvoiceDescription(),
+                    placement.getCheckedInOn(),
+                    checkIn == null ? null : checkIn.days(),
+                    checkIn == null ? null : checkIn.date(),
+                    checkIn != null && checkIn.due(),
+                    owner == null ? null : owner.getId(),
+                    owner == null ? null : owner.getDisplayName()
             );
         }
     }

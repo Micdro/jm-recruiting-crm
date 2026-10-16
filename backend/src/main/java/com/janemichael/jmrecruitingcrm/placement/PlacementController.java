@@ -66,4 +66,10 @@ public class PlacementController {
     public void delete(@PathVariable Long id) {
         placementService.delete(id);
     }
+
+    /** Records a guarantee check-in with the candidate and the client. */
+    @PostMapping("/{id}/check-in")
+    public PlacementResponse checkIn(@PathVariable Long id, @Valid @RequestBody PlacementDtos.CheckInRequest request) {
+        return placementService.checkIn(id, request);
+    }
 }

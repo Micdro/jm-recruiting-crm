@@ -22,6 +22,7 @@ import com.janemichael.jmrecruitingcrm.pipeline.PipelineService;
 import com.janemichael.jmrecruitingcrm.placement.Placement;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementResponse;
 import com.janemichael.jmrecruitingcrm.placement.PlacementRepository;
+import com.janemichael.jmrecruitingcrm.placement.PlacementService;
 import com.janemichael.jmrecruitingcrm.search.SearchResponse;
 import com.janemichael.jmrecruitingcrm.search.SearchService;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,6 +61,7 @@ public class DashboardService {
     private final ActivityRepository activityRepository;
     private final SearchService searchService;
     private final PipelineService pipelineService;
+    private final PlacementService placementService;
     private final Clock clock;
     private final int dailyTouchTarget;
     private final int dailyTouchStretch;
@@ -74,6 +76,7 @@ public class DashboardService {
             ActivityRepository activityRepository,
             SearchService searchService,
             PipelineService pipelineService,
+            PlacementService placementService,
             Clock clock,
             @Value("${app.outreach.daily-touch-target:30}") int dailyTouchTarget,
             @Value("${app.outreach.daily-touch-stretch:50}") int dailyTouchStretch
@@ -87,6 +90,7 @@ public class DashboardService {
         this.activityRepository = activityRepository;
         this.searchService = searchService;
         this.pipelineService = pipelineService;
+        this.placementService = placementService;
         this.clock = clock;
         this.dailyTouchTarget = dailyTouchTarget;
         this.dailyTouchStretch = dailyTouchStretch;
@@ -148,6 +152,12 @@ public class DashboardService {
                 .filter(entry -> team || me.getId().equals(entry.ownerId()))
                 .toList();
 
+        // Guarantee check-ins due, 30 and 60 days after a placement starts.
+        List<PlacementResponse> checkIns = placementService.checkInsDue()
+                .stream()
+                .filter(placement -> team || me.getId().equals(placement.ownerId()))
+                .toList();
+
         Map<String, Long> outreachByStatus = new LinkedHashMap<>();
         for (OutreachStatus status : OutreachStatus.values()) {
             outreachByStatus.put(status.name(), 0L);
@@ -180,7 +190,8 @@ public class DashboardService {
                 outreachByStatus,
                 placementSummary(today),
                 recentActivity,
-                interviews
+                interviews,
+                checkIns
         );
     }
 
@@ -279,7 +290,8 @@ public class DashboardService {
             Map<String, Long> outreachByStatus,
             PlacementSummary placements,
             List<ActivityResponse> recentActivity,
-            List<PipelineEntryResponse> interviews
+            List<PipelineEntryResponse> interviews,
+            List<PlacementResponse> checkIns
     ) {
     }
 }

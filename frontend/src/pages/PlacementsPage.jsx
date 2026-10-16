@@ -108,6 +108,11 @@ export default function PlacementsPage() {
                       ) : (
                         <span className="muted">Not set</span>
                       )}
+                      {placement.checkInDays && (
+                        <span className={placement.checkInDue ? 'cell-sub check-in-due' : 'cell-sub'}>
+                          {placement.checkInDays}-day check-in {placement.checkInDue ? 'due' : formatDate(placement.checkInDate)}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

@@ -186,6 +186,8 @@ export const api = {
     ...crud('/api/placements'),
     invoice: (id, body) => put(`/api/placements/${id}/invoice`, body),
     nextInvoiceNumber: () => get('/api/placements/next-invoice-number'),
+    /** Records the guarantee check-in that's due: { notes }. */
+    checkIn: (id, body) => post(`/api/placements/${id}/check-in`, body),
   },
   firm: {
     invoiceSettings: () => get('/api/firm/invoice-settings'),

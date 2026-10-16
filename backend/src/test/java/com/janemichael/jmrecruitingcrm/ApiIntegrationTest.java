@@ -1074,6 +1074,52 @@ class ApiIntegrationTest {
                 });
     }
 
+    // Guarantee check-ins ----------------------------------------------------------
+
+    @Test
+    void guaranteeCheckInsComeDueOnTodayAndAreRecorded() throws Exception {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate start = today.minusDays(35);
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Check-in Test Insurer AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", companyId, "title", "AI Platform Engineer", "track", "PRODUCTION_AI_ENGINEERING")))
+                .andExpect(status().isCreated()).andReturn());
+        long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Check-in Candidate")))
+                .andExpect(status().isCreated()).andReturn());
+        long placementId = id(mockMvc.perform(send(post("/api/placements"), body(
+                        "searchId", searchId, "candidateId", candidateId, "startDate", start.toString(), "baseSalary", 190000)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.checkInDays").value(30))
+                .andExpect(jsonPath("$.checkInDate").value(start.plusDays(30).toString()))
+                .andExpect(jsonPath("$.checkInDue").value(true))
+                .andReturn());
+
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.checkIns[?(@.id == " + placementId + ")].checkInDays").value(hasItem(30)));
+        entityManager.flush();
+        assertThat(morningReminder.showNow(EMAIL).message().body()).contains("1 guarantee check-in due");
+
+        mockMvc.perform(send(post("/api/placements/" + placementId + "/check-in"), body("notes", "Settled in, owns the eval pipeline")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checkedInOn").value(today.toString()))
+                .andExpect(jsonPath("$.checkInDue").value(false))
+                .andExpect(jsonPath("$.checkInDays").value(60))
+                .andExpect(jsonPath("$.checkInDate").value(start.plusDays(60).toString()));
+        mockMvc.perform(send(post("/api/placements/" + placementId + "/check-in"), body()))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.checkIns[?(@.id == " + placementId + ")]").isEmpty());
+        mockMvc.perform(signedIn(get("/api/candidates/" + candidateId)))
+                .andExpect(jsonPath("$.lastContactedDate").value(today.toString()));
+        mockMvc.perform(signedIn(get("/api/activities").param("candidateId", String.valueOf(candidateId))))
+                .andExpect(jsonPath("$[*].summary").value(hasItem("30-day guarantee check-in with Check-in Candidate and "
+                        + "Check-in Test Insurer AI: Settled in, owns the eval pipeline")));
+        mockMvc.perform(signedIn(get("/api/placements")))
+                .andExpect(jsonPath("$[?(@.id == " + placementId + ")].checkedInOn").value(hasItem(today.toString())));
+    }
+
     // Interviews -------------------------------------------------------------------
 
     @Test

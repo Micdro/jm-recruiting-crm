@@ -39,7 +39,7 @@ public class MorningReminder {
 
     /** What's due for one person today. {@code waiting}: new contacts not yet in anyone's queue. */
     public record Counts(int touches, int replies, int followUps, int candidates, int companies, int waiting,
-                         int interviews, int debriefs) {
+                         int interviews, int debriefs, int checkIns) {
     }
 
     public record Message(String title, String body) {
@@ -175,11 +175,19 @@ public class MorningReminder {
                      JOIN candidate c ON c.id = p.candidate_id
                      WHERE coalesce(s.owner_id, c.owner_id) = :user AND p.interview_date < :today
                      AND NOT (p.candidate_debriefed AND p.client_debriefed)
-                     AND p.stage NOT IN ('PLACED', 'CLIENT_PASSED', 'WITHDREW')) AS debriefs
+                     AND p.stage NOT IN ('PLACED', 'CLIENT_PASSED', 'WITHDREW')) AS debriefs,
+                  (SELECT count(*) FROM placement pl JOIN job_search s ON s.id = pl.search_id
+                     JOIN candidate c ON c.id = pl.candidate_id
+                     WHERE coalesce(s.owner_id, c.owner_id) = :user AND pl.start_date IS NOT NULL
+                     AND (pl.guarantee_end_date IS NULL OR pl.guarantee_end_date >= :today)
+                     AND EXISTS (SELECT 1 FROM (VALUES (30), (60)) AS mark(days)
+                        WHERE pl.start_date + mark.days <= :today
+                        AND (pl.guarantee_end_date IS NULL OR pl.start_date + mark.days <= pl.guarantee_end_date)
+                        AND (pl.checked_in_on IS NULL OR pl.checked_in_on < pl.start_date + mark.days))) AS check_ins
                 """, params, (row, number) -> new Counts(
                 row.getInt("touches"), row.getInt("replies"), row.getInt("follow_ups"),
                 row.getInt("candidates"), row.getInt("companies"), row.getInt("waiting"),
-                row.getInt("interviews"), row.getInt("debriefs")));
+                row.getInt("interviews"), row.getInt("debriefs"), row.getInt("check_ins")));
         return compose(counts, dailyTouchTarget);
     }
 
@@ -198,6 +206,9 @@ public class MorningReminder {
         }
         if (counts.debriefs() > 0) {
             interviews.add(count(counts.debriefs(), "interview debrief", "interview debriefs") + " to do");
+        }
+        if (counts.checkIns() > 0) {
+            interviews.add(count(counts.checkIns(), "guarantee check-in", "guarantee check-ins") + " due");
         }
 
         String title;

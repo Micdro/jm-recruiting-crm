@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { affirmationFor } from '../affirmations.js';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, Pill, TouchPips } from '../components/Bits.jsx';
+import CheckInForm from '../components/CheckInForm.jsx';
 import { DebriefButton, DebriefForm } from '../components/Interviews.jsx';
 import LaterMenu from '../components/LaterMenu.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
@@ -37,6 +38,7 @@ export default function TodayPage() {
   const [logging, setLogging] = useState(null);
   const [writing, setWriting] = useState(null);
   const [debriefing, setDebriefing] = useState(null);
+  const [checkingIn, setCheckingIn] = useState(null);
   const offerUndo = useUndoableChange();
   const toast = useToast();
 
@@ -80,6 +82,7 @@ export default function TodayPage() {
           <div className="today-grid">
             <div className="today-main">
               <Interviews data={data} scope={scope} onDebrief={(entry, side) => setDebriefing({ entry, side })} />
+              <CheckIns data={data} scope={scope} onCheckIn={setCheckingIn} />
               <ContactQueue
                 data={data}
                 scope={scope}
@@ -118,6 +121,20 @@ export default function TodayPage() {
             onLogged={(updated, type) => {
               offerUndo('contacts', writing.id, touchLoggedMessage(writing, updated, type), dashboard.reload);
               setWriting(null);
+              dashboard.reload();
+            }}
+          />
+        </Modal>
+      )}
+
+      {checkingIn && (
+        <Modal title={`Check in on ${checkingIn.candidateName}`} onClose={() => setCheckingIn(null)}>
+          <CheckInForm
+            placement={checkingIn}
+            onCancel={() => setCheckingIn(null)}
+            onSaved={() => {
+              setCheckingIn(null);
+              toast('Check-in saved');
               dashboard.reload();
             }}
           />
@@ -238,6 +255,60 @@ function Interviews({ data, scope, onDebrief }) {
                   Open search
                 </Link>
               )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * Placed candidates due a guarantee check-in, 30 and 60 days after they start: a call with them
+ * and with the client while there's still time to fix a problem.
+ */
+function CheckIns({ data, scope, onCheckIn }) {
+  const placements = data.checkIns ?? [];
+  if (placements.length === 0) return null;
+
+  return (
+    <section className="panel" aria-labelledby="queue-check-ins">
+      <div className="panel-head">
+        <h2 id="queue-check-ins">
+          Guarantee check-ins <span className="count">{placements.length}</span>
+        </h2>
+        <Link to="/placements" className="panel-link">
+          All placements
+        </Link>
+      </div>
+      <ul className="queue">
+        {placements.map((placement) => (
+          <li key={placement.id} className="queue-row" data-testid="queue-check-in">
+            <div className="queue-who">
+              <Link to={`/candidates/${placement.candidateId}`} className="queue-name">
+                {placement.candidateName}
+              </Link>
+              <span className="queue-org">
+                <Link to={`/searches/${placement.searchId}`}>{placement.searchTitle}</Link>, {placement.companyName}
+              </span>
+            </div>
+            <div className="queue-state">
+              <span className="check-in-due">{placement.checkInDays}-day check-in</span>
+              <span className="queue-type">
+                Started {formatDate(placement.startDate)}
+                {placement.guaranteeEndDate ? `, guarantee ends ${formatDate(placement.guaranteeEndDate)}` : ''}
+              </span>
+              {scope === 'team' && placement.ownerName && <span className="queue-owner">{placement.ownerName}</span>}
+            </div>
+            <div className="queue-actions">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => onCheckIn(placement)}
+                aria-label={`Check in on ${placement.candidateName}`}
+              >
+                Check in
+              </button>
             </div>
           </li>
         ))}

@@ -70,6 +70,10 @@ public class Placement extends Auditable {
     @Column(name = "guarantee_end_date")
     private LocalDate guaranteeEndDate;
 
+    /** The day of the last guarantee check-in with the candidate and the client. */
+    @Column(name = "checked_in_on")
+    private LocalDate checkedInOn;
+
     @Convert(converter = EncryptedString.class)
     private String notes;
 
@@ -246,5 +250,13 @@ public class Placement extends Auditable {
 
     public void setInvoiceDescription(String invoiceDescription) {
         this.invoiceDescription = invoiceDescription;
+    }
+
+    public LocalDate getCheckedInOn() {
+        return checkedInOn;
+    }
+
+    public void setCheckedInOn(LocalDate checkedInOn) {
+        this.checkedInOn = checkedInOn;
     }
 }

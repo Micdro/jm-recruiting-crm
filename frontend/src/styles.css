@@ -1881,6 +1881,13 @@ a.cell-title:hover {
   color: var(--amber);
 }
 
+/* A guarantee check-in that's due, on Today and on Placements. */
+.check-in-due {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--amber);
+}
+
 .card-remove {
   margin-left: auto;
   font-size: 13px;
