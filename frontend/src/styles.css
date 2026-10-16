@@ -2586,6 +2586,24 @@ a.cell-title:hover {
   margin-top: 2px;
 }
 
+.linkedin-quote {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--rule-strong);
+  background: var(--paper);
+  color: var(--ink-2);
+  white-space: pre-wrap;
+}
+
+.linkedin-pick {
+  margin: 0 0 12px;
+}
+
+.linkedin-done {
+  margin: 0;
+  font-weight: 500;
+}
+
 .linkedin-company {
   display: flex;
   flex-wrap: wrap;

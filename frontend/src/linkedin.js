@@ -46,6 +46,117 @@ export function bookmarklet(origin) {
   return `javascript:${encodeURIComponent(SCRAPER.replace('__CRM__', JSON.stringify(origin)))}`;
 }
 
+/**
+ * "Log to JM CRM": runs on a LinkedIn conversation (the messaging page or a chat window) or a
+ * profile. It reads who the conversation is with, who sent the last message and what it said, and
+ * opens the CRM's log page with them, where the person confirms what to log. LinkedIn doesn't
+ * document its pages, so every guess here is shown in the CRM to check. Plain old JavaScript.
+ */
+const LOGGER = String.raw`(function () {
+  var crm = __CRM__;
+  if (!/(^|\.)linkedin\.com$/.test(location.hostname)) {
+    alert('Open a LinkedIn conversation or profile first, then click Log to JM CRM.');
+    return;
+  }
+  function clean(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+  function profile(href) {
+    var match = String(href || '').match(/linkedin\.com\/(in|sales\/lead|sales\/people)\/[^\/?#]+/i);
+    return match ? 'https://www.' + match[0] + '/' : '';
+  }
+  function within(scope, selectors) {
+    for (var i = 0; i < selectors.length; i++) {
+      var found = scope.querySelector(selectors[i]);
+      if (found) return found;
+    }
+    return null;
+  }
+  function all(scope, selector) {
+    return Array.prototype.slice.call(scope.querySelectorAll(selector));
+  }
+
+  var meImage = document.querySelector('img.global-nav__me-photo, .global-nav__me img');
+  var me = meImage ? clean(meImage.getAttribute('alt')) : '';
+
+  // The open conversation: the messaging page's thread, or the chat window that's open.
+  var scope = within(document, ['.msg-convo-wrapper', '.msg-thread', '.msg-s-message-list-container']);
+  if (!scope) {
+    var windows = all(document, '.msg-overlay-conversation-bubble').filter(function (bubble) {
+      return !/minimized|collapsed/.test(bubble.className) && bubble.querySelector('.msg-s-message-list, .msg-s-event-listitem');
+    });
+    scope = windows.length ? windows[windows.length - 1] : null;
+  }
+
+  var params = { page: location.origin + location.pathname };
+  if (scope) {
+    // Their name and profile from the conversation's header, else the first profile link in it.
+    var header = within(scope, ['.msg-thread__link-to-profile', '.msg-entity-lockup__entity-title a',
+      '.msg-overlay-bubble-header a[href*="/in/"]', 'header a[href*="/in/"]', 'a[href*="/in/"]']);
+    var title = within(scope, ['.msg-entity-lockup__entity-title', '#thread-detail-jump-target',
+      '.msg-overlay-bubble-header__title', 'h2']);
+    params.name = clean(title ? title.textContent : header ? header.textContent : '');
+    params.url = profile(header && header.href);
+    var others = [];
+    all(scope, 'a[href*="/in/"], a[href*="/sales/lead/"]').forEach(function (link) {
+      var url = profile(link.href);
+      if (url && url !== params.url && others.indexOf(url) < 0 && clean(link.textContent) !== me) others.push(url);
+    });
+    params.others = others.slice(0, 8).join(' ');
+
+    // Who wrote last: the last sender shown in the thread, or LinkedIn's mark on others' messages.
+    var senders = all(scope, '.msg-s-message-group__name, .msg-s-message-group__profile-link');
+    var last = senders.length ? senders[senders.length - 1] : null;
+    var events = all(scope, '.msg-s-event-listitem');
+    var lastEvent = events.length ? events[events.length - 1] : null;
+    var from = '';
+    if (last) {
+      var lastName = clean(last.textContent);
+      var lastUrl = profile(last.href || (last.querySelector('a') || {}).href);
+      if ((me && lastName === me) || (lastUrl && params.url && lastUrl !== params.url)) from = 'me';
+      else if ((params.name && lastName === params.name) || (lastUrl && lastUrl === params.url)) from = 'them';
+    }
+    if (!from && lastEvent && scope.querySelector('.msg-s-event-listitem--other')) {
+      from = /msg-s-event-listitem--other/.test(lastEvent.className) ? 'them' : 'me';
+    }
+    params.from = from;
+    var bodies = all(scope, '.msg-s-event-listitem__body');
+    params.text = bodies.length ? clean(bodies[bodies.length - 1].textContent).slice(0, 400) : '';
+    var times = all(scope, '.msg-s-message-group__timestamp, time');
+    params.when = times.length ? clean(times[times.length - 1].textContent) : '';
+  } else {
+    // A profile: just the person.
+    var heading = document.querySelector('[data-anonymize="person-name"], main h1, h1');
+    params.name = clean(heading ? heading.textContent : document.title.split(' - ')[0].replace(/^\(\d+\)\s*/, ''));
+    params.url = profile(location.href);
+  }
+  if (!params.name && !params.url) {
+    alert('JM CRM could not find who this is. Open the conversation, or their profile, and try again.');
+    return;
+  }
+  window.open(crm + '/linkedin/log?' + new URLSearchParams(params).toString(), '_blank');
+})();`;
+
+/** The Log to JM CRM bookmark's address, for a CRM at {@code origin}. */
+export function logBookmarklet(origin) {
+  return `javascript:${encodeURIComponent(LOGGER.replace('__CRM__', JSON.stringify(origin)))}`;
+}
+
+/**
+ * Who a logged conversation is with, among contacts and candidates: by the profile in the
+ * conversation's header first, then any other profile linked in it, then by name.
+ */
+export function findPerson({ name, url, others }, contacts, candidates) {
+  const byUrl = (link) => findExisting({ name: '', url: link }, contacts, candidates);
+  const first = url ? byUrl(url) : [];
+  if (first.length) return first;
+  for (const link of String(others ?? '').split(/\s+/).filter(Boolean)) {
+    const found = byUrl(link);
+    if (found.length) return found;
+  }
+  return name ? findExisting({ name, url: '' }, contacts, candidates) : [];
+}
+
 /** "VP Engineering at Ledgerlight AI | Fraud ML" becomes a title and a company. */
 export function parseHeadline(headline) {
   const lead = String(headline ?? '').split(/\s+[|•·]\s+/)[0].trim();

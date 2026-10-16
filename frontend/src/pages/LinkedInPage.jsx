@@ -5,7 +5,7 @@ import { ErrorNote, ExternalLink, PageHeader } from '../components/Bits.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
 import { useLoader, useTitle, useToast } from '../hooks.js';
-import { bookmarklet, findCompany, findExisting, jobChange, parseHeadline } from '../linkedin.js';
+import { bookmarklet, findCompany, findExisting, jobChange, logBookmarklet, parseHeadline } from '../linkedin.js';
 
 /**
  * Without details: how to set up the Add to JM CRM bookmark. With them (the bookmark opens this
@@ -24,18 +24,39 @@ export default function LinkedInPage() {
   return capture.name || capture.url ? <AddPerson capture={capture} /> : <Setup />;
 }
 
-function Setup() {
+/** A bookmark button to drag to the bookmarks bar. Clicking it here only shows a hint. */
+function BookmarkButton({ address, children }) {
   const link = useRef(null);
   const [hint, setHint] = useState(false);
 
   // React won't render a javascript: link, so the bookmark's address is set directly.
   useEffect(() => {
-    link.current?.setAttribute('href', bookmarklet(window.location.origin));
-  }, []);
+    link.current?.setAttribute('href', address);
+  }, [address]);
 
   return (
     <>
-      <PageHeader title="Add from LinkedIn" sub="Save someone from their LinkedIn profile in two clicks." />
+      <a
+        ref={link}
+        className="bookmarklet"
+        draggable="true"
+        onClick={(event) => {
+          event.preventDefault();
+          setHint(true);
+        }}
+      >
+        {children}
+      </a>
+      {hint && <span className="warn-note bookmarklet-hint">Drag it to the bookmarks bar rather than clicking it here.</span>}
+    </>
+  );
+}
+
+function Setup() {
+
+  return (
+    <>
+      <PageHeader title="Add from LinkedIn" sub="Save people from their LinkedIn profiles, and log your LinkedIn messages, in a click or two." />
       <section className="panel narrow-panel" aria-labelledby="linkedin-setup">
         <div className="panel-head">
           <h2 id="linkedin-setup">Set up the button once</h2>
@@ -46,18 +67,7 @@ function Setup() {
           </li>
           <li>
             Drag this button onto the bookmarks bar:{' '}
-            <a
-              ref={link}
-              className="bookmarklet"
-              draggable="true"
-              onClick={(event) => {
-                event.preventDefault();
-                setHint(true);
-              }}
-            >
-              Add to JM CRM
-            </a>
-            {hint && <span className="warn-note bookmarklet-hint">Drag it to the bookmarks bar rather than clicking it here.</span>}
+            <BookmarkButton address={bookmarklet(window.location.origin)}>Add to JM CRM</BookmarkButton>
           </li>
           <li>
             On someone’s LinkedIn profile, click <strong>Add to JM CRM</strong> in the bookmarks bar. The CRM opens with their
@@ -68,6 +78,30 @@ function Setup() {
           The button only copies what’s on the profile you’re looking at into this CRM. Nothing is sent anywhere else. It works
           on regular profiles and Sales Navigator leads; if LinkedIn changes its pages and a detail is missed, fill it in before
           saving.
+        </p>
+      </section>
+
+      <section className="panel narrow-panel" aria-labelledby="linkedin-log-setup">
+        <div className="panel-head">
+          <h2 id="linkedin-log-setup">Log LinkedIn messages in one click</h2>
+        </div>
+        <ol className="plain-list numbered linkedin-steps">
+          <li>
+            Drag this button onto the bookmarks bar too:{' '}
+            <BookmarkButton address={logBookmarklet(window.location.origin)}>Log to JM CRM</BookmarkButton>
+          </li>
+          <li>
+            When someone replies, open the conversation on LinkedIn (the messaging page or a chat window) and click{' '}
+            <strong>Log to JM CRM</strong>. The CRM opens on their record with their last message.
+          </li>
+          <li>
+            Click <strong>Log their reply</strong>, or <strong>Log my message</strong> for one you sent without{' '}
+            <strong>Write</strong>. The CRM suggests the right one from who wrote last.
+          </li>
+        </ol>
+        <p className="panel-foot">
+          It reads only the conversation you have open, when you click it, and sends it only to this CRM. Nothing runs on its
+          own. It also works on a profile page. If it can’t tell who wrote last, pick the button yourself.
         </p>
       </section>
     </>

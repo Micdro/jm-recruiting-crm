@@ -25,6 +25,7 @@ import TeamPage from './pages/TeamPage.jsx';
 import TemplatesPage from './pages/TemplatesPage.jsx';
 import ExportPage from './pages/ExportPage.jsx';
 import LinkedInPage from './pages/LinkedInPage.jsx';
+import LinkedInLogPage from './pages/LinkedInLogPage.jsx';
 import TrashPage from './pages/TrashPage.jsx';
 import ThisComputerPage from './pages/ThisComputerPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
@@ -100,6 +101,7 @@ export default function App() {
         <Route path="templates" element={<TemplatesPage />} />
         <Route path="export" element={<ExportPage />} />
         <Route path="linkedin" element={<LinkedInPage />} />
+        <Route path="linkedin/log" element={<LinkedInLogPage />} />
         <Route path="trash" element={<TrashPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="computer" element={<ThisComputerPage />} />
