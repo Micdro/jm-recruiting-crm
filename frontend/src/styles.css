@@ -2943,6 +2943,10 @@ a.cell-title:hover {
   align-items: center;
 }
 
+.boardless {
+  margin-top: 10px;
+}
+
 .boardless .muted {
   font-size: 14px;
 }
