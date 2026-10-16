@@ -1,4 +1,5 @@
 // Which candidates fit a search, and why: scored from the brief and the candidate's record.
+import { sameCompany } from './companyNames.js';
 import { compactMoney } from './format.js';
 import { EXPERIENCE } from './labels.js';
 import { fold } from './quickSearch.js';
@@ -141,6 +142,72 @@ export function matchLevel(score) {
   if (score >= 60) return 'Strong match';
   if (score >= 35) return 'Good match';
   return 'Possible match';
+}
+
+/** Titles for people who manage engineers rather than ship code themselves. */
+const LEADERSHIP = /\b(manager|head|director|vp|vice president|chief)\b/i;
+
+/** The part of production AI each kind of open role is about. */
+const ROLE_AREA_FOR = { FDE: 'DEPLOY', AI_PLATFORM: 'OPERATE' };
+const ROLE_AREA_TEXT = { DEPLOY: 'Deploys production AI', OPERATE: 'Runs production AI platforms' };
+/** A good match or better: the track plus something else in their favor. */
+const ROLE_MATCH_MINIMUM = 35;
+
+/**
+ * An open role from a company's job board, read as a search brief, so it can be scored the same
+ * way: the track from the title, remote or the first location listed, and the title's words.
+ */
+export function roleAsSearch(role) {
+  const location = String(role.location ?? '')
+    .split(/[;|]/)[0]
+    .trim();
+  return {
+    title: role.title,
+    track: LEADERSHIP.test(role.title ?? '') ? 'TECHNICAL_LEADERSHIP' : 'PRODUCTION_AI_ENGINEERING',
+    workModel: /\bremote\b/i.test(role.location ?? '') ? 'REMOTE' : null,
+    location: /\bremote\b/i.test(location) ? null : location || null,
+  };
+}
+
+/**
+ * Candidates who fit a company's open roles, best first, each with the role they fit best. People
+ * who work at the company, or at an off-limits company, are left out.
+ */
+export function matchForRoles(company, roles, candidates, companies, limit = 3) {
+  const best = new Map();
+  for (const role of roles ?? []) {
+    const search = roleAsSearch(role);
+    const area = ROLE_AREA_FOR[role.track];
+    for (const match of matchCandidates(search, candidates)) {
+      const { candidate } = match;
+      if (candidate.currentCompany && sameCompany(company.name, candidate.currentCompany)) continue;
+      const blocked = (companies ?? []).some(
+        (other) => other.offLimits && candidate.currentCompany && sameCompany(other.name, candidate.currentCompany),
+      );
+      if (blocked) continue;
+      let { score } = match;
+      let reasons = match.reasons;
+      const sameArea = Boolean(area && (candidate.roleAreas ?? []).includes(area));
+      if (sameArea) {
+        score += 15;
+        reasons = [{ good: true, text: ROLE_AREA_TEXT[area] }, ...reasons];
+      }
+      // Track, place and availability say they could take it, not that they can do it. One of
+      // these says they can.
+      const theirs = terms(`${candidate.currentTitle ?? ''} ${candidate.productionEvidence ?? ''}`);
+      const sharesWords = [...terms(role.title)].some((term) => theirs.has(term));
+      if (!sameArea && !candidate.regulatedExperience && !sharesWords) continue;
+      const earlier = best.get(candidate.id);
+      if (!earlier || score > earlier.score) {
+        best.set(candidate.id, { candidate, role, score, reasons, level: matchLevel(score) });
+      }
+    }
+  }
+  // A role's brief is only its title and place, so the same track alone isn't enough.
+  return [...best.values()]
+    .filter((match) => match.score >= ROLE_MATCH_MINIMUM)
+    .sort((first, second) => second.score - first.score || first.candidate.name.localeCompare(second.candidate.name))
+    .slice(0, limit);
 }
 
 /**

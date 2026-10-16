@@ -4,7 +4,16 @@ import { api, errorMessage } from '../api.js';
 import { href } from '../format.js';
 import { useAuth, useLoader } from '../hooks.js';
 import { MAX_TOUCHES } from '../labels.js';
-import { LINKEDIN_NOTE_LIMIT, bestTemplate, channelForTouch, fill, leftovers, nextTouch } from '../templates.js';
+import {
+  LINKEDIN_NOTE_LIMIT,
+  bestTemplate,
+  channelForTouch,
+  fill,
+  leftovers,
+  nextTouch,
+  signalDraft,
+  signalTemplate,
+} from '../templates.js';
 import { ErrorNote } from './Bits.jsx';
 
 const CHANNELS = [
@@ -12,12 +21,19 @@ const CHANNELS = [
   ['EMAIL', 'Email'],
 ];
 
+/** The built-in signal message's place in the template picker. */
+const DRAFT = 'signal-draft';
+
 /**
  * Writes the next touch for a contact from a saved template: fills in their details, copies the
  * message or opens it in the email app or on LinkedIn, then logs the touch.
+ *
+ * With {@code role} (writing from a hiring signal), {role} fills in with the open role, a template
+ * that uses it is picked first (or the built-in signal message), and the touch notes the role.
  */
-export default function MessageComposer({ contact, onLogged }) {
+export default function MessageComposer({ contact: person, role = null, onLogged }) {
   const { user } = useAuth();
+  const contact = role ? { ...person, role } : person;
   const templates = useLoader(() => api.templates.list(), [], 'templates');
   const cold = contact.status === 'NEW' || contact.status === 'IN_SEQUENCE';
   const touch = nextTouch(contact);
@@ -35,9 +51,16 @@ export default function MessageComposer({ contact, onLogged }) {
   const [copied, setCopied] = useState(false);
 
   const all = templates.data ?? [];
-  const onChannel = all.filter((template) => template.channel === channel);
+  const saved = all.filter((template) => template.channel === channel);
+  // From a signal with no saved {role} template yet, the built-in signal message comes first.
+  const draft = role && !signalTemplate(all, channel, cold ? touch : null, user?.id)
+    ? { id: DRAFT, ...signalDraft(channel, touch, cold) }
+    : null;
+  const onChannel = draft ? [draft, ...saved] : saved;
   const chosen =
-    onChannel.find((template) => template.id === chosenId) ?? bestTemplate(all, channel, cold ? touch : null, user?.id);
+    onChannel.find((template) => template.id === chosenId) ??
+    (role ? (draft ?? signalTemplate(all, channel, cold ? touch : null, user?.id)) : null) ??
+    bestTemplate(all, channel, cold ? touch : null, user?.id);
 
   // What the template gives, unless the person has typed over it.
   const subject = edited?.subject ?? fill(chosen?.subject, contact, user);
@@ -86,7 +109,10 @@ export default function MessageComposer({ contact, onLogged }) {
     setBusy(true);
     setError('');
     try {
-      const updated = await api.contacts.logActivity(contact.id, { type: channel });
+      const updated = await api.contacts.logActivity(contact.id, {
+        type: channel,
+        notes: role ? `About the ${role} opening (hiring signal)` : undefined,
+      });
       onLogged(updated, channel);
     } catch (err) {
       setError(errorMessage(err));
@@ -115,6 +141,13 @@ export default function MessageComposer({ contact, onLogged }) {
         ))}
       </fieldset>
 
+      {draft && chosen?.id === DRAFT && (
+        <p className="field-hint">
+          The hiring signal message. To make it your own, save a template that uses {'{role}'} on{' '}
+          <Link to="/templates">Templates</Link>.
+        </p>
+      )}
+
       {templates.data && onChannel.length === 0 && (
         <p className="setup-note">
           No {channel === 'EMAIL' ? 'email' : 'LinkedIn'} templates yet. Write the message below, or{' '}
@@ -128,7 +161,7 @@ export default function MessageComposer({ contact, onLogged }) {
           <select
             id="composer-template"
             value={chosen?.id ?? ''}
-            onChange={(event) => choose(channel, Number(event.target.value))}
+            onChange={(event) => choose(channel, event.target.value === DRAFT ? DRAFT : Number(event.target.value))}
           >
             {onChannel.map((template) => (
               <option key={template.id} value={template.id}>

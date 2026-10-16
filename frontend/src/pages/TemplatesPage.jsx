@@ -10,7 +10,8 @@ import { LINKEDIN_NOTE_LIMIT, PLACEHOLDERS, STARTER_TEMPLATES, TOUCH_NAMES, chan
 const CHANNEL = { LINKEDIN: 'LinkedIn', EMAIL: 'Email' };
 
 /** Who the preview pretends to write to. */
-const SAMPLE = { name: 'Dana Reyes', title: 'VP of Engineering', companyName: 'Ledgerlight AI' };
+// {role} only fills in when writing from Hiring signals; the preview shows a sample opening.
+const SAMPLE = { name: 'Dana Reyes', title: 'VP of Engineering', companyName: 'Ledgerlight AI', role: 'Forward Deployed Engineer' };
 
 const GROUPS = [
   ...Array.from({ length: MAX_TOUCHES }, (_, index) => ({

@@ -91,9 +91,14 @@ export default function SignalsGuidePage() {
               <strong>Today</strong> lists companies that posted new roles since the team last reviewed them.
             </li>
             <li>
-              Open <strong>Hiring signals</strong>, read the new roles, and message the people listed for each
-              company. Name the role in your message, for example: “Saw you’re hiring a forward deployed engineer for
-              your bank rollouts.”
+              Open <strong>Hiring signals</strong> and read the new roles. Under <strong>Reach out to</strong>, click{' '}
+              <strong>Write</strong> next to a person. The message names the opening (pick another under{' '}
+              <strong>About the opening</strong> if the company has several), then copy it, open LinkedIn and log the
+              touch, as on Today. The touch counts toward their sequence and notes the role in their history.
+            </li>
+            <li>
+              Under <strong>Candidates who fit</strong>, click <strong>Blind profile</strong> to make a PDF of a
+              matching candidate, prepared for that role, to send with your message.
             </li>
             <li>
               Click <strong>Mark reviewed</strong> once you’ve acted. The company only comes back when it posts
@@ -120,6 +125,16 @@ export default function SignalsGuidePage() {
               roles are left out.
             </li>
             <li>A role counts as new for 30 days after it’s posted, until the company is marked reviewed.</li>
+            <li>
+              Write starts from a built-in message about the role. To use your own, add a template on{' '}
+              <Link to="/templates">Templates</Link> with <code>{'{role}'}</code> where the role’s title goes. It’s picked
+              first whenever you write from a signal.
+            </li>
+            <li>
+              Candidates who fit are people in the CRM open to a move, matched on track, what they do (deploy or
+              operate), regulated financial services experience, location and the role’s title. People at the hiring
+              company, or at an off-limits client, are left out.
+            </li>
             <li>
               <strong>Boards that couldn’t be read</strong> usually means the company moved or renamed its board.
               Paste the new link on its page.

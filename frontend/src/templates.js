@@ -15,6 +15,8 @@ export const PLACEHOLDERS = [
   { key: 'name', label: 'Their full name', value: (contact) => contact?.name },
   { key: 'title', label: 'Their title', value: (contact) => contact?.title },
   { key: 'company', label: 'Their company', value: (contact) => contact?.companyName },
+  // Filled in when writing from a hiring signal: the open role's title.
+  { key: 'role', label: 'The open role', value: (contact) => contact?.role },
   { key: 'my first name', label: 'Your first name', value: (contact, me) => firstName(me?.displayName) },
   { key: 'my name', label: 'Your full name', value: (contact, me) => me?.displayName },
 ];
@@ -67,6 +69,61 @@ export function bestTemplate(templates, channel, touch, meId) {
     onChannel[0] ??
     null
   );
+}
+
+/**
+ * The message to start from when writing about an open role: a saved template that uses {role}
+ * (written for this touch first, your own first), or null to use the built-in signal message.
+ */
+export function signalTemplate(templates, channel, touch, meId) {
+  const withRole = (templates ?? []).filter((template) => template.channel === channel && /\{role\}/i.test(template.body ?? ''));
+  return bestTemplate(withRole, channel, touch, meId);
+}
+
+/**
+ * Built-in messages about an open role, used until a template with {role} is saved. The first
+ * touch is a connection request, so it stays under LinkedIn's note limit.
+ */
+export function signalDraft(channel, touch, cold) {
+  if (channel === 'EMAIL') {
+    return {
+      name: 'Hiring signal message',
+      subject: 'Your {role} opening',
+      body: [
+        'Hi {first name},',
+        '',
+        'I saw the {role} opening at {company}. We recruit forward deployed and AI platform engineers who have ' +
+          'shipped production AI at banks and insurers, and I have people who fit this role.',
+        '',
+        'Would a 15-minute call this week work?',
+        '',
+        '{my first name}',
+      ].join('\n'),
+    };
+  }
+  if (cold && touch === 1) {
+    return {
+      name: 'Hiring signal message',
+      subject: null,
+      body:
+        'Hi {first name}, I saw the {role} opening at {company}. I recruit forward deployed and AI platform ' +
+        'engineers for vendors selling into banks and insurers, and know people who fit. Open to connecting?',
+    };
+  }
+  return {
+    name: 'Hiring signal message',
+    subject: null,
+    body: [
+      'Hi {first name}, I saw the {role} opening at {company}.',
+      '',
+      'We recruit forward deployed and AI platform engineers who have shipped production AI under bank-grade ' +
+        'security and compliance, and I have candidates who fit this role.',
+      '',
+      'Would a 15-minute call this week work?',
+      '',
+      '{my first name}',
+    ].join('\n'),
+  };
 }
 
 /** A starting point for each touch, in the firm's voice. Edit them to sound like you. */

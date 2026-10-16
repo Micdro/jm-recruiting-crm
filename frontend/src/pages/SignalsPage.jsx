@@ -1,12 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { api, errorMessage } from '../api.js';
+import BlindProfileForm from '../components/BlindProfileForm.jsx';
 import { Empty, ErrorNote, ExternalLink, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
-import { COMPANY_STATUS, JOB_BOARD, ROLE_TRACK, TIER } from '../labels.js';
+import MessageComposer from '../components/MessageComposer.jsx';
+import Modal from '../components/Modal.jsx';
+import { ACTIVITY_TYPE, COMPANY_STATUS, JOB_BOARD, OUTREACH_STATUS, ROLE_TRACK, TIER } from '../labels.js';
 import { formatDay, formatTimestamp, plural } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
+import { matchForRoles } from '../matching.js';
 
 const ROLES_SHOWN = 5;
+const LEVEL_CLASS = { 'Strong match': 'match-strong', 'Good match': 'match-good-fit', 'Possible match': 'match-possible' };
+/** People whose sequence is over or who said no can't be written to from here. */
+const CANT_WRITE = new Set(['NO_RESPONSE', 'NOT_INTERESTED', 'DO_NOT_CONTACT']);
 const BOARDLESS_PAGE = 30;
 
 /** While the CRM reads or looks for boards, the page checks back this often. */
@@ -15,9 +22,36 @@ const POLL_MS = 3000;
 export default function SignalsPage() {
   useTitle('Hiring signals');
   const signals = useLoader(() => api.signals.list(), [], 'signals');
+  // For matching candidates to the roles. The same lists the rest of the CRM loads.
+  const candidates = useLoader(() => api.candidates.list(), [], 'candidates');
+  const crmCompanies = useLoader(() => api.companies.list(), [], 'companies');
   const [view, setView] = useState('new');
   const [error, setError] = useState('');
+  const [writing, setWriting] = useState(null);
+  const [profiling, setProfiling] = useState(null);
   const toast = useToast();
+
+  /** Opens the composer for someone at a hiring company, about one of its roles. */
+  async function write(person, company) {
+    setError('');
+    try {
+      const contact = await api.contacts.get(person.id);
+      setWriting({ contact, company });
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  /** Opens a blind profile of a candidate, prepared for one of a company's open roles. */
+  async function profile(candidateId, company, role) {
+    setError('');
+    try {
+      const candidate = await api.candidates.get(candidateId);
+      setProfiling({ candidate, forRole: { companyName: company.name, title: role.title } });
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
 
   const data = signals.data;
   const running = data?.overview.running;
@@ -131,6 +165,10 @@ export default function SignalsPage() {
                   <CompanySignal
                     key={company.companyId}
                     company={company}
+                    candidates={candidates.data}
+                    crmCompanies={crmCompanies.data}
+                    onWrite={(person) => write(person, company)}
+                    onProfile={(candidateId, role) => profile(candidateId, company, role)}
                     onReviewed={() =>
                       act(
                         () => api.signals.reviewed(company.companyId),
@@ -169,6 +207,60 @@ export default function SignalsPage() {
           {data.withoutBoard.length > 0 && <WithoutBoard companies={data.withoutBoard} />}
         </>
       )}
+
+      {writing && (
+        <Modal title={`Message for ${writing.contact.name}`} onClose={() => setWriting(null)} wide>
+          <SignalComposer
+            contact={writing.contact}
+            roles={writing.company.roles}
+            onLogged={(type) => {
+              toast(`${ACTIVITY_TYPE[type]} logged for ${writing.contact.name}.`);
+              setWriting(null);
+              reload();
+            }}
+          />
+        </Modal>
+      )}
+
+      {profiling && (
+        <Modal title="Blind profile for a client" onClose={() => setProfiling(null)} wide>
+          <BlindProfileForm
+            candidate={profiling.candidate}
+            entries={[]}
+            forRole={profiling.forRole}
+            onCancel={() => setProfiling(null)}
+            onDone={(reference) => {
+              setProfiling(null);
+              toast(`Blind profile ${reference} downloaded. It’s noted in the candidate’s history.`);
+            }}
+          />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+/** The composer, about one of the company's roles: the newest new one unless another is picked. */
+function SignalComposer({ contact, roles, onLogged }) {
+  const titles = [...new Set(roles.map((role) => role.title))];
+  const first = roles.find((role) => role.unreviewed)?.title ?? titles[0];
+  const [title, setTitle] = useState(first);
+
+  return (
+    <>
+      {titles.length > 1 && (
+        <div className="field signal-role-pick">
+          <label htmlFor="signal-role">About the opening</label>
+          <select id="signal-role" value={title} onChange={(event) => setTitle(event.target.value)}>
+            {titles.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <MessageComposer key={title} contact={contact} role={title} onLogged={(updated, type) => onLogged(type)} />
     </>
   );
 }
@@ -225,10 +317,17 @@ function NothingYet({ overview, view, hasAny, onFind }) {
   return <Empty title="Nobody is hiring for these roles right now">Boards are read again every few hours.</Empty>;
 }
 
-function CompanySignal({ company, onReviewed, onConfirm, onWrongBoard }) {
+function CompanySignal({ company, candidates, crmCompanies, onWrite, onProfile, onReviewed, onConfirm, onWrongBoard }) {
   const [allRoles, setAllRoles] = useState(false);
   const roles = allRoles ? company.roles : company.roles.slice(0, Math.max(ROLES_SHOWN, company.unreviewedRoles));
   const hidden = company.roles.length - roles.length;
+
+  // Candidates for the new roles if there are any, otherwise for every open one.
+  const matches = useMemo(() => {
+    if (!candidates) return [];
+    const fresh = company.roles.filter((role) => role.unreviewed);
+    return matchForRoles({ name: company.name }, fresh.length ? fresh : company.roles, candidates, crmCompanies);
+  }, [company, candidates, crmCompanies]);
 
   return (
     <li className="signal" data-testid="signal">
@@ -290,27 +389,82 @@ function CompanySignal({ company, onReviewed, onConfirm, onWrongBoard }) {
         </button>
       )}
 
-      <p className="signal-people">
-        {company.people.length === 0 ? (
-          <>
-            No contacts here yet. <Link to={`/companies/${company.companyId}`}>Add the hiring manager</Link>
-          </>
-        ) : (
-          <>
-            Reach out to{' '}
-            {company.people.map((person, index) => (
-              <span key={person.id}>
-                {index > 0 && (index === company.people.length - 1 ? ' or ' : ', ')}
-                <Link to={`/contacts/${person.id}`}>{person.name}</Link>
-                {person.title ? ` (${person.title})` : ''}
-              </span>
-            ))}
-            {company.contactCount > company.people.length &&
-              `, or ${plural(company.contactCount - company.people.length, 'other contact')}`}
-            .
-          </>
-        )}
-      </p>
+      <div className="signal-columns">
+        <div className="signal-block">
+          <h3 className="signal-subhead">Reach out to</h3>
+          {company.people.length === 0 ? (
+            <p className="signal-people">
+              No contacts here yet. <Link to={`/companies/${company.companyId}`}>Add the hiring manager</Link>
+            </p>
+          ) : (
+            <ul className="signal-list">
+              {company.people.map((person) => (
+                <li key={person.id}>
+                  <span className="signal-list-who">
+                    <Link to={`/contacts/${person.id}`}>{person.name}</Link>
+                    <span className="muted">{[person.title, OUTREACH_STATUS[person.status]].filter(Boolean).join(', ')}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={CANT_WRITE.has(person.status)}
+                    title={CANT_WRITE.has(person.status) ? 'Their sequence is over, or they asked not to be contacted' : undefined}
+                    onClick={() => onWrite(person)}
+                    aria-label={`Write to ${person.name} about this role`}
+                  >
+                    Write
+                  </button>
+                </li>
+              ))}
+              {company.contactCount > company.people.length && (
+                <li>
+                  <Link to={`/companies/${company.companyId}`} className="muted">
+                    {plural(company.contactCount - company.people.length, 'other contact')}
+                  </Link>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+
+        <div className="signal-block">
+          <h3 className="signal-subhead">Candidates who fit</h3>
+          {!candidates ? (
+            <p className="signal-people">Loading candidates…</p>
+          ) : matches.length === 0 ? (
+            <p className="signal-people">Nobody in the CRM fits these roles yet.</p>
+          ) : (
+            <ul className="signal-list">
+              {matches.map(({ candidate, role, level, reasons }) => (
+                <li key={candidate.id}>
+                  <span className="signal-list-who">
+                    <span>
+                      <Link to={`/candidates/${candidate.id}`}>{candidate.name}</Link>{' '}
+                      <span className={`match-level ${LEVEL_CLASS[level]}`}>{level}</span>
+                    </span>
+                    <span className="muted">
+                      {[
+                        company.roles.length > 1 ? `For ${role.title}` : null,
+                        ...reasons.filter((reason) => reason.good).slice(0, 3).map((reason) => reason.text),
+                      ]
+                        .filter(Boolean)
+                        .join('. ')}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => onProfile(candidate.id, role)}
+                    aria-label={`Blind profile of ${candidate.name} for ${role.title}`}
+                  >
+                    Blind profile
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </li>
   );
 }

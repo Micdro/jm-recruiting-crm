@@ -12,12 +12,18 @@ import { TextArea, TextField } from './Fields.jsx';
  * employer. Everything is filled in with those details taken out, for a final read before the
  * PDF is made; anything that still identifies them is pointed out.
  */
-export default function BlindProfileForm({ candidate, entries, onDone, onCancel }) {
+export default function BlindProfileForm({ candidate, entries, forRole = null, onDone, onCancel }) {
   const firm = useLoader(() => api.firm.invoiceSettings(), [], 'firm:invoice');
   const reference = profileReference(candidate.id);
   const searches = entries ?? [];
   const [entryId, setEntryId] = useState(searches.length === 1 ? String(searches[0].id) : '');
   const entry = searches.find((item) => String(item.id) === entryId) ?? null;
+  // From a hiring signal (forRole: { companyName, title }), the profile is for that open role.
+  const recipient = entry
+    ? `${entry.companyName}, ${entry.searchTitle}`
+    : forRole
+      ? `${forRole.companyName}, ${forRole.title}`
+      : '';
   const [form, setForm] = useState(() => ({
     title: candidate.currentTitle ?? '',
     employer: '',
@@ -56,7 +62,7 @@ export default function BlindProfileForm({ candidate, entries, onDone, onCancel 
         profile: {
           reference,
           date: todayIso(),
-          preparedFor: entry ? `${entry.companyName}, ${entry.searchTitle}` : '',
+          preparedFor: recipient,
           title: form.title,
           employer: form.employer,
           location: form.location,
@@ -68,7 +74,9 @@ export default function BlindProfileForm({ candidate, entries, onDone, onCancel 
       // A note of where the profile went, in the candidate's history.
       await api.candidates.logActivity(candidate.id, {
         type: 'NOTE',
-        notes: `Blind profile ${reference} prepared${entry ? ` for ${entry.companyName}, ${entry.searchTitle}` : ''}.`,
+        notes: `Blind profile ${reference} prepared${recipient ? ` for ${recipient}` : ''}${
+          !entry && forRole ? ' (hiring signal)' : ''
+        }.`,
         searchId: entry?.searchId ?? null,
       });
       onDone(reference);
@@ -83,6 +91,12 @@ export default function BlindProfileForm({ candidate, entries, onDone, onCancel 
       <p className="form-intro">
         Reference <strong>{reference}</strong>. Their name, email, phone, LinkedIn and current employer are left out. Read it
         through before you send it.
+        {!entry && forRole && (
+          <>
+            {' '}
+            Prepared for <strong>{recipient}</strong>.
+          </>
+        )}
       </p>
 
       {searches.length > 0 && (
