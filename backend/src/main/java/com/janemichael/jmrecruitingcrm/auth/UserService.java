@@ -8,6 +8,7 @@ import com.janemichael.jmrecruitingcrm.auth.UserDtos.UpdateUserRequest;
 import com.janemichael.jmrecruitingcrm.auth.UserDtos.UserResponse;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
+import com.janemichael.jmrecruitingcrm.common.ForbiddenException;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -79,6 +80,8 @@ public class UserService {
             if (request.role() != UserRole.ADMIN) {
                 throw new BadRequestException("You can't remove your own admin role");
             }
+        } else if (user.isAccountOwner() && (request.role() != UserRole.ADMIN || !request.active())) {
+            throw new ForbiddenException("The owner stays an active admin. Only they can hand over ownership.");
         }
 
         user.setDisplayName(request.displayName().trim());
@@ -90,10 +93,36 @@ public class UserService {
 
     @Transactional
     public void resetPassword(Long id, ResetPasswordRequest request) {
-        currentUserService.requireAdmin();
+        AppUser admin = currentUserService.requireAdmin();
         AppUser user = find(id);
+        // Otherwise an admin could take over the owner's account, and with it the spending settings.
+        if (user.isAccountOwner() && !user.getId().equals(admin.getId())) {
+            throw new ForbiddenException("Only the owner can change their own password. If it's lost, it can be "
+                    + "reset with the CRM key.");
+        }
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         crmLock.lockKeyFor(user, request.password());
+    }
+
+    /**
+     * The owner hands ownership to another active teammate, who becomes an admin if they weren't.
+     * While there's no owner, any admin can name one, themselves included.
+     */
+    @Transactional
+    public List<UserResponse> handOverOwnership(Long id) {
+        AppUser owner = currentUserService.requireAccountOwner("hand over ownership");
+        AppUser next = find(id);
+        if (next.getId().equals(owner.getId()) && owner.isAccountOwner()) {
+            throw new BadRequestException("You're already the owner");
+        }
+        if (!next.isActive()) {
+            throw new BadRequestException("Reactivate " + next.getDisplayName() + " first");
+        }
+        owner.setAccountOwner(false);
+        next.setRole(UserRole.ADMIN);
+        next.setAccountOwner(true);
+        userRepository.flush();
+        return list();
     }
 
     @Transactional

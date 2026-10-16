@@ -37,6 +37,10 @@ public class AppUser {
     @Column(nullable = false)
     private boolean active = true;
 
+    /** The one person who can change what the CRM spends and hand that on. Always an admin. */
+    @Column(name = "account_owner", nullable = false)
+    private boolean accountOwner;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -61,6 +65,14 @@ public class AppUser {
 
     public boolean isAdmin() {
         return role == UserRole.ADMIN;
+    }
+
+    public boolean isAccountOwner() {
+        return accountOwner;
+    }
+
+    public void setAccountOwner(boolean accountOwner) {
+        this.accountOwner = accountOwner;
     }
 
     public Long getId() {

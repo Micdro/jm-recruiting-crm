@@ -26,7 +26,9 @@ public final class ProspectDtos {
      * @param runsOn      the name of the computer that runs it each weekday
      * @param runsHere    whether that's this computer
      * @param waiting     companies found and not reviewed yet
-     * @param canEdit     whether the signed-in person can change the settings (admins)
+     * @param canEdit     whether the signed-in person can change the schedule and guidance (admins)
+     * @param canEditLimits whether they can change the API key and the spending limits (the account owner)
+     * @param ownerName   the account owner, who sets the key and the limits
      */
     public record Status(
             boolean configured,
@@ -34,6 +36,8 @@ public final class ProspectDtos {
             boolean enabled,
             int perRun,
             String focus,
+            int dailyLimitDollars,
+            int spentTodayCents,
             int monthlyLimitDollars,
             int spentThisMonthCents,
             String runsOn,
@@ -41,7 +45,9 @@ public final class ProspectDtos {
             boolean running,
             LastRun lastRun,
             long waiting,
-            boolean canEdit
+            boolean canEdit,
+            boolean canEditLimits,
+            String ownerName
     ) {
     }
 
@@ -81,7 +87,16 @@ public final class ProspectDtos {
             Integer perRun,
 
             @Size(max = 2000, message = "Keep the guidance to 2,000 characters or fewer")
-            String focus,
+            String focus
+    ) {
+    }
+
+    /** What the finder may spend. A search stops when either limit would be passed. */
+    public record LimitsRequest(
+            @NotNull(message = "Enter a daily limit")
+            @Min(value = 1, message = "The daily limit must be at least $1, what one search needs")
+            @Max(value = 100, message = "The daily limit can be up to $100")
+            Integer dailyLimitDollars,
 
             @NotNull(message = "Enter a monthly limit")
             @Min(value = 0, message = "The monthly limit can't be negative")

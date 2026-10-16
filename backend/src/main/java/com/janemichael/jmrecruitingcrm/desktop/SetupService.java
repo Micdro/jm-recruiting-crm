@@ -123,6 +123,7 @@ public class SetupService {
             admin.setEmail(email.trim().toLowerCase());
             admin.setDisplayName(name.trim());
             admin.setRole(UserRole.ADMIN);
+            admin.setAccountOwner(true);
             admin.setActive(true);
             admin.setPasswordHash(passwordEncoder.encode(password));
             crmLock.lockKeyFor(admin, password);

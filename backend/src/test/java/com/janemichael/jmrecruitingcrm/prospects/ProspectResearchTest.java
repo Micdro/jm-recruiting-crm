@@ -48,8 +48,25 @@ class ProspectResearchTest {
     private final ObjectMapper json = new ObjectMapper();
 
     private static ProspectResearch.Request request(int count) {
+        return request(count, 200, "today's $2 limit");
+    }
+
+    private static ProspectResearch.Request request(int count, int budgetCents, String limitName) {
         return new ProspectResearch.Request(KEY, count, "Prefer US companies.", List.of("Ledgerlight AI", "Acme"),
-                LocalDate.of(2026, 10, 16));
+                LocalDate.of(2026, 10, 16), budgetCents, limitName);
+    }
+
+    /** A paused step whose usage costs about {@code cents}: input tokens at $2 per million. */
+    private static String pausedStep(int cents, String stdout) {
+        return """
+                {"stop_reason": "pause_turn", "container": {"id": "container_1"},
+                 "content": [{"type": "text", "text": "Northwind Risk looks promising: hiring FDEs."},
+                             {"type": "server_tool_use", "id": "srvtoolu_1", "name": "code_execution",
+                              "input": {"code": "search()"}},
+                             {"type": "code_execution_tool_result", "tool_use_id": "srvtoolu_1",
+                              "content": {"type": "code_execution_result", "stdout": "%s"}}],
+                 "usage": {"input_tokens": %d, "output_tokens": 0}}
+                """.formatted(stdout, cents * 5_000);
     }
 
     private static ProspectResearch research(ScriptedApi api) {
@@ -94,12 +111,14 @@ class ProspectResearchTest {
         assertThat(outcome.usage().inputTokens()).isEqualTo(150_000);
         // 150k input ($0.30) + 5k output ($0.05) + 10k cache reads ($0.001) + 10 searches ($0.10)
         assertThat(outcome.usage().costCents()).isEqualTo(46);
+        assertThat(outcome.note()).isNull();
 
         assertThat(api.sent).hasSize(2);
         JsonNode first = json.readTree(api.sent.get(0));
         assertThat(first.path("model").asText()).isEqualTo("claude-sonnet-5-5");
         assertThat(first.path("tools").get(0).path("type").asText()).isEqualTo("web_search_20260318");
-        assertThat(first.path("tools").get(0).path("max_uses").asInt()).isEqualTo(38);
+        // At most 12 searches a step, so no single step can run up the bill before the cost is checked.
+        assertThat(first.path("tools").get(0).path("max_uses").asInt()).isEqualTo(12);
         assertThat(first.path("tools").get(1).path("name").asText()).isEqualTo("record_prospects");
         assertThat(first.path("system").asText()).contains("Prefer US companies.").contains("October 16, 2026");
         assertThat(first.path("messages").get(0).path("content").asText())
@@ -183,5 +202,88 @@ class ProspectResearchTest {
         assertThat(ProspectResearch.backoff(0, 900L)).isEqualTo(120_000);
         assertThat(ProspectResearch.maxSearches(1)).isEqualTo(11);
         assertThat(ProspectResearch.maxSearches(25)).isEqualTo(40);
+    }
+
+    @Test
+    void stopsBeforeAStepThatCouldPassTheLimitAndSavesWhatItFound() throws Exception {
+        ScriptedApi api = new ScriptedApi()
+                // $1.50 spent: another step like it, plus the wrap-up, could pass $2.
+                .reply(200, pausedStep(150, "Dana Ruiz, CTO, Northwind Risk https://www.linkedin.com/in/dana-ruiz-42"))
+                .reply(200, "{\"stop_reason\": \"tool_use\", \"content\": [" + RECORDED + "], "
+                        + "\"usage\": {\"input_tokens\": 5000, \"output_tokens\": 1000}}");
+
+        ProspectResearch.Outcome outcome = research(api).run(request(10));
+
+        assertThat(api.sent).hasSize(2);
+        JsonNode wrapUp = json.readTree(api.sent.get(1));
+        assertThat(wrapUp.path("tools")).hasSize(1);
+        assertThat(wrapUp.path("tools").get(0).path("name").asText()).isEqualTo("record_prospects");
+        assertThat(wrapUp.path("tool_choice").path("name").asText()).isEqualTo("record_prospects");
+        assertThat(wrapUp.path("max_tokens").asInt()).isEqualTo(ProspectResearch.WRAP_UP_MAX_TOKENS);
+        assertThat(wrapUp.has("container")).isFalse();
+        String message = wrapUp.path("messages").get(0).path("content").asText();
+        assertThat(message).contains("Northwind Risk looks promising").contains("linkedin.com/in/dana-ruiz-42")
+                .doesNotContain("srvtoolu_1").doesNotContain("code_execution_result");
+
+        assertThat(outcome.found().companies()).hasSize(1);
+        assertThat(outcome.found().companies().getFirst().people().getFirst().linkedinUrl())
+                .isEqualTo("https://www.linkedin.com/in/dana-ruiz-42");
+        assertThat(outcome.note()).isEqualTo("The search reached today's $2 limit, so it saved what it had found by then.");
+        assertThat(outcome.usage().costCents()).isLessThanOrEqualTo(200);
+    }
+
+    @Test
+    void sendsNothingMoreWhenOneStepAlreadyUsedTheBudget() {
+        ScriptedApi api = new ScriptedApi().reply(200, pausedStep(196, "Northwind Risk is hiring"));
+
+        assertThatThrownBy(() -> research(api).run(request(10)))
+                .isInstanceOfSatisfying(ProspectResearch.ResearchException.class, problem -> {
+                    assertThat(problem.getMessage()).isEqualTo("The search reached today's $2 limit "
+                            + "with nothing left of its budget to save what it found.");
+                    assertThat(problem.usage.costCents()).isEqualTo(196);
+                });
+        assertThat(api.sent).hasSize(1);
+    }
+
+    @Test
+    void aSmallerBudgetStopsItSooner() throws Exception {
+        ScriptedApi api = new ScriptedApi()
+                .reply(200, pausedStep(40, "Northwind Risk is hiring forward deployed engineers"))
+                .reply(200, "{\"stop_reason\": \"tool_use\", \"content\": [" + RECORDED + "]}");
+
+        ProspectResearch.Outcome outcome = research(api).run(request(10, 100, "this month's $30 limit"));
+
+        assertThat(api.sent).hasSize(2);
+        assertThat(json.readTree(api.sent.get(1)).path("tool_choice").path("type").asText()).isEqualTo("tool");
+        assertThat(outcome.note()).startsWith("The search reached this month's $30 limit");
+    }
+
+    @Test
+    void neverSearchesMoreThanTheRunAllows() throws Exception {
+        // One company: 11 searches for the whole run, so the first step may use all 11.
+        ScriptedApi api = new ScriptedApi()
+                .reply(200, """
+                        {"stop_reason": "pause_turn", "content": [{"type": "text", "text": "Still looking."}],
+                         "usage": {"input_tokens": 1000, "output_tokens": 10, "server_tool_use": {"web_search_requests": 11}}}
+                        """)
+                .reply(200, "{\"stop_reason\": \"tool_use\", \"content\": [" + RECORDED + "]}");
+
+        ProspectResearch.Outcome outcome = research(api).run(request(1));
+
+        assertThat(json.readTree(api.sent.get(0)).path("tools").get(0).path("max_uses").asInt()).isEqualTo(11);
+        // Out of searches: the next step records what it has, with no web search.
+        assertThat(json.readTree(api.sent.get(1)).path("tools")).hasSize(1);
+        assertThat(outcome.note()).isEqualTo("The search used all its web searches, so it saved what it had found by then.");
+    }
+
+    @Test
+    void givesUpWithoutAnotherRequestWhenThereIsNothingToSave() {
+        ScriptedApi api = new ScriptedApi().reply(200, """
+                {"stop_reason": "max_tokens", "content": [], "usage": {"input_tokens": 1000, "output_tokens": 16000}}
+                """);
+
+        assertThatThrownBy(() -> research(api).run(request(10)))
+                .hasMessage("The search ran longer than one step allows before it found anything.");
+        assertThat(api.sent).hasSize(1);
     }
 }

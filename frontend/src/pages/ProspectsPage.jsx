@@ -154,9 +154,9 @@ function FinderStatus({ data }) {
     return (
       <section className="panel">
         <Empty title="Add a Claude API key to start">
-          {data.canEdit
-            ? 'The finder uses Claude with web search, billed to your Anthropic account. Add the key under Settings below.'
-            : 'The finder uses Claude with web search, billed to your Anthropic account. Ask an admin to add the API key.'}
+          {data.canEditLimits
+            ? 'The finder uses Claude with web search, billed to your Anthropic account. Add the key under Spending below.'
+            : `The finder uses Claude with web search, billed to your Anthropic account. Ask ${data.ownerName ?? 'the owner'} to add the API key.`}
         </Empty>
       </section>
     );
@@ -178,7 +178,7 @@ function FinderStatus({ data }) {
         {data.enabled && data.runsOn
           ? `Searches each weekday on ${data.runsHere ? 'this computer' : data.runsOn}, the first time the CRM is unlocked after 7 AM. `
           : 'Weekday searches are off. '}
-        {`${dollars(data.spentThisMonthCents)} of the $${data.monthlyLimitDollars} monthly limit spent this month.`}
+        {`Spent ${dollars(data.spentTodayCents)} of today’s $${data.dailyLimitDollars} limit and ${dollars(data.spentThisMonthCents)} of this month’s $${data.monthlyLimitDollars}.`}
       </p>
     </section>
   );
@@ -300,18 +300,19 @@ function FoundCompany({ company, busy, onAccept, onDismiss }) {
 }
 
 function FinderSettings({ data, onSaved }) {
+  return (
+    <>
+      <SpendingSettings data={data} onSaved={onSaved} />
+      <SearchSettings data={data} onSaved={onSaved} />
+    </>
+  );
+}
+
+/** Calls the API and hands back the finder's new state, with a toast or an error. */
+function useSettingsAction(onSaved) {
   const toast = useToast();
-  const [editingKey, setEditingKey] = useState(false);
-  const [key, setKey] = useState('');
-  const [form, setForm] = useState(() => ({
-    enabled: data.enabled,
-    perRun: String(data.perRun),
-    monthlyLimitDollars: String(data.monthlyLimitDollars),
-    focus: data.focus ?? '',
-  }));
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
-  const set = (field) => (value) => setForm((current) => ({ ...current, [field]: value }));
 
   async function act(name, call, done) {
     setBusy(name);
@@ -328,6 +329,35 @@ function FinderSettings({ data, onSaved }) {
     }
   }
 
+  return { busy, error, act };
+}
+
+/** The API key and what the finder may spend: the account owner's to change. */
+function SpendingSettings({ data, onSaved }) {
+  const { busy, error, act } = useSettingsAction(onSaved);
+  const [editingKey, setEditingKey] = useState(false);
+  const [key, setKey] = useState('');
+  const [limits, setLimits] = useState(() => ({
+    dailyLimitDollars: String(data.dailyLimitDollars),
+    monthlyLimitDollars: String(data.monthlyLimitDollars),
+  }));
+  const setLimit = (field) => (value) => setLimits((current) => ({ ...current, [field]: value }));
+
+  if (!data.canEditLimits) {
+    return (
+      <section className="panel" aria-labelledby="finder-spending">
+        <div className="panel-head">
+          <h2 id="finder-spending">Spending</h2>
+        </div>
+        <p className="panel-meta">
+          {data.configured ? `Claude API key ending in ${data.keyHint ?? '••••'}. ` : 'No Claude API key yet. '}
+          Each day’s searches stop at ${data.dailyLimitDollars}, and each month’s at ${data.monthlyLimitDollars}. Only{' '}
+          {data.ownerName ?? 'the owner'} can change the key and these limits.
+        </p>
+      </section>
+    );
+  }
+
   async function saveKey(event) {
     event.preventDefault();
     if (await act('key', () => api.prospects.saveKey(key), 'API key saved')) {
@@ -336,39 +366,24 @@ function FinderSettings({ data, onSaved }) {
     }
   }
 
-  function saveSchedule(event) {
+  function saveLimits(event) {
     event.preventDefault();
     act(
-      'settings',
+      'limits',
       () =>
-        api.prospects.saveSettings({
-          enabled: form.enabled,
-          perRun: Number(form.perRun),
-          monthlyLimitDollars: Number(form.monthlyLimitDollars),
-          focus: form.focus,
+        api.prospects.saveLimits({
+          dailyLimitDollars: Number(limits.dailyLimitDollars),
+          monthlyLimitDollars: Number(limits.monthlyLimitDollars),
         }),
-      'Settings saved',
-    );
-  }
-
-  if (!data.canEdit) {
-    return (
-      <section className="panel" aria-labelledby="finder-settings">
-        <div className="panel-head">
-          <h2 id="finder-settings">Settings</h2>
-        </div>
-        <p className="panel-meta">
-          Up to {plural(data.perRun, 'company', 'companies')} a search{data.focus ? `, with this guidance: ${data.focus}` : ''}. Only admins
-          can change the settings.
-        </p>
-      </section>
+      'Limits saved',
     );
   }
 
   return (
-    <section className="panel" aria-labelledby="finder-settings">
+    <section className="panel" aria-labelledby="finder-spending">
       <div className="panel-head">
-        <h2 id="finder-settings">Settings</h2>
+        <h2 id="finder-spending">Spending</h2>
+        <span className="panel-meta">{data.ownerName ? 'Only you can change these.' : 'No owner is set, so any admin can change these.'}</span>
       </div>
       <ErrorNote>{error}</ErrorNote>
 
@@ -419,7 +434,80 @@ function FinderSettings({ data, onSaved }) {
         </form>
       )}
 
-      <form className="form finder-form" onSubmit={saveSchedule}>
+      <form className="form finder-form" onSubmit={saveLimits}>
+        <div className="form-row">
+          <TextField
+            label="Daily limit (US dollars)"
+            type="number"
+            min="1"
+            max="100"
+            value={limits.dailyLimitDollars}
+            onChange={setLimit('dailyLimitDollars')}
+            hint="A search stops before it would pass this, and saves what it found so far. No more searches that day."
+            required
+          />
+          <TextField
+            label="Monthly limit (US dollars)"
+            type="number"
+            min="0"
+            max="1000"
+            value={limits.monthlyLimitDollars}
+            onChange={setLimit('monthlyLimitDollars')}
+            hint="Searches stop for the month once this is spent."
+            required
+          />
+        </div>
+        <div className="form-actions form-actions-start">
+          <button type="submit" className="btn btn-primary" disabled={busy === 'limits'}>
+            {busy === 'limits' ? 'Saving…' : 'Save limits'}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+/** When the finder searches and what it looks for: any admin's to change. */
+function SearchSettings({ data, onSaved }) {
+  const { busy, error, act } = useSettingsAction(onSaved);
+  const [form, setForm] = useState(() => ({
+    enabled: data.enabled,
+    perRun: String(data.perRun),
+    focus: data.focus ?? '',
+  }));
+  const set = (field) => (value) => setForm((current) => ({ ...current, [field]: value }));
+
+  if (!data.canEdit) {
+    return (
+      <section className="panel" aria-labelledby="finder-settings">
+        <div className="panel-head">
+          <h2 id="finder-settings">Search settings</h2>
+        </div>
+        <p className="panel-meta">
+          Up to {plural(data.perRun, 'company', 'companies')} a search{data.focus ? `, with this guidance: ${data.focus}` : ''}. Only admins
+          can change the search settings.
+        </p>
+      </section>
+    );
+  }
+
+  function saveSchedule(event) {
+    event.preventDefault();
+    act(
+      'settings',
+      () => api.prospects.saveSettings({ enabled: form.enabled, perRun: Number(form.perRun), focus: form.focus }),
+      'Settings saved',
+    );
+  }
+
+  return (
+    <section className="panel" aria-labelledby="finder-settings">
+      <div className="panel-head">
+        <h2 id="finder-settings">Search settings</h2>
+      </div>
+      <ErrorNote>{error}</ErrorNote>
+
+      <form className="form" onSubmit={saveSchedule}>
         <CheckboxField
           label="Search each weekday"
           checked={form.enabled}
@@ -428,16 +516,6 @@ function FinderSettings({ data, onSaved }) {
         />
         <div className="form-row">
           <TextField label="Companies per search" type="number" min="1" max="25" value={form.perRun} onChange={set('perRun')} required />
-          <TextField
-            label="Monthly limit (US dollars)"
-            type="number"
-            min="0"
-            max="1000"
-            value={form.monthlyLimitDollars}
-            onChange={set('monthlyLimitDollars')}
-            hint="Searches stop for the month once this is spent."
-            required
-          />
         </div>
         <TextArea
           label="Extra guidance"
@@ -456,7 +534,7 @@ function FinderSettings({ data, onSaved }) {
       </form>
 
       {data.runsOn && (
-        <div className="setting-row">
+        <div className="setting-row finder-form">
           <p>
             <strong>Runs on {data.runsHere ? 'this computer' : data.runsOn}</strong>
             One computer runs the weekday search, so the team pays for one search a day, not three.

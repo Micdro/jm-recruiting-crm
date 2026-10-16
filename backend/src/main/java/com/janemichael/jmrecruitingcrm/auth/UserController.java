@@ -63,6 +63,11 @@ public class UserController {
         userService.resetPassword(id, request);
     }
 
+    @PostMapping("/users/{id}/account-owner")
+    public List<UserResponse> handOverOwnership(@PathVariable Long id) {
+        return userService.handOverOwnership(id);
+    }
+
     @PostMapping("/users/me/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changeOwnPassword(@Valid @RequestBody ChangePasswordRequest request) {

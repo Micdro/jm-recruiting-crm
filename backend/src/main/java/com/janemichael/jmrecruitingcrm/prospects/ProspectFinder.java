@@ -22,6 +22,7 @@ import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.FoundCompany;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.FoundContact;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.KeyRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.LastRun;
+import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.LimitsRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.Reviewed;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.SettingsRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.Status;
@@ -85,10 +86,21 @@ public class ProspectFinder {
     /** A run still marked running after this long stopped without finishing (the app closed, say). */
     static final Duration STALE = Duration.ofMinutes(45);
     static final int MAX_EXCLUDED_NAMES = 1500;
+    /** A search needs at least this much of the month's limit left to be worth starting. */
+    static final int MIN_RUN_CENTS = 100;
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.US);
 
     record Saved(int added, int skipped, int contacts) {
+    }
+
+    /**
+     * What a search may spend now: what's left of today's limit, or of this month's if that's less.
+     *
+     * @param limitName the limit that decides it, like "today's $2 limit"
+     * @param blocked   why no search can start now, or null when one can
+     */
+    record Budget(int cents, String limitName, String blocked) {
     }
 
     private final ProspectSettings settings;
@@ -151,6 +163,8 @@ public class ProspectFinder {
                 values.enabled(),
                 values.perRun(),
                 values.focus(),
+                values.dailyLimitDollars(),
+                settings.spentCents(today()),
                 values.monthlyLimitDollars(),
                 settings.spentCents(month()),
                 computer == null ? null : computerName(computer),
@@ -158,7 +172,9 @@ public class ProspectFinder {
                 isRunning(),
                 lastRun(),
                 waiting(),
-                me.isAdmin());
+                me.isAdmin(),
+                currentUser.isAccountOwnerOrStandIn(me),
+                currentUser.accountOwnerName());
     }
 
     public Summary summary() {
@@ -249,11 +265,15 @@ public class ProspectFinder {
         return YearMonth.now(clock);
     }
 
-    // Settings (admins) -------------------------------------------------------------
+    private LocalDate today() {
+        return LocalDate.now(clock);
+    }
+
+    // Settings: the key and the limits are the account owner's; the rest, any admin's ------
 
     /** Checks the key with the API before saving it, so a typo shows up now rather than at 7 AM. */
     public Status saveKey(KeyRequest request) {
-        currentUser.requireAdmin();
+        currentUser.requireAccountOwner("change the Claude API key");
         String key = request.apiKey().trim();
         if (!key.startsWith("sk-") || key.contains(" ")) {
             throw new BadRequestException("That doesn't look like a Claude API key. Keys start with sk-ant-.");
@@ -282,18 +302,23 @@ public class ProspectFinder {
     }
 
     public Status removeKey() {
-        currentUser.requireAdmin();
+        currentUser.requireAccountOwner("remove the Claude API key");
         settings.saveKey(null);
         return status();
     }
 
     public Status saveSettings(SettingsRequest request) {
         currentUser.requireAdmin();
-        settings.saveSchedule(request.enabled(), request.perRun(), Text.clean(request.focus()),
-                request.monthlyLimitDollars());
+        settings.saveSchedule(request.enabled(), request.perRun(), Text.clean(request.focus()));
         if (request.enabled() && settings.values().computer() == null) {
             settings.saveComputer(identity.nodeId());
         }
+        return status();
+    }
+
+    public Status saveLimits(LimitsRequest request) {
+        currentUser.requireAccountOwner("change the spending limits");
+        settings.saveLimits(request.dailyLimitDollars(), request.monthlyLimitDollars());
         return status();
     }
 
@@ -341,7 +366,29 @@ public class ProspectFinder {
         if (last != null && LocalDate.ofInstant(last.started(), now.getZone()).equals(now.toLocalDate())) {
             return false;
         }
-        return settings.spentCents(YearMonth.from(now)) < values.monthlyLimitDollars() * 100;
+        return budget(values, now.toLocalDate()).blocked() == null;
+    }
+
+    Budget budget(Values values, LocalDate day) {
+        return budget(values.dailyLimitDollars(), settings.spentCents(day),
+                values.monthlyLimitDollars(), settings.spentCents(YearMonth.from(day)));
+    }
+
+    static Budget budget(int dailyLimitDollars, int spentToday, int monthlyLimitDollars, int spentThisMonth) {
+        int leftToday = dailyLimitDollars * 100 - spentToday;
+        int leftThisMonth = monthlyLimitDollars * 100 - spentThisMonth;
+        boolean daily = leftToday <= leftThisMonth;
+        int cents = Math.min(leftToday, leftThisMonth);
+        String name = daily ? "today's $" + dailyLimitDollars + " limit" : "this month's $" + monthlyLimitDollars + " limit";
+        String blocked = null;
+        if (cents <= 0) {
+            blocked = daily
+                    ? "Today's limit of $" + dailyLimitDollars + " is reached. The finder can search again tomorrow."
+                    : "This month's limit of $" + monthlyLimitDollars + " is reached.";
+        } else if (cents < MIN_RUN_CENTS) {
+            blocked = String.format(Locale.US, "Only $%.2f is left of %s, less than a search needs.", cents / 100.0, name);
+        }
+        return new Budget(Math.max(0, cents), name, blocked);
     }
 
     private synchronized void start(String trigger, AppUser by) {
@@ -352,10 +399,9 @@ public class ProspectFinder {
         if (isRunning()) {
             throw new ConflictException("The finder is already searching. New companies will show up here when it's done.");
         }
-        int spent = settings.spentCents(month());
-        if (spent >= values.monthlyLimitDollars() * 100) {
-            throw new ConflictException("This month's limit of $" + values.monthlyLimitDollars()
-                    + " is reached. Raise it in the settings to search again.");
+        Budget budget = budget(values, today());
+        if (budget.blocked() != null) {
+            throw new ConflictException(budget.blocked() + " The owner can raise the limits in the settings.");
         }
         if (!running.compareAndSet(false, true)) {
             throw new ConflictException("The finder is already searching.");
@@ -364,7 +410,7 @@ public class ProspectFinder {
             Run run = Run.started(trigger, identity.nodeId(), by == null ? null : by.getDisplayName(), clock.instant());
             settings.saveRun(run);
             Long byId = by == null ? null : by.getId();
-            Thread thread = new Thread(() -> execute(run, values, byId), "prospect-finder");
+            Thread thread = new Thread(() -> execute(run, values, byId, budget), "prospect-finder");
             thread.setDaemon(true);
             thread.start();
         } catch (RuntimeException problem) {
@@ -373,18 +419,20 @@ public class ProspectFinder {
         }
     }
 
-    private void execute(Run run, Values values, Long byId) {
+    private void execute(Run run, Values values, Long byId, Budget budget) {
         Usage usage = Usage.NONE;
         try {
             List<String> exclude = transaction.execute(status -> excludedNames());
             ProspectResearch.Request request = new ProspectResearch.Request(values.apiKey(), values.perRun(),
-                    values.focus(), exclude == null ? List.of() : exclude, LocalDate.now(clock));
+                    values.focus(), exclude == null ? List.of() : exclude, today(), budget.cents(), budget.limitName());
             Outcome outcome = research.run(request);
             usage = outcome.usage();
             Found.Result found = outcome.found();
             Saved saved = transaction.execute(status -> save(found.companies(), byId));
             Objects.requireNonNull(saved);
-            String message = found.companies().isEmpty() ? "No new companies this time." : null;
+            String message = found.companies().isEmpty()
+                    ? (outcome.note() == null ? "No new companies this time." : outcome.note() + " It found no new companies.")
+                    : outcome.note();
             finish(run, "DONE", found.companies().size(), saved, found.withheld(), usage, message);
             log.info("Prospect finder: found {}, added {} companies and {} people", found.companies().size(),
                     saved.added(), saved.contacts());
@@ -407,7 +455,7 @@ public class ProspectFinder {
 
     private void finish(Run run, String status, int found, Saved saved, int withheld, Usage usage, String message) {
         try {
-            settings.addSpend(YearMonth.from(run.started().atZone(clock.getZone())), usage.costCents());
+            settings.addSpend(LocalDate.ofInstant(run.started(), clock.getZone()), usage.costCents());
             settings.saveRun(new Run(status, run.trigger(), run.startedAt(), clock.instant().toEpochMilli(),
                     run.computer(), run.startedBy(), found, saved.added(), saved.skipped(), saved.contacts(),
                     withheld, usage.searches(), usage.costCents(), message));

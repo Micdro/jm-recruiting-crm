@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,6 +23,7 @@ class ProspectSettings {
     static final int DEFAULT_PER_RUN = 10;
     static final int MAX_PER_RUN = 25;
     static final int DEFAULT_MONTHLY_LIMIT_DOLLARS = 30;
+    static final int DEFAULT_DAILY_LIMIT_DOLLARS = 2;
 
     private static final String PREFIX = "prospects.";
     private static final String API_KEY = "api_key";
@@ -31,10 +33,13 @@ class ProspectSettings {
     private static final String COMPUTER = "computer";
     private static final String MONTHLY_LIMIT = "monthly_limit";
     private static final String MONTH_SPEND = "month_spend";
+    private static final String DAILY_LIMIT = "daily_limit";
+    private static final String DAY_SPEND = "day_spend";
     private static final String LAST_RUN = "last_run";
 
     /** What the finder is set to do. {@code computer} is the computer that runs it on schedule. */
-    record Values(String apiKey, boolean enabled, int perRun, String focus, Integer computer, int monthlyLimitDollars) {
+    record Values(String apiKey, boolean enabled, int perRun, String focus, Integer computer, int monthlyLimitDollars,
+                  int dailyLimitDollars) {
 
         boolean hasKey() {
             return apiKey != null && !apiKey.isBlank();
@@ -98,17 +103,22 @@ class ProspectSettings {
                 number(all.get(PER_RUN), DEFAULT_PER_RUN, 1, MAX_PER_RUN),
                 all.get(FOCUS),
                 all.get(COMPUTER) == null ? null : number(all.get(COMPUTER), 0, 0, Integer.MAX_VALUE),
-                number(all.get(MONTHLY_LIMIT), DEFAULT_MONTHLY_LIMIT_DOLLARS, 0, 10_000));
+                number(all.get(MONTHLY_LIMIT), DEFAULT_MONTHLY_LIMIT_DOLLARS, 0, 10_000),
+                number(all.get(DAILY_LIMIT), DEFAULT_DAILY_LIMIT_DOLLARS, 0, 1_000));
     }
 
     void saveKey(String apiKey) {
         write(API_KEY, apiKey);
     }
 
-    void saveSchedule(boolean enabled, int perRun, String focus, int monthlyLimitDollars) {
+    void saveSchedule(boolean enabled, int perRun, String focus) {
         write(ENABLED, String.valueOf(enabled));
         write(PER_RUN, String.valueOf(perRun));
         write(FOCUS, focus);
+    }
+
+    void saveLimits(int dailyLimitDollars, int monthlyLimitDollars) {
+        write(DAILY_LIMIT, String.valueOf(dailyLimitDollars));
         write(MONTHLY_LIMIT, String.valueOf(monthlyLimitDollars));
     }
 
@@ -138,17 +148,29 @@ class ProspectSettings {
 
     /** What the finder has cost in {@code month}, in cents. */
     int spentCents(YearMonth month) {
-        String value = read().get(MONTH_SPEND);
-        if (value == null || !value.startsWith(month + ":")) {
+        return spent(read().get(MONTH_SPEND), month.toString());
+    }
+
+    /** What the finder has cost on {@code day}, in cents. */
+    int spentCents(LocalDate day) {
+        return spent(read().get(DAY_SPEND), day.toString());
+    }
+
+    /** Adds a run's cost to the day it started and that day's month. */
+    void addSpend(LocalDate day, int cents) {
+        if (cents > 0) {
+            YearMonth month = YearMonth.from(day);
+            write(MONTH_SPEND, month + ":" + (spentCents(month) + cents));
+            write(DAY_SPEND, day + ":" + (spentCents(day) + cents));
+        }
+    }
+
+    /** Spend is stored as "period:cents"; a different period means nothing spent in this one yet. */
+    private static int spent(String value, String period) {
+        if (value == null || !value.startsWith(period + ":")) {
             return 0;
         }
         return number(value.substring(value.indexOf(':') + 1), 0, 0, Integer.MAX_VALUE);
-    }
-
-    void addSpend(YearMonth month, int cents) {
-        if (cents > 0) {
-            write(MONTH_SPEND, month + ":" + (spentCents(month) + cents));
-        }
     }
 
     private Map<String, String> read() {

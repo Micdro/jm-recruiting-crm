@@ -2,6 +2,7 @@ package com.janemichael.jmrecruitingcrm.prospects;
 
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.FoundCompany;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.KeyRequest;
+import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.LimitsRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.Reviewed;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.SettingsRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.Status;
@@ -63,6 +64,11 @@ public class ProspectController {
     @PutMapping("/settings")
     public Status saveSettings(@Valid @RequestBody SettingsRequest request) {
         return finder.saveSettings(request);
+    }
+
+    @PutMapping("/limits")
+    public Status saveLimits(@Valid @RequestBody LimitsRequest request) {
+        return finder.saveLimits(request);
     }
 
     @PostMapping("/run-here")

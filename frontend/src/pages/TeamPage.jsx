@@ -14,6 +14,11 @@ export default function TeamPage() {
   const [modal, setModal] = useState(null);
 
   const isAdmin = user?.role === 'ADMIN';
+  // Read from the list, so it's current right after ownership changes hands.
+  const owner = users.data?.find((member) => member.accountOwner && member.active);
+  const iAmOwner = Boolean(owner && owner.id === user?.id);
+  // With no owner on file, any admin can name one.
+  const canNameOwner = iAmOwner || (!owner && isAdmin);
 
   function changed(message) {
     setModal(null);
@@ -24,7 +29,10 @@ export default function TeamPage() {
 
   return (
     <>
-      <PageHeader title="Team" sub="Who can sign in to the CRM.">
+      <PageHeader
+        title="Team"
+        sub={`Who can sign in to the CRM.${owner ? ` ${owner.displayName} is the owner: the only one who can change the AI Found API key and spending limits.` : ''}`}
+      >
         {isAdmin && (
           <button type="button" className="btn btn-primary" onClick={() => setModal({ kind: 'add' })}>
             Add teammate
@@ -60,16 +68,26 @@ export default function TeamPage() {
                     {member.id === user?.id && <span className="cell-sub">You</span>}
                   </td>
                   <td>{member.email}</td>
-                  <td>{ROLE[member.role]}</td>
+                  <td>
+                    {ROLE[member.role]}
+                    {member.accountOwner && <span className="tag">Owner</span>}
+                  </td>
                   <td>{member.active ? 'Active' : <span className="muted">Deactivated</span>}</td>
                   {isAdmin && (
                     <td className="cell-actions">
                       <button type="button" className="btn btn-sm" onClick={() => setModal({ kind: 'edit', member })}>
                         Edit
                       </button>
-                      <button type="button" className="btn btn-sm" onClick={() => setModal({ kind: 'reset', member })}>
-                        Reset password
-                      </button>
+                      {!(member.accountOwner && member.id !== user?.id) && (
+                        <button type="button" className="btn btn-sm" onClick={() => setModal({ kind: 'reset', member })}>
+                          Reset password
+                        </button>
+                      )}
+                      {canNameOwner && member.active && !(member.accountOwner && iAmOwner) && (
+                        <button type="button" className="btn btn-sm" onClick={() => setModal({ kind: 'owner', member })}>
+                          {member.id === user?.id ? 'Make me owner' : 'Make owner'}
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -94,6 +112,19 @@ export default function TeamPage() {
       {modal?.kind === 'edit' && (
         <Modal title={`Edit ${modal.member.displayName}`} onClose={() => setModal(null)}>
           <EditUserForm member={modal.member} onCancel={() => setModal(null)} onSaved={() => changed('Saved')} />
+        </Modal>
+      )}
+      {modal?.kind === 'owner' && (
+        <Modal title={`Make ${modal.member.displayName} the owner?`} onClose={() => setModal(null)}>
+          <MakeOwnerForm
+            member={modal.member}
+            isSelf={modal.member.id === user?.id}
+            onCancel={() => setModal(null)}
+            onSaved={(team) => {
+              users.setData(team);
+              changed(`${modal.member.displayName} is now the owner`);
+            }}
+          />
         </Modal>
       )}
       {modal?.kind === 'reset' && (
@@ -157,6 +188,28 @@ function AddUserForm({ onCancel, onSaved }) {
   );
 }
 
+function MakeOwnerForm({ member, isSelf, onCancel, onSaved }) {
+  const { busy, error, submit } = useSubmit(() => api.users.makeOwner(member.id), onSaved);
+
+  return (
+    <form className="form" onSubmit={submit}>
+      <p className="form-intro">
+        {isSelf ? 'You' : member.displayName} will be the only one who can change the AI Found API key and spending limits, and hand
+        ownership on.{isSelf ? '' : ` ${member.displayName} becomes an admin if they aren't one, and you stay an admin.`}
+      </p>
+      <ErrorNote>{error}</ErrorNote>
+      <div className="form-actions">
+        <button type="button" className="btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={busy}>
+          {isSelf ? 'Make me owner' : 'Make owner'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function EditUserForm({ member, onCancel, onSaved }) {
   const [form, setForm] = useState({ displayName: member.displayName, role: member.role, active: member.active });
   const set = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
@@ -165,13 +218,19 @@ function EditUserForm({ member, onCancel, onSaved }) {
   return (
     <form className="form" onSubmit={submit}>
       <TextField label="Name" value={form.displayName} onChange={set('displayName')} required maxLength={100} />
-      <SelectField label="Role" value={form.role} onChange={set('role')} options={options(ROLE)} required />
-      <CheckboxField
-        label="Can sign in"
-        checked={form.active}
-        onChange={set('active')}
-        hint="Deactivating keeps their history but blocks sign-in."
-      />
+      {member.accountOwner ? (
+        <p className="field-hint">The owner stays an active admin. To change that, they hand ownership to someone else first.</p>
+      ) : (
+        <>
+          <SelectField label="Role" value={form.role} onChange={set('role')} options={options(ROLE)} required />
+          <CheckboxField
+            label="Can sign in"
+            checked={form.active}
+            onChange={set('active')}
+            hint="Deactivating keeps their history but blocks sign-in."
+          />
+        </>
+      )}
       <ErrorNote>{error}</ErrorNote>
       <div className="form-actions">
         <button type="button" className="btn" onClick={onCancel}>

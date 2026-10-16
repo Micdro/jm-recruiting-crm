@@ -95,6 +95,8 @@ export const api = {
     create: (body) => post('/api/users', body),
     update: (id, body) => put(`/api/users/${id}`, body),
     resetPassword: (id, password) => post(`/api/users/${id}/password`, { password }),
+    /** Hands the account owner role to this teammate. Returns the team. */
+    makeOwner: (id) => post(`/api/users/${id}/account-owner`),
     changeOwnPassword: (currentPassword, newPassword) =>
       post('/api/users/me/password', { currentPassword, newPassword }),
   },
@@ -197,6 +199,7 @@ export const api = {
     saveKey: (apiKey) => put('/api/prospects/key', { apiKey }),
     removeKey: () => del('/api/prospects/key'),
     saveSettings: (body) => put('/api/prospects/settings', body),
+    saveLimits: (body) => put('/api/prospects/limits', body),
     runHere: () => post('/api/prospects/run-here'),
     accept: (id) => post(`/api/prospects/companies/${id}/accept`),
     dismiss: (id) => post(`/api/prospects/companies/${id}/dismiss`),

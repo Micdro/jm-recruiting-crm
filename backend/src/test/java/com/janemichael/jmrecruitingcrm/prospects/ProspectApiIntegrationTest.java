@@ -60,6 +60,7 @@ class ProspectApiIntegrationTest {
 
     private static final String ADMIN = "prospects-admin@jane-michael.test";
     private static final String MEMBER = "prospects-member@jane-michael.test";
+    private static final String OWNER = "prospects-owner@jane-michael.test";
     private static final String KEY = "sk-ant-api03-test-key-1234";
 
     @Autowired
@@ -95,6 +96,9 @@ class ProspectApiIntegrationTest {
     @Autowired
     private SyncIdentity identity;
 
+    @Autowired
+    private java.time.Clock clock;
+
     @MockitoBean
     private ClaudeApi api;
 
@@ -122,7 +126,11 @@ class ProspectApiIntegrationTest {
                 .andExpect(jsonPath("$.configured").value(false))
                 .andExpect(jsonPath("$.canEdit").value(true))
                 .andExpect(jsonPath("$.perRun").value(10))
-                .andExpect(jsonPath("$.monthlyLimitDollars").value(30));
+                .andExpect(jsonPath("$.dailyLimitDollars").value(2))
+                .andExpect(jsonPath("$.monthlyLimitDollars").value(30))
+                // No owner on file yet (an older CRM), so any admin stands in.
+                .andExpect(jsonPath("$.canEditLimits").value(true))
+                .andExpect(jsonPath("$.ownerName").value(nullValue()));
 
         mockMvc.perform(send(ADMIN, "ADMIN", put("/api/prospects/key"), Map.of("apiKey", "  " + KEY + " ")))
                 .andExpect(status().isOk())
@@ -156,7 +164,7 @@ class ProspectApiIntegrationTest {
 
     @Test
     void onlyAdminsChangeTheSettings() throws Exception {
-        Map<String, Object> request = Map.of("enabled", true, "perRun", 5, "focus", "US only", "monthlyLimitDollars", 15);
+        Map<String, Object> request = Map.of("enabled", true, "perRun", 5, "focus", "US only");
 
         mockMvc.perform(send(MEMBER, "USER", put("/api/prospects/settings"), request))
                 .andExpect(status().isForbidden());
@@ -167,12 +175,46 @@ class ProspectApiIntegrationTest {
         mockMvc.perform(send(ADMIN, "ADMIN", put("/api/prospects/settings"), request))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.perRun").value(5))
-                .andExpect(jsonPath("$.focus").value("US only"))
-                .andExpect(jsonPath("$.monthlyLimitDollars").value(15));
+                .andExpect(jsonPath("$.focus").value("US only"));
 
-        mockMvc.perform(send(ADMIN, "ADMIN", put("/api/prospects/settings"),
-                        Map.of("enabled", true, "perRun", 40, "monthlyLimitDollars", 15)))
+        mockMvc.perform(send(ADMIN, "ADMIN", put("/api/prospects/settings"), Map.of("enabled", true, "perRun", 40)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void onlyTheOwnerChangesTheKeyAndTheLimits() throws Exception {
+        AppUser owner = account(OWNER, "Prospects Owner", UserRole.ADMIN);
+        owner.setAccountOwner(true);
+        users.save(owner);
+        Map<String, Object> limits = Map.of("dailyLimitDollars", 3, "monthlyLimitDollars", 40);
+
+        mockMvc.perform(send(ADMIN, "ADMIN", get("/api/prospects"), null))
+                .andExpect(jsonPath("$.canEdit").value(true))
+                .andExpect(jsonPath("$.canEditLimits").value(false))
+                .andExpect(jsonPath("$.ownerName").value("Prospects Owner"));
+        mockMvc.perform(send(ADMIN, "ADMIN", put("/api/prospects/limits"), limits))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.messages[0]").value("Only the owner (Prospects Owner) can change the spending limits."));
+        mockMvc.perform(send(ADMIN, "ADMIN", put("/api/prospects/key"), Map.of("apiKey", KEY)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.messages[0]").value("Only the owner (Prospects Owner) can change the Claude API key."));
+        mockMvc.perform(send(ADMIN, "ADMIN", delete("/api/prospects/key"), null))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(send(OWNER, "ADMIN", put("/api/prospects/limits"), limits))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.canEditLimits").value(true))
+                .andExpect(jsonPath("$.dailyLimitDollars").value(3))
+                .andExpect(jsonPath("$.monthlyLimitDollars").value(40));
+        mockMvc.perform(send(OWNER, "ADMIN", put("/api/prospects/limits"),
+                        Map.of("dailyLimitDollars", 0, "monthlyLimitDollars", 40)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value(containsString("at least $1")));
+
+        // Admins still run the schedule and the guidance.
+        mockMvc.perform(send(ADMIN, "ADMIN", put("/api/prospects/settings"), Map.of("enabled", false, "perRun", 8)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.perRun").value(8));
     }
 
     @Test
@@ -182,11 +224,28 @@ class ProspectApiIntegrationTest {
                 .andExpect(jsonPath("$.messages[0]").value("Add a Claude API key first."));
 
         settings.saveKey(KEY);
-        settings.saveSchedule(true, 10, null, 0);
+        settings.saveLimits(2, 0);
         mockMvc.perform(send(MEMBER, "USER", post("/api/prospects/run"), null))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.messages[0]").value(containsString("limit of $0 is reached")));
+                .andExpect(jsonPath("$.messages[0]").value(containsString("This month's limit of $0 is reached.")));
+
+        // A $1 daily limit with 40 cents spent today: 60 cents isn't enough for a search.
+        settings.saveLimits(1, 30);
+        settings.addSpend(LocalDate.now(clock), 40);
+        mockMvc.perform(send(MEMBER, "USER", post("/api/prospects/run"), null))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.messages[0]").value(containsString("Only $0.60 is left of today's $1 limit")));
+        mockMvc.perform(send(MEMBER, "USER", get("/api/prospects"), null))
+                .andExpect(jsonPath("$.spentTodayCents").value(40))
+                .andExpect(jsonPath("$.spentThisMonthCents").value(40));
         assertThat(finder.isRunningHere()).isFalse();
+
+        // Each search gets what's left of today's limit, or of the month's if that's less.
+        assertThat(ProspectFinder.budget(2, 0, 30, 0)).isEqualTo(new ProspectFinder.Budget(200, "today's $2 limit", null));
+        assertThat(ProspectFinder.budget(2, 50, 30, 50).cents()).isEqualTo(150);
+        assertThat(ProspectFinder.budget(2, 0, 30, 2_900)).isEqualTo(new ProspectFinder.Budget(100, "this month's $30 limit", null));
+        assertThat(ProspectFinder.budget(2, 200, 30, 200).blocked())
+                .isEqualTo("Today's limit of $2 is reached. The finder can search again tomorrow.");
     }
 
     @Test
@@ -222,7 +281,7 @@ class ProspectApiIntegrationTest {
                 """, null));
 
         ProspectResearch.Outcome outcome = research.run(new ProspectResearch.Request(KEY, 10, null,
-                List.of("Ledgerlight AI"), LocalDate.now()));
+                List.of("Ledgerlight AI"), LocalDate.now(), 200, "today's $2 limit"));
         assertThat(outcome.found().withheld()).isEqualTo(1);
         ProspectFinder.Saved saved = finder.save(outcome.found().companies(), admin.getId());
         assertThat(saved.added()).isEqualTo(1);
@@ -306,16 +365,16 @@ class ProspectApiIntegrationTest {
         ZoneId zone = ZoneId.of("America/New_York");
         ZonedDateTime thursday = ZonedDateTime.of(2026, 10, 15, 9, 0, 0, 0, zone);
         int here = identity.nodeId();
-        ProspectSettings.Values on = new ProspectSettings.Values(KEY, true, 10, null, here, 30);
+        ProspectSettings.Values on = new ProspectSettings.Values(KEY, true, 10, null, here, 30, 2);
 
         assertThat(finder.isDue(on, null, thursday)).isTrue();
         assertThat(finder.isDue(on, null, thursday.withHour(6))).isFalse();
         assertThat(finder.isDue(on, null, thursday.plusDays(2))).isFalse();
-        assertThat(finder.isDue(new ProspectSettings.Values(KEY, false, 10, null, here, 30), null, thursday)).isFalse();
-        assertThat(finder.isDue(new ProspectSettings.Values(null, true, 10, null, here, 30), null, thursday)).isFalse();
-        assertThat(finder.isDue(new ProspectSettings.Values(KEY, true, 10, null, here + 1, 30), null, thursday)).isFalse();
-        assertThat(finder.isDue(new ProspectSettings.Values(KEY, true, 10, null, null, 30), null, thursday)).isFalse();
-        assertThat(finder.isDue(new ProspectSettings.Values(KEY, true, 10, null, here, 0), null, thursday)).isFalse();
+        assertThat(finder.isDue(new ProspectSettings.Values(KEY, false, 10, null, here, 30, 2), null, thursday)).isFalse();
+        assertThat(finder.isDue(new ProspectSettings.Values(null, true, 10, null, here, 30, 2), null, thursday)).isFalse();
+        assertThat(finder.isDue(new ProspectSettings.Values(KEY, true, 10, null, here + 1, 30, 2), null, thursday)).isFalse();
+        assertThat(finder.isDue(new ProspectSettings.Values(KEY, true, 10, null, null, 30, 2), null, thursday)).isFalse();
+        assertThat(finder.isDue(new ProspectSettings.Values(KEY, true, 10, null, here, 0, 2), null, thursday)).isFalse();
 
         Instant earlierToday = thursday.withHour(7).withMinute(30).toInstant();
         ProspectSettings.Run today = ProspectSettings.Run.started("MANUAL", here, "Prospects Admin", earlierToday);

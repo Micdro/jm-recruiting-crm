@@ -30,6 +30,36 @@ public class CurrentUserService {
                 .orElseThrow(() -> new ForbiddenException("Your account was not found"));
     }
 
+    /**
+     * The signed-in account owner. While there's no active owner (an older CRM, or the owner was
+     * deactivated), any admin may act, so nothing is ever locked away.
+     *
+     * @param what what they're trying to do, to finish "Only the owner ... can ..."
+     */
+    public AppUser requireAccountOwner(String what) {
+        AppUser user = get();
+        if (user.isAccountOwner()) {
+            return user;
+        }
+        java.util.Optional<AppUser> owner = userRepository.findFirstByAccountOwnerTrueAndActiveTrue();
+        if (owner.isEmpty() && user.isAdmin()) {
+            return user;
+        }
+        throw new ForbiddenException("Only the owner" + owner.map(o -> " (" + o.getDisplayName() + ")").orElse("")
+                + " can " + what + ".");
+    }
+
+    /** Whether the signed-in person may do what {@link #requireAccountOwner} guards. */
+    public boolean isAccountOwnerOrStandIn(AppUser user) {
+        return user.isAccountOwner()
+                || user.isAdmin() && userRepository.findFirstByAccountOwnerTrueAndActiveTrue().isEmpty();
+    }
+
+    /** The active account owner's name, or null if there isn't one. */
+    public String accountOwnerName() {
+        return userRepository.findFirstByAccountOwnerTrueAndActiveTrue().map(AppUser::getDisplayName).orElse(null);
+    }
+
     public AppUser requireAdmin() {
         AppUser user = get();
         if (!user.isAdmin()) {

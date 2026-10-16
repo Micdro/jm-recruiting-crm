@@ -257,6 +257,9 @@ final class Found {
      */
     static final class Evidence {
 
+        /** Labels the API puts on blocks, not anything a page said. */
+        private static final Set<String> BOOKKEEPING = Set.of("type", "id", "tool_use_id", "caller");
+
         private final StringBuilder text = new StringBuilder();
         private String lowered;
         private Set<String> phones;
@@ -273,7 +276,7 @@ final class Found {
                 return;
             }
             if (node.isTextual()) {
-                if (field == null || !field.startsWith("encrypted")) {
+                if (field == null || !field.startsWith("encrypted") && !BOOKKEEPING.contains(field)) {
                     text.append(node.asText()).append('\n');
                 }
             } else if (node.isArray()) {
@@ -344,6 +347,11 @@ final class Found {
 
         boolean isEmpty() {
             return text.isEmpty();
+        }
+
+        /** Everything collected, as it was returned. */
+        String excerpt() {
+            return text.toString();
         }
     }
 }

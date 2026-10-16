@@ -16,7 +16,8 @@ public final class UserDtos {
     private UserDtos() {
     }
 
-    public record UserResponse(Long id, String email, String displayName, UserRole role, boolean active) {
+    public record UserResponse(Long id, String email, String displayName, UserRole role, boolean active,
+                               boolean accountOwner) {
 
         public static UserResponse from(AppUser user) {
             return new UserResponse(
@@ -24,18 +25,20 @@ public final class UserDtos {
                     user.getEmail(),
                     user.getDisplayName(),
                     user.getRole(),
-                    user.isActive()
+                    user.isActive(),
+                    user.isAccountOwner()
             );
         }
     }
 
     /** The signed-in person, and whether this computer's CRM is still locked for them. */
     public record SignedInUser(
-            Long id, String email, String displayName, UserRole role, boolean active, boolean crmLocked) {
+            Long id, String email, String displayName, UserRole role, boolean active, boolean crmLocked,
+            boolean accountOwner) {
 
         public static SignedInUser from(AppUser user, boolean crmLocked) {
             return new SignedInUser(user.getId(), user.getEmail(), user.getDisplayName(), user.getRole(),
-                    user.isActive(), crmLocked);
+                    user.isActive(), crmLocked, user.isAccountOwner());
         }
     }
 

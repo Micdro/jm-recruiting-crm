@@ -66,6 +66,7 @@ public class AdminBootstrap implements ApplicationRunner {
         admin.setEmail(email.trim().toLowerCase());
         admin.setDisplayName(StringUtils.hasText(name) ? name.trim() : "Admin");
         admin.setRole(UserRole.ADMIN);
+        admin.setAccountOwner(true);
         admin.setActive(true);
         admin.setPasswordHash(passwordEncoder.encode(password));
         crmLock.lockKeyFor(admin, password);

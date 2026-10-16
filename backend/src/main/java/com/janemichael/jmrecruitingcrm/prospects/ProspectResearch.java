@@ -31,6 +31,21 @@ class ProspectResearch {
     static final int MAX_RETRIES = 3;
     /** A run that's still going after this long is stopped before its next request. */
     static final Duration TIME_LIMIT = Duration.ofMinutes(40);
+    /** Web searches one request may run, so no single step can spend much before the CRM checks the cost. */
+    static final int SEARCHES_PER_REQUEST = 12;
+
+    /**
+     * Kept back for the last step: when the cost so far plus the priciest step yet would leave less
+     * than this, the search stops and Claude records what it has found from its notes.
+     */
+    static final int WRAP_UP_RESERVE_CENTS = 25;
+    static final int WRAP_UP_MAX_TOKENS = 8_000;
+    /** The wrap-up's instructions and its longest answer, in cents. */
+    static final int WRAP_UP_FIXED_CENTS = 10;
+    static final int WRAP_UP_MAX_CHARS = 150_000;
+    static final int WRAP_UP_MIN_CHARS = 500;
+    /** Characters per token, counted low so the wrap-up's cost is overestimated rather than under. */
+    static final int CHARS_PER_TOKEN = 3;
 
     // Prices for Claude Sonnet 5.5, in US dollars per million tokens, and per search.
     static final double INPUT_PER_MILLION = 2.00;
@@ -39,7 +54,13 @@ class ProspectResearch {
     static final double CACHE_READ_PER_MILLION = 0.10;
     static final double PER_SEARCH = 0.01;
 
-    record Request(String apiKey, int count, String focus, List<String> exclude, LocalDate today) {
+    /**
+     * @param budgetCents the most this search may cost: what's left of today's limit, or of this
+     *                    month's if that's less
+     * @param limitName   which limit that is, for "The search reached ...", like "today's $2 limit"
+     */
+    record Request(String apiKey, int count, String focus, List<String> exclude, LocalDate today, int budgetCents,
+                   String limitName) {
     }
 
     /** What a run used, added up over its requests. */
@@ -70,7 +91,8 @@ class ProspectResearch {
         }
     }
 
-    record Outcome(Found.Result found, Usage usage) {
+    /** @param note why the search stopped early, when it did (it still saved what it had found) */
+    record Outcome(Found.Result found, Usage usage, String note) {
     }
 
     /** The search couldn't finish. {@code usage} is what it had used (and cost) by then. */
@@ -101,16 +123,33 @@ class ProspectResearch {
 
         Usage usage = Usage.NONE;
         Found.Evidence evidence = new Found.Evidence();
+        StringBuilder notes = new StringBuilder();
         String container = null;
         boolean nudged = false;
+        int priciestStep = 0;
+        int searchLimit = maxSearches(request.count());
         long started = System.nanoTime();
 
-        for (int call = 0; call < MAX_REQUESTS; call++) {
-            if (Duration.ofNanos(System.nanoTime() - started).compareTo(TIME_LIMIT) > 0) {
-                throw new ResearchException("The search took too long and was stopped.", usage);
+        for (int call = 0; ; call++) {
+            String stopping = null;
+            if (call >= MAX_REQUESTS) {
+                stopping = "took too many steps";
+            } else if (Duration.ofNanos(System.nanoTime() - started).compareTo(TIME_LIMIT) > 0) {
+                stopping = "took too long";
+            } else if (call > 0 && usage.costCents() + priciestStep + WRAP_UP_RESERVE_CENTS > request.budgetCents()) {
+                stopping = "reached " + request.limitName();
+            } else if (usage.searches() >= searchLimit) {
+                stopping = "used all its web searches";
             }
-            JsonNode response = send(request.apiKey(), body(request, messages, container), usage);
+            if (stopping != null) {
+                return wrapUp(request, evidence, notes, usage, stopping);
+            }
+
+            int maxUses = Math.min(SEARCHES_PER_REQUEST, searchLimit - usage.searches());
+            int before = usage.costCents();
+            JsonNode response = send(request.apiKey(), body(request, messages, container, maxUses), usage);
             usage = usage.plus(response.get("usage"));
+            priciestStep = Math.max(priciestStep, usage.costCents() - before);
             JsonNode content = response.path("content");
             JsonNode containerNode = response.path("container").path("id");
             if (containerNode.isTextual()) {
@@ -123,6 +162,7 @@ class ProspectResearch {
                 if (type.endsWith("_tool_result")) {
                     evidence.addResult(block);
                 } else if (type.equals("text")) {
+                    notes.append(block.path("text").asText()).append('\n');
                     // Citations quote the results, so they count as what the searches showed.
                     block.path("citations").forEach(evidence::addResult);
                 } else if (type.equals("tool_use") && TOOL.equals(block.path("name").asText())) {
@@ -130,7 +170,7 @@ class ProspectResearch {
                 }
             }
             if (recorded != null) {
-                return new Outcome(Found.read(recorded, evidence, request.count()), usage);
+                return new Outcome(Found.read(recorded, evidence, request.count()), usage, null);
             }
 
             String stop = response.path("stop_reason").asText();
@@ -145,13 +185,79 @@ class ProspectResearch {
                     messages.addObject().put("role", "user").put("content",
                             "Please call " + TOOL + " now with the companies you found (an empty list if none).");
                 }
-                case "max_tokens" -> throw new ResearchException(
-                        "The search ran longer than one run allows. Try fewer companies per run.", usage);
+                case "max_tokens" -> {
+                    return wrapUp(request, evidence, notes, usage, "ran longer than one step allows");
+                }
                 case "refusal" -> throw new ResearchException("Claude declined this search.", usage);
                 default -> throw new ResearchException("The search stopped unexpectedly (" + stop + ").", usage);
             }
         }
-        throw new ResearchException("The search took too many steps and was stopped.", usage);
+    }
+
+    /**
+     * Ends a search that has to stop early: one last request, with no web search, in which Claude
+     * records the companies it found from its notes and what its searches returned. That request
+     * is sized to fit what's left of the budget, and is skipped when nothing fits.
+     *
+     * @param why how the search stopped, to finish "The search ..."
+     */
+    private Outcome wrapUp(Request request, Found.Evidence evidence, CharSequence notes, Usage usage, String why)
+            throws ResearchException, InterruptedException {
+        String material = material(notes, evidence);
+        if (material.isBlank()) {
+            throw new ResearchException("The search " + why + " before it found anything.", usage);
+        }
+        int left = request.budgetCents() - usage.costCents() - WRAP_UP_FIXED_CENTS;
+        long affordable = (long) (left / 100.0 / INPUT_PER_MILLION * 1e6) * CHARS_PER_TOKEN;
+        int maxChars = (int) Math.max(0, Math.min(WRAP_UP_MAX_CHARS, affordable));
+        if (maxChars < WRAP_UP_MIN_CHARS) {
+            throw new ResearchException("The search " + why + " with nothing left of its budget to save what it found.",
+                    usage);
+        }
+        if (material.length() > maxChars) {
+            material = material.substring(0, maxChars);
+        }
+
+        ObjectNode body = json.createObjectNode();
+        body.put("model", MODEL);
+        body.put("max_tokens", WRAP_UP_MAX_TOKENS);
+        body.put("system", systemPrompt(request));
+        body.putArray("tools").add(recordTool());
+        body.putObject("tool_choice").put("type", "tool").put("name", TOOL);
+        body.putArray("messages").addObject().put("role", "user").put("content", wrapUpMessage(request, material));
+        String text;
+        try {
+            text = json.writeValueAsString(body);
+        } catch (JsonProcessingException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+
+        JsonNode response = send(request.apiKey(), text, usage);
+        usage = usage.plus(response.get("usage"));
+        for (JsonNode block : response.path("content")) {
+            if (block.path("type").asText().equals("tool_use") && TOOL.equals(block.path("name").asText())) {
+                return new Outcome(Found.read(block.path("input"), evidence, request.count()), usage,
+                        "The search " + why + ", so it saved what it had found by then.");
+            }
+        }
+        throw new ResearchException("The search " + why + " and couldn't save what it found.", usage);
+    }
+
+    /** Claude's notes, then what the searches returned. */
+    static String material(CharSequence notes, Found.Evidence evidence) {
+        String said = notes.toString().strip();
+        String returned = evidence.excerpt().strip();
+        if (said.isEmpty() && returned.isEmpty()) {
+            return "";
+        }
+        return "Your notes:\n" + (said.isEmpty() ? "(none)" : said) + "\n\nWhat your searches returned:\n"
+                + (returned.isEmpty() ? "(nothing)" : returned);
+    }
+
+    static String wrapUpMessage(Request request, String material) {
+        return "Your search has to stop now, so there's no more searching. From your notes and what your searches "
+                + "returned, below, call " + TOOL + " with up to " + request.count() + " of the best companies. Use "
+                + "only details shown below, and leave out anything you'd have to guess.\n\n" + material;
     }
 
     /** One request, retried when the API is busy or briefly unavailable. */
@@ -224,7 +330,7 @@ class ProspectResearch {
 
     // The request ---------------------------------------------------------------
 
-    String body(Request request, ArrayNode messages, String container) {
+    String body(Request request, ArrayNode messages, String container, int maxUses) {
         ObjectNode body = json.createObjectNode();
         body.put("model", MODEL);
         body.put("max_tokens", MAX_TOKENS);
@@ -237,7 +343,7 @@ class ProspectResearch {
         ObjectNode search = tools.addObject();
         search.put("type", "web_search_20260318");
         search.put("name", "web_search");
-        search.put("max_uses", maxSearches(request.count()));
+        search.put("max_uses", maxUses);
         // Search results Claude's filtering code already read don't need to come back to the CRM.
         search.put("response_inclusion", "excluded");
         tools.add(recordTool());
@@ -248,7 +354,7 @@ class ProspectResearch {
         }
     }
 
-    /** About three searches per company (finding it, then its people), plus a few to start. */
+    /** Searches for the whole run: about three per company (finding it, then its people), plus a few to start. */
     static int maxSearches(int count) {
         return Math.min(40, 8 + count * 3);
     }
