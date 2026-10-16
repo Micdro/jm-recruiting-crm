@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, Empty, ErrorNote, ExternalLink, Loading, Pill, TouchPips } from '../components/Bits.jsx';
-import JobBoardPanel from '../components/JobBoardPanel.jsx';
+// Loads with the page rather than the app, which keeps the main bundle small.
+const JobBoardPanel = lazy(() => import('../components/JobBoardPanel.jsx'));
 import NoteForm from '../components/NoteForm.jsx';
 import Modal from '../components/Modal.jsx';
 import Timeline from '../components/Timeline.jsx';
@@ -160,7 +161,9 @@ export default function CompanyDetailPage() {
 
           <WorksHere company={record} />
 
-          <JobBoardPanel companyId={record.id} companyName={record.name} />
+          <Suspense fallback={null}>
+            <JobBoardPanel companyId={record.id} companyName={record.name} />
+          </Suspense>
 
           <section className="panel">
             <div className="panel-head">
