@@ -121,13 +121,13 @@ final class DesktopTray {
         return drawn(width, height);
     }
 
-    /** "JM" on the app's green, for builds without the web app's files. */
+    /** "JM" on the firm's navy, for builds without the web app's files. */
     private static Image drawn(int width, int height) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        graphics.setColor(new Color(0x1d6b57));
+        graphics.setColor(new Color(0x003366));
         graphics.fillRoundRect(0, 0, width, height, width / 3, height / 3);
         graphics.setColor(Color.WHITE);
         graphics.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.round(height * 0.5f)));

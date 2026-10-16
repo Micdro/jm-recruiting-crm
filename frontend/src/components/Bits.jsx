@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import logo from '../assets/jm-logo.png';
 import { MAX_TOUCHES, toneFor } from '../labels.js';
 import { dueInfo } from '../format.js';
 
@@ -24,21 +25,12 @@ export function DueTag({ date, today }) {
   return <span className={`due due-${tone}`}>{label}</span>;
 }
 
-/** The firm's mark and a heading, at the top of the sign-in, setup and unlock screens. */
+/** The firm's logo and a heading, at the top of the sign-in, setup and unlock screens. */
 export function LoginBrand({ title }) {
   return (
     <div className="login-brand">
-      <svg viewBox="0 0 32 32" width="40" height="40" aria-hidden="true">
-        <rect width="32" height="32" rx="6" fill="currentColor" />
-        <g stroke="#6FC3A6" strokeWidth="2.4" strokeLinecap="round">
-          <path d="M9 9v14M13.5 9v14M18 9v14M22.5 9v14" />
-          <path d="M6.5 20.5 25 11.5" stroke="#F4F6F5" />
-        </g>
-      </svg>
-      <div>
-        <p className="login-firm">Jane Michael</p>
-        <h1>{title}</h1>
-      </div>
+      <img className="login-logo" src={logo} alt="Jane Michael AI Talent Search" width="220" height="42" />
+      <h1>{title}</h1>
     </div>
   );
 }

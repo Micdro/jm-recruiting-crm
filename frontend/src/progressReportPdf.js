@@ -1,5 +1,5 @@
 // The progress report for a client as a PDF. Loaded only when a report is made.
-import { GREEN, INK_2, INK_3, MARGIN, PAGE, RIGHT, RULE, createPdf, fileName, longDate, savePdf } from './pdfText.js';
+import { BRAND, GOLD, INK_2, INK_3, MARGIN, PAGE, RIGHT, RULE, createPdf, fileName, longDate, savePdf } from './pdfText.js';
 
 const BOTTOM = MARGIN + 40; // room for the footer
 
@@ -11,21 +11,20 @@ const BOTTOM = MARGIN + 40; // room for the footer
  */
 export async function progressPdf({ firm, report }) {
   const pdf = await createPdf({ title: `Search progress: ${report.searchTitle}`, author: firm.firmName });
-  const { doc, bold, regular, draw, wrap, rule } = pdf;
+  const { doc, bold, regular, draw, wrap, rule, letterhead } = pdf;
   const contentWidth = RIGHT - MARGIN;
 
   // The firm and the date, top.
-  let y = PAGE.height - MARGIN - 10;
-  draw(firm.firmName, MARGIN, y, { font: bold, size: 13 });
-  draw('Search progress', RIGHT, y - 2, { font: bold, size: 20, color: GREEN, align: 'right' });
-  y -= 16;
+  const top = PAGE.height - MARGIN - 10;
+  draw('Search progress', RIGHT, top - 2, { font: bold, size: 20, color: BRAND, align: 'right' });
+  draw(longDate(report.date), RIGHT, top - 26, { size: 9, color: INK_3, align: 'right' });
+  let y = letterhead(firm.firmName);
   const contact = [firm.website, firm.email, firm.phone].filter(Boolean).join('   ');
   if (contact) draw(contact, MARGIN, y, { size: 9, color: INK_3 });
-  draw(longDate(report.date), RIGHT, y - 10, { size: 9, color: INK_3, align: 'right' });
   y -= 24;
   draw(`Prepared for ${[report.preparedFor, report.companyName].filter(Boolean).join(', ')}`, MARGIN, y, { color: INK_2 });
   y -= 14;
-  rule(y, GREEN, 1.5);
+  rule(y, GOLD, 1.5);
   y -= 32;
 
   // The search.
@@ -48,7 +47,7 @@ export async function progressPdf({ firm, report }) {
   const heading = (text) => {
     y -= 14;
     room(46);
-    draw(text, MARGIN, y, { font: bold, size: 11, color: GREEN });
+    draw(text, MARGIN, y, { font: bold, size: 11, color: BRAND });
     y -= 17;
   };
   const paragraph = (text, { font = regular, indent = 0 } = {}) => {
@@ -61,7 +60,7 @@ export async function progressPdf({ firm, report }) {
   const bullets = (text, font = regular) => {
     for (const item of String(text ?? '').split('\n').map((line) => line.trim()).filter(Boolean)) {
       room(14.5);
-      draw('•', MARGIN + 2, y, { font, size: 10.5, color: GREEN });
+      draw('•', MARGIN + 2, y, { font, size: 10.5, color: BRAND });
       paragraph(item, { font, indent: 14 });
       y -= 3;
     }
@@ -78,7 +77,7 @@ export async function progressPdf({ firm, report }) {
     draw(row.label, MARGIN, y, { size: 10.5, color: INK_2 });
     const width = (row.count / most) * barSpace;
     pdf.page.drawRectangle({ x: barLeft, y: y - 2, width: barSpace, height: 11, color: RULE, opacity: 0.45 });
-    if (width > 0) pdf.page.drawRectangle({ x: barLeft, y: y - 2, width: Math.max(width, 2), height: 11, color: GREEN });
+    if (width > 0) pdf.page.drawRectangle({ x: barLeft, y: y - 2, width: Math.max(width, 2), height: 11, color: BRAND });
     draw(String(row.count), barLeft + barSpace + 10, y, { font: bold, size: 10.5 });
     y -= 18;
   }
