@@ -1,6 +1,8 @@
 package com.janemichael.jmrecruitingcrm.pipeline;
 
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineDtos.AddToSearchRequest;
+import com.janemichael.jmrecruitingcrm.pipeline.PipelineDtos.DebriefRequest;
+import com.janemichael.jmrecruitingcrm.pipeline.PipelineDtos.InterviewRequest;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineDtos.PipelineEntryResponse;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineDtos.UpdateEntryRequest;
 import jakarta.validation.Valid;
@@ -52,5 +54,22 @@ public class PipelineController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         pipelineService.delete(id);
+    }
+
+    /** Schedules or moves the next interview for this candidate in this search. */
+    @PutMapping("/pipeline/{id}/interview")
+    public PipelineEntryResponse scheduleInterview(@PathVariable Long id, @Valid @RequestBody InterviewRequest request) {
+        return pipelineService.scheduleInterview(id, request);
+    }
+
+    @DeleteMapping("/pipeline/{id}/interview")
+    public PipelineEntryResponse cancelInterview(@PathVariable Long id) {
+        return pipelineService.cancelInterview(id);
+    }
+
+    /** Records the debrief with the candidate or the client after the interview. */
+    @PostMapping("/pipeline/{id}/debrief")
+    public PipelineEntryResponse debrief(@PathVariable Long id, @Valid @RequestBody DebriefRequest request) {
+        return pipelineService.debrief(id, request);
     }
 }

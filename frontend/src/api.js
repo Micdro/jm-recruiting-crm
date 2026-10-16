@@ -174,6 +174,11 @@ export const api = {
     add: (body) => post('/api/pipeline', body),
     update: (id, body) => put(`/api/pipeline/${id}`, body),
     remove: (id) => del(`/api/pipeline/${id}`),
+    /** { date: 'YYYY-MM-DD', time: 'HH:MM' or null, label }. A new date or time starts both debriefs over. */
+    scheduleInterview: (id, body) => put(`/api/pipeline/${id}/interview`, body),
+    cancelInterview: (id) => del(`/api/pipeline/${id}/interview`),
+    /** { with: 'CANDIDATE' | 'CLIENT', notes }. */
+    debrief: (id, body) => post(`/api/pipeline/${id}/debrief`, body),
   },
   placements: {
     ...crud('/api/placements'),

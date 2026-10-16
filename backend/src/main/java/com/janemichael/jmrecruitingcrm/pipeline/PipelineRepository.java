@@ -25,6 +25,10 @@ public interface PipelineRepository extends JpaRepository<PipelineEntry, Long> {
     @Query(FETCH + "where p.candidate.id = :candidateId order by p.stageChangedAt desc")
     List<PipelineEntry> findForCandidate(@Param("candidateId") Long candidateId);
 
+    /** Pipeline entries with an interview on or before this day, for Today's interviews and debriefs. */
+    @Query(FETCH + "where p.interviewDate is not null and p.interviewDate <= :day")
+    List<PipelineEntry> findWithInterviewOnOrBefore(@Param("day") java.time.LocalDate day);
+
     @Query(FETCH + "where p.id = :id")
     Optional<PipelineEntry> findWithDetailsById(@Param("id") Long id);
 

@@ -17,6 +17,8 @@ import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import com.janemichael.jmrecruitingcrm.contact.ContactResponse;
 import com.janemichael.jmrecruitingcrm.contact.ContactService;
 import com.janemichael.jmrecruitingcrm.contact.OutreachStatus;
+import com.janemichael.jmrecruitingcrm.pipeline.PipelineDtos.PipelineEntryResponse;
+import com.janemichael.jmrecruitingcrm.pipeline.PipelineService;
 import com.janemichael.jmrecruitingcrm.placement.Placement;
 import com.janemichael.jmrecruitingcrm.placement.PlacementDtos.PlacementResponse;
 import com.janemichael.jmrecruitingcrm.placement.PlacementRepository;
@@ -57,6 +59,7 @@ public class DashboardService {
     private final PlacementRepository placementRepository;
     private final ActivityRepository activityRepository;
     private final SearchService searchService;
+    private final PipelineService pipelineService;
     private final Clock clock;
     private final int dailyTouchTarget;
     private final int dailyTouchStretch;
@@ -70,6 +73,7 @@ public class DashboardService {
             PlacementRepository placementRepository,
             ActivityRepository activityRepository,
             SearchService searchService,
+            PipelineService pipelineService,
             Clock clock,
             @Value("${app.outreach.daily-touch-target:30}") int dailyTouchTarget,
             @Value("${app.outreach.daily-touch-stretch:50}") int dailyTouchStretch
@@ -82,6 +86,7 @@ public class DashboardService {
         this.placementRepository = placementRepository;
         this.activityRepository = activityRepository;
         this.searchService = searchService;
+        this.pipelineService = pipelineService;
         this.clock = clock;
         this.dailyTouchTarget = dailyTouchTarget;
         this.dailyTouchStretch = dailyTouchStretch;
@@ -137,6 +142,12 @@ public class DashboardService {
 
         List<SearchResponse> openSearches = searchService.list(null, null, true);
 
+        // Interviews today, and debriefs due after interviews, for whoever runs the search.
+        List<PipelineEntryResponse> interviews = pipelineService.interviewsForToday()
+                .stream()
+                .filter(entry -> team || me.getId().equals(entry.ownerId()))
+                .toList();
+
         Map<String, Long> outreachByStatus = new LinkedHashMap<>();
         for (OutreachStatus status : OutreachStatus.values()) {
             outreachByStatus.put(status.name(), 0L);
@@ -168,7 +179,8 @@ public class DashboardService {
                 openSearches,
                 outreachByStatus,
                 placementSummary(today),
-                recentActivity
+                recentActivity,
+                interviews
         );
     }
 
@@ -266,7 +278,8 @@ public class DashboardService {
             List<SearchResponse> openSearches,
             Map<String, Long> outreachByStatus,
             PlacementSummary placements,
-            List<ActivityResponse> recentActivity
+            List<ActivityResponse> recentActivity,
+            List<PipelineEntryResponse> interviews
     ) {
     }
 }

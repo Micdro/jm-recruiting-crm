@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Empty, ErrorNote, Loading, Pill } from '../components/Bits.jsx';
+import { DebriefForm, InterviewForm, InterviewLine } from '../components/Interviews.jsx';
 import { SelectField, TextArea } from '../components/Fields.jsx';
 import Modal from '../components/Modal.jsx';
 import NoteForm from '../components/NoteForm.jsx';
@@ -26,6 +27,7 @@ import {
 import { formatDate, formatTimestamp, percent, salaryRange, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 import { candidateOffLimits, offLimitsWarning } from '../offLimits.js';
+import { INTERVIEW_STAGES } from '../interviews.js';
 import ProgressReportForm from '../components/ProgressReportForm.jsx';
 
 const TABS = [
@@ -197,6 +199,8 @@ export default function SearchDetailPage() {
             onStage={requestStage}
             onEditRationale={(entry) => setModal({ kind: 'rationale', entry, stage: entry.stage })}
             onPlace={(entry) => setModal({ kind: 'placement', entry })}
+            onInterview={(entry) => setModal({ kind: 'interview', entry })}
+            onDebrief={(entry, side) => setModal({ kind: 'debrief', entry, side })}
             onRemove={async (entry) => {
               try {
                 await api.pipeline.remove(entry.id);
@@ -260,6 +264,42 @@ export default function SearchDetailPage() {
         </Modal>
       )}
 
+      {modal?.kind === 'interview' && (
+        <Modal
+          title={modal.entry.interviewDate ? `Interview for ${modal.entry.candidateName}` : `Schedule an interview for ${modal.entry.candidateName}`}
+          onClose={() => setModal(null)}
+        >
+          <InterviewForm
+            entry={modal.entry}
+            onCancel={() => setModal(null)}
+            onSaved={(updated, what) => {
+              setModal(null);
+              toast(what === 'cancelled' ? 'Interview cancelled' : `Interview set for ${updated.candidateName}`);
+              refreshAll();
+            }}
+          />
+        </Modal>
+      )}
+
+      {modal?.kind === 'debrief' && (
+        <Modal
+          title={modal.side === 'CANDIDATE' ? `Debrief ${modal.entry.candidateName}` : `Debrief ${modal.entry.companyName}`}
+          onClose={() => setModal(null)}
+        >
+          <DebriefForm
+            entry={modal.entry}
+            with={modal.side}
+            today={todayIso()}
+            onCancel={() => setModal(null)}
+            onSaved={() => {
+              setModal(null);
+              toast('Debrief saved');
+              refreshAll();
+            }}
+          />
+        </Modal>
+      )}
+
       {modal?.kind === 'placement' && (
         <Modal title={`Record placement: ${modal.entry.candidateName}`} onClose={() => setModal(null)}>
           <PlacementForm
@@ -312,7 +352,19 @@ export default function SearchDetailPage() {
   );
 }
 
-function PipelineTab({ search, entries, loading, onAdded, onStage, onEditRationale, onPlace, onRemove, onNewCandidate }) {
+function PipelineTab({
+  search,
+  entries,
+  loading,
+  onAdded,
+  onStage,
+  onEditRationale,
+  onPlace,
+  onInterview,
+  onDebrief,
+  onRemove,
+  onNewCandidate,
+}) {
   if (!entries && loading) return <Loading label="Loading pipeline" />;
   const list = entries ?? [];
   const closed = list.filter((entry) => CLOSED_STAGES.includes(entry.stage));
@@ -339,6 +391,8 @@ function PipelineTab({ search, entries, loading, onAdded, onStage, onEditRationa
                     onStage={onStage}
                     onEditRationale={onEditRationale}
                     onPlace={onPlace}
+                    onInterview={onInterview}
+                    onDebrief={onDebrief}
                     onRemove={onRemove}
                   />
                 ))}
@@ -377,7 +431,7 @@ function PipelineTab({ search, entries, loading, onAdded, onStage, onEditRationa
   );
 }
 
-function PipelineCard({ entry, onStage, onEditRationale, onPlace, onRemove }) {
+function PipelineCard({ entry, onStage, onEditRationale, onPlace, onInterview, onDebrief, onRemove }) {
   const needsRationale = SHORTLIST_STAGES.includes(entry.stage) && !entry.rationale;
 
   return (
@@ -400,6 +454,20 @@ function PipelineCard({ entry, onStage, onEditRationale, onPlace, onRemove }) {
         >
           {needsRationale ? 'Add the rationale for the client' : 'Add rationale'}
         </button>
+      )}
+      {entry.interviewDate ? (
+        <InterviewLine entry={entry} today={todayIso()} onEdit={onInterview} onDebrief={onDebrief} />
+      ) : (
+        INTERVIEW_STAGES.includes(entry.stage) && (
+          <button
+            type="button"
+            className="link-button card-schedule"
+            onClick={() => onInterview(entry)}
+            aria-label={`Schedule an interview for ${entry.candidateName}`}
+          >
+            Schedule interview
+          </button>
+        )
       )}
       <div className="card-foot">
         <label className="visually-hidden" htmlFor={`stage-${entry.id}`}>

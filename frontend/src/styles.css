@@ -1518,6 +1518,11 @@ a.cell-title:hover {
   justify-content: flex-start;
 }
 
+/* A destructive action kept apart from Save and Close. */
+.form-actions-left {
+  margin-right: auto;
+}
+
 .required {
   font-weight: 400;
   color: var(--ink-3);
@@ -1820,6 +1825,60 @@ a.cell-title:hover {
 .card-placed {
   font-size: 13px;
   color: var(--green-strong);
+}
+
+/* The interview on a pipeline card, and its debriefs once it's over. */
+.card-schedule {
+  align-self: flex-start;
+  font-size: 13px;
+}
+
+.card-interview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--brand);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--brand-soft);
+  font-size: 13px;
+}
+
+.card-interview-when {
+  align-self: flex-start;
+  font-weight: 500;
+  text-align: left;
+}
+
+.card-interview-label {
+  color: var(--ink-2);
+}
+
+.debriefs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.debrief-done {
+  align-self: center;
+  font-size: 13px;
+  color: var(--green-strong);
+}
+
+.debrief-done::before {
+  content: '\2713\00a0';
+}
+
+/* On Today: when the interview is, in amber once it's over and a debrief is waiting. */
+.interview-when {
+  font-size: 14px;
+  color: var(--brand-strong);
+}
+
+.interview-over {
+  color: var(--amber);
 }
 
 .card-remove {

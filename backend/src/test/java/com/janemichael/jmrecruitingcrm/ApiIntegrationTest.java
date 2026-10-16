@@ -9,6 +9,7 @@ import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.KeyWrap;
 import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.desktop.MorningReminder;
+import com.janemichael.jmrecruitingcrm.pipeline.Interviews;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -31,6 +32,7 @@ import org.springframework.web.context.WebApplicationContext;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1070,6 +1072,84 @@ class ApiIntegrationTest {
                     request.setRemoteAddr(address);
                     return request;
                 });
+    }
+
+    // Interviews -------------------------------------------------------------------
+
+    @Test
+    void interviewsAreScheduledDebriefedAndShownOnToday() throws Exception {
+        LocalDate today = LocalDate.now(clock);
+        String yesterday = today.minusDays(1).toString();
+
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Interview Test Bank AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", companyId, "title", "Forward Deployed Engineer", "track", "PRODUCTION_AI_ENGINEERING")))
+                .andExpect(status().isCreated()).andReturn());
+        long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Interview Candidate")))
+                .andExpect(status().isCreated()).andReturn());
+        long entryId = id(mockMvc.perform(send(post("/api/pipeline"), body(
+                        "searchId", searchId, "candidateId", candidateId, "stage", "SUBMITTED")))
+                .andExpect(status().isCreated()).andReturn());
+
+        // Yesterday's interview moves them to Interviewing and is due a debrief.
+        mockMvc.perform(send(put("/api/pipeline/" + entryId + "/interview"), body(
+                        "date", yesterday, "time", "14:00", "label", "Round 1 with the CTO")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stage").value("INTERVIEWING"))
+                .andExpect(jsonPath("$.interviewDate").value(yesterday))
+                .andExpect(jsonPath("$.interviewTime").value(containsString("14:00")))
+                .andExpect(jsonPath("$.interviewLabel").value("Round 1 with the CTO"))
+                .andExpect(jsonPath("$.debriefDue").value(true));
+        assertThat(jdbc.queryForObject("SELECT interview_label FROM pipeline_entry WHERE id = ?", String.class, entryId))
+                .doesNotContain("CTO");
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.interviews[?(@.id == " + entryId + ")].debriefDue").value(hasItem(true)));
+
+        // One debrief leaves it on Today; both take it off.
+        mockMvc.perform(send(post("/api/pipeline/" + entryId + "/debrief"), body("with", "CANDIDATE", "notes", "Liked the team")))
+                .andExpect(jsonPath("$.candidateDebriefed").value(true))
+                .andExpect(jsonPath("$.debriefDue").value(true));
+        mockMvc.perform(send(post("/api/pipeline/" + entryId + "/debrief"), body("with", "CLIENT", "notes", "Strong on serving")))
+                .andExpect(jsonPath("$.clientDebriefed").value(true))
+                .andExpect(jsonPath("$.debriefDue").value(false));
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.interviews[?(@.id == " + entryId + ")]").isEmpty());
+        mockMvc.perform(signedIn(get("/api/candidates/" + candidateId)))
+                .andExpect(jsonPath("$.lastContactedDate").value(today.toString()));
+        mockMvc.perform(signedIn(get("/api/activities").param("candidateId", String.valueOf(candidateId))))
+                .andExpect(jsonPath("$[*].summary").value(hasItem(containsString("Interview set for"))))
+                .andExpect(jsonPath("$[*].summary").value(hasItem(
+                        "Debriefed Interview Candidate after the interview on "
+                                + Interviews.describe(today.minusDays(1), LocalTime.of(14, 0)) + ": Liked the team")))
+                .andExpect(jsonPath("$[*].summary").value(hasItem(containsString(
+                        "Debriefed Interview Test Bank AI after Interview Candidate's interview"))));
+
+        // The next round starts the debriefs over; it shows on Today on its day.
+        mockMvc.perform(send(put("/api/pipeline/" + entryId + "/interview"), body("date", today.toString(), "label", "Final round")))
+                .andExpect(jsonPath("$.candidateDebriefed").value(false))
+                .andExpect(jsonPath("$.clientDebriefed").value(false))
+                .andExpect(jsonPath("$.interviewTime").value(nullValue()))
+                .andExpect(jsonPath("$.debriefDue").value(false));
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.interviews[?(@.id == " + entryId + ")].interviewLabel").value(hasItem("Final round")));
+
+        // Cancelled, then nothing left to cancel or debrief.
+        mockMvc.perform(signedIn(delete("/api/pipeline/" + entryId + "/interview")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.interviewDate").value(nullValue()));
+        mockMvc.perform(signedIn(delete("/api/pipeline/" + entryId + "/interview")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(send(post("/api/pipeline/" + entryId + "/debrief"), body("with", "CLIENT")))
+                .andExpect(status().isConflict());
+
+        // An interview needs a date, and a candidate still in process.
+        mockMvc.perform(send(put("/api/pipeline/" + entryId + "/interview"), body("label", "No date")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(send(put("/api/pipeline/" + entryId), body("stage", "WITHDREW")))
+                .andExpect(status().isOk());
+        mockMvc.perform(send(put("/api/pipeline/" + entryId + "/interview"), body("date", today.toString())))
+                .andExpect(status().isConflict());
     }
 
     // Bulk actions -----------------------------------------------------------------

@@ -33,6 +33,12 @@ export function laterFrom(todayIso, days) {
   return date.toISOString().slice(0, 10);
 }
 
+/** A YYYY-MM-DD date some days from another, by the calendar (weekends included). */
+export function daysFrom(isoDay, days) {
+  const [year, month, day] = isoDay.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 export function companyPayload(overrides = {}) {
   return {
     name: uniqueName('Acme AI'),

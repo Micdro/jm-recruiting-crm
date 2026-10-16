@@ -18,6 +18,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 
 /** One candidate in one search. */
 @Entity
@@ -46,6 +48,24 @@ public class PipelineEntry extends Auditable {
 
     @Column(name = "stage_changed_at", nullable = false)
     private Instant stageChangedAt;
+
+    /** The next (or latest) interview with the client. Time is optional. */
+    @Column(name = "interview_date")
+    private LocalDate interviewDate;
+
+    @Column(name = "interview_time")
+    private LocalTime interviewTime;
+
+    /** For example "Round 2 with the CTO". */
+    @Convert(converter = EncryptedString.class)
+    @Column(name = "interview_label")
+    private String interviewLabel;
+
+    @Column(name = "candidate_debriefed", nullable = false)
+    private boolean candidateDebriefed;
+
+    @Column(name = "client_debriefed", nullable = false)
+    private boolean clientDebriefed;
 
     public Long getId() {
         return id;
@@ -93,5 +113,45 @@ public class PipelineEntry extends Auditable {
 
     public void setStageChangedAt(Instant stageChangedAt) {
         this.stageChangedAt = stageChangedAt;
+    }
+
+    public LocalDate getInterviewDate() {
+        return interviewDate;
+    }
+
+    public void setInterviewDate(LocalDate interviewDate) {
+        this.interviewDate = interviewDate;
+    }
+
+    public LocalTime getInterviewTime() {
+        return interviewTime;
+    }
+
+    public void setInterviewTime(LocalTime interviewTime) {
+        this.interviewTime = interviewTime;
+    }
+
+    public String getInterviewLabel() {
+        return interviewLabel;
+    }
+
+    public void setInterviewLabel(String interviewLabel) {
+        this.interviewLabel = interviewLabel;
+    }
+
+    public boolean isCandidateDebriefed() {
+        return candidateDebriefed;
+    }
+
+    public void setCandidateDebriefed(boolean candidateDebriefed) {
+        this.candidateDebriefed = candidateDebriefed;
+    }
+
+    public boolean isClientDebriefed() {
+        return clientDebriefed;
+    }
+
+    public void setClientDebriefed(boolean clientDebriefed) {
+        this.clientDebriefed = clientDebriefed;
     }
 }

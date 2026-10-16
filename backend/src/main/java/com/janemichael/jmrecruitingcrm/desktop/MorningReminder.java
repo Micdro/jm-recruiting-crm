@@ -38,7 +38,8 @@ public class MorningReminder {
     static final Duration LATE_BY_AT_MOST = Duration.ofHours(4);
 
     /** What's due for one person today. {@code waiting}: new contacts not yet in anyone's queue. */
-    public record Counts(int touches, int replies, int followUps, int candidates, int companies, int waiting) {
+    public record Counts(int touches, int replies, int followUps, int candidates, int companies, int waiting,
+                         int interviews, int debriefs) {
     }
 
     public record Message(String title, String body) {
@@ -165,10 +166,20 @@ public class MorningReminder {
                   (SELECT count(*) FROM company WHERE owner_id = :user AND follow_up_date <= :today) AS companies,
                   (SELECT count(*) FROM contact WHERE status = 'NEW' AND next_action_date IS NULL
                      AND (owner_id IS NULL OR owner_id = :user)
-                     AND company_id NOT IN (SELECT id FROM company WHERE status = 'AI_FOUND')) AS waiting
+                     AND company_id NOT IN (SELECT id FROM company WHERE status = 'AI_FOUND')) AS waiting,
+                  (SELECT count(*) FROM pipeline_entry p JOIN job_search s ON s.id = p.search_id
+                     JOIN candidate c ON c.id = p.candidate_id
+                     WHERE coalesce(s.owner_id, c.owner_id) = :user AND p.interview_date = :today
+                     AND p.stage NOT IN ('PLACED', 'CLIENT_PASSED', 'WITHDREW')) AS interviews,
+                  (SELECT count(*) FROM pipeline_entry p JOIN job_search s ON s.id = p.search_id
+                     JOIN candidate c ON c.id = p.candidate_id
+                     WHERE coalesce(s.owner_id, c.owner_id) = :user AND p.interview_date < :today
+                     AND NOT (p.candidate_debriefed AND p.client_debriefed)
+                     AND p.stage NOT IN ('PLACED', 'CLIENT_PASSED', 'WITHDREW')) AS debriefs
                 """, params, (row, number) -> new Counts(
                 row.getInt("touches"), row.getInt("replies"), row.getInt("follow_ups"),
-                row.getInt("candidates"), row.getInt("companies"), row.getInt("waiting")));
+                row.getInt("candidates"), row.getInt("companies"), row.getInt("waiting"),
+                row.getInt("interviews"), row.getInt("debriefs")));
         return compose(counts, dailyTouchTarget);
     }
 
@@ -181,11 +192,18 @@ public class MorningReminder {
         if (counts.companies() > 0) {
             others.add(count(counts.companies(), "client", "clients"));
         }
+        List<String> interviews = new ArrayList<>();
+        if (counts.interviews() > 0) {
+            interviews.add(count(counts.interviews(), "interview", "interviews") + " today");
+        }
+        if (counts.debriefs() > 0) {
+            interviews.add(count(counts.debriefs(), "interview debrief", "interview debriefs") + " to do");
+        }
 
         String title;
         if (contacts > 0) {
             title = "Good morning. " + count(contacts, "contact is", "contacts are") + " due today.";
-        } else if (!others.isEmpty()) {
+        } else if (!others.isEmpty() || !interviews.isEmpty()) {
             title = "Good morning. No contacts are due today.";
         } else {
             title = "Good morning. Nothing is due today.";
@@ -204,6 +222,9 @@ public class MorningReminder {
                 parts.add(count(counts.followUps(), "follow-up", "follow-ups"));
             }
             sentences.add(join(parts) + ".");
+        }
+        if (!interviews.isEmpty()) {
+            sentences.add(join(interviews) + ".");
         }
         if (!others.isEmpty()) {
             sentences.add(contacts > 0

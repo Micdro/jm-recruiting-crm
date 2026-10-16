@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { affirmationFor } from '../affirmations.js';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, Pill, TouchPips } from '../components/Bits.jsx';
+import { DebriefButton, DebriefForm } from '../components/Interviews.jsx';
 import LaterMenu from '../components/LaterMenu.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
 import MessageComposer from '../components/MessageComposer.jsx';
@@ -24,6 +25,7 @@ import {
 } from '../labels.js';
 import { formatDate, formatLongDay, formatWeekday, money, plural } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
+import { interviewWhen } from '../interviews.js';
 import { useUndoableChange } from '../undo.js';
 
 const QUICK_TYPES = ['LINKEDIN', 'CALL'];
@@ -34,7 +36,9 @@ export default function TodayPage() {
   const dashboard = useLoader(() => api.dashboard(scope), [scope], `dashboard:${scope}`);
   const [logging, setLogging] = useState(null);
   const [writing, setWriting] = useState(null);
+  const [debriefing, setDebriefing] = useState(null);
   const offerUndo = useUndoableChange();
+  const toast = useToast();
 
   const data = dashboard.data;
 
@@ -75,6 +79,7 @@ export default function TodayPage() {
 
           <div className="today-grid">
             <div className="today-main">
+              <Interviews data={data} scope={scope} onDebrief={(entry, side) => setDebriefing({ entry, side })} />
               <ContactQueue
                 data={data}
                 scope={scope}
@@ -113,6 +118,25 @@ export default function TodayPage() {
             onLogged={(updated, type) => {
               offerUndo('contacts', writing.id, touchLoggedMessage(writing, updated, type), dashboard.reload);
               setWriting(null);
+              dashboard.reload();
+            }}
+          />
+        </Modal>
+      )}
+
+      {debriefing && (
+        <Modal
+          title={debriefing.side === 'CANDIDATE' ? `Debrief ${debriefing.entry.candidateName}` : `Debrief ${debriefing.entry.companyName}`}
+          onClose={() => setDebriefing(null)}
+        >
+          <DebriefForm
+            entry={debriefing.entry}
+            with={debriefing.side}
+            today={data.today}
+            onCancel={() => setDebriefing(null)}
+            onSaved={() => {
+              setDebriefing(null);
+              toast('Debrief saved');
               dashboard.reload();
             }}
           />
@@ -163,6 +187,61 @@ function TouchSummary({ data }) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * Interviews later today, and debriefs due once an interview is over: the candidate and the client,
+ * each with their own button. Debriefs come first, oldest first.
+ */
+function Interviews({ data, scope, onDebrief }) {
+  const entries = data.interviews ?? [];
+  if (entries.length === 0) return null;
+  const due = entries.filter((entry) => entry.debriefDue).length;
+
+  return (
+    <section className="panel" aria-labelledby="queue-interviews">
+      <div className="panel-head">
+        <h2 id="queue-interviews">
+          Interviews <span className="count">{entries.length}</span>
+        </h2>
+        {due > 0 && <span className="panel-meta">{plural(due, 'debrief', 'debriefs')} to do</span>}
+      </div>
+      <ul className="queue">
+        {entries.map((entry) => (
+          <li key={entry.id} className="queue-row" data-testid="queue-interview">
+            <div className="queue-who">
+              <Link to={`/candidates/${entry.candidateId}`} className="queue-name">
+                {entry.candidateName}
+              </Link>
+              <span className="queue-org">
+                <Link to={`/searches/${entry.searchId}`}>{entry.searchTitle}</Link>, {entry.companyName}
+              </span>
+            </div>
+            <div className="queue-state">
+              <span className={entry.debriefDue ? 'interview-when interview-over' : 'interview-when'}>
+                {entry.debriefDue ? 'Interviewed ' : 'Interview '}
+                {interviewWhen(entry, data.today)}
+              </span>
+              {entry.interviewLabel && <span className="queue-type">{entry.interviewLabel}</span>}
+              {scope === 'team' && entry.ownerName && <span className="queue-owner">{entry.ownerName}</span>}
+            </div>
+            <div className="queue-actions">
+              {entry.debriefDue ? (
+                <>
+                  <DebriefButton entry={entry} side="CANDIDATE" done={entry.candidateDebriefed} onDebrief={onDebrief} />
+                  <DebriefButton entry={entry} side="CLIENT" done={entry.clientDebriefed} onDebrief={onDebrief} />
+                </>
+              ) : (
+                <Link to={`/searches/${entry.searchId}`} className="btn btn-sm">
+                  Open search
+                </Link>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

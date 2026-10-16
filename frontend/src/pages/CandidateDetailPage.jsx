@@ -26,6 +26,7 @@ import {
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 import { candidateOffLimits, offLimitsWarning } from '../offLimits.js';
+import { interviewWhen } from '../interviews.js';
 
 export default function CandidateDetailPage() {
   const { id } = useParams();
@@ -234,6 +235,12 @@ function CandidateSearches({ candidate, entries, offLimits, onChanged }) {
                   {entry.searchTitle}
                 </Link>
                 <span className="cell-sub">{entry.companyName}</span>
+                {entry.interviewDate && (
+                  <span className={entry.debriefDue ? 'cell-sub interview-when interview-over' : 'cell-sub interview-when'}>
+                    Interview {interviewWhen(entry, todayIso())}
+                    {entry.debriefDue ? ', debrief due' : ''}
+                  </span>
+                )}
               </div>
               <label className="visually-hidden" htmlFor={`cand-stage-${entry.id}`}>
                 Stage in {entry.searchTitle}
