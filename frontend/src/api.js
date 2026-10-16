@@ -202,6 +202,8 @@ export const api = {
     removeKey: () => del('/api/prospects/key'),
     saveSettings: (body) => put('/api/prospects/settings', body),
     saveLimits: (body) => put('/api/prospects/limits', body),
+    /** Drafts the next message to a contact with Claude: { subject, body, basis, costCents }. */
+    draft: (body) => post('/api/prospects/draft', body),
     runHere: () => post('/api/prospects/run-here'),
     accept: (id) => post(`/api/prospects/companies/${id}/accept`),
     dismiss: (id) => post(`/api/prospects/companies/${id}/dismiss`),

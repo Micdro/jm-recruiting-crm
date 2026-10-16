@@ -124,6 +124,37 @@ public final class ProspectDtos {
     public record FoundContact(Long id, String name, String title, String linkedinUrl, String email, String phone) {
     }
 
+    /**
+     * Asks for a draft of the next message to a contact.
+     *
+     * @param touch   which touch of the cold sequence it is (1 to 4), or null outside a sequence
+     * @param role    the open role it's about, when writing from a hiring signal
+     * @param example the team's own template for this step, filled in, to keep its voice
+     */
+    public record DraftRequest(
+            @NotNull(message = "Choose a contact")
+            Long contactId,
+
+            @NotBlank(message = "Choose LinkedIn or email")
+            @jakarta.validation.constraints.Pattern(regexp = "LINKEDIN|EMAIL", message = "Choose LinkedIn or email")
+            String channel,
+
+            @Min(value = 1, message = "The touch must be between 1 and 4")
+            @Max(value = 4, message = "The touch must be between 1 and 4")
+            Integer touch,
+
+            @Size(max = 200, message = "The role must be 200 characters or fewer")
+            String role,
+
+            @Size(max = 4000, message = "The example must be 4,000 characters or fewer")
+            String example
+    ) {
+    }
+
+    /** A draft to read and edit. {@code basis} is what it was written from; subject is for email only. */
+    public record DraftResponse(String subject, String body, List<String> basis, int costCents) {
+    }
+
     /** For the card on Today. */
     public record Summary(long waiting, boolean running, LastRun lastRun) {
     }

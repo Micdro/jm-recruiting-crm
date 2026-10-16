@@ -1,5 +1,7 @@
 package com.janemichael.jmrecruitingcrm.prospects;
 
+import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.DraftRequest;
+import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.DraftResponse;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.FoundCompany;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.KeyRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.LimitsRequest;
@@ -25,9 +27,17 @@ import java.util.List;
 public class ProspectController {
 
     private final ProspectFinder finder;
+    private final OpenerDrafter drafter;
 
-    public ProspectController(ProspectFinder finder) {
+    public ProspectController(ProspectFinder finder, OpenerDrafter drafter) {
         this.finder = finder;
+        this.drafter = drafter;
+    }
+
+    /** Drafts the next message to a contact with Claude, from why their company might hire now. */
+    @PostMapping("/draft")
+    public DraftResponse draft(@Valid @RequestBody DraftRequest request) {
+        return drafter.draft(request);
     }
 
     @GetMapping

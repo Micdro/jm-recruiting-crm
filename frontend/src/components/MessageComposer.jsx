@@ -35,6 +35,10 @@ export default function MessageComposer({ contact: person, role = null, onLogged
   const { user } = useAuth();
   const contact = role ? { ...person, role } : person;
   const templates = useLoader(() => api.templates.list(), [], 'templates');
+  // Drafting with Claude needs the API key added on AI Found.
+  const finder = useLoader(() => api.prospects.status(), [], 'prospects:status');
+  const [drafting, setDrafting] = useState(false);
+  const [drafted, setDrafted] = useState(null);
   const cold = contact.status === 'NEW' || contact.status === 'IN_SEQUENCE';
   const touch = nextTouch(contact);
   const suggested =
@@ -78,7 +82,30 @@ export default function MessageComposer({ contact: person, role = null, onLogged
     setChannel(nextChannel);
     setChosenId(templateId);
     setEdited(null);
+    setDrafted(null);
     setCopied(false);
+  }
+
+  async function draftWithClaude() {
+    setDrafting(true);
+    setError('');
+    try {
+      const draft = await api.prospects.draft({
+        contactId: contact.id,
+        channel,
+        touch: cold ? touch : null,
+        role: role ?? undefined,
+        // The team's own message for this step, so the draft keeps its voice.
+        example: fill(chosen?.body, contact, user) || undefined,
+      });
+      setEdited({ subject: draft.subject ?? subject, body: draft.body });
+      setDrafted(draft);
+      setCopied(false);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDrafting(false);
+    }
   }
 
   async function copy() {
@@ -170,6 +197,22 @@ export default function MessageComposer({ contact: person, role = null, onLogged
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {finder.data?.configured && !blocked && (
+        <div className="composer-draft">
+          <button type="button" className="btn btn-sm" disabled={drafting} onClick={draftWithClaude}>
+            {drafting ? 'Drafting…' : drafted ? 'Draft again' : 'Draft with Claude'}
+          </button>
+          {drafted ? (
+            <p className="field-hint">
+              Drafted from {drafted.basis.length > 0 ? drafted.basis.join(' · ') : 'what the CRM knows about them'}. Cost $
+              {(drafted.costCents / 100).toFixed(2)}. Read it over before you send it.
+            </p>
+          ) : (
+            <p className="field-hint">Writes this message for {contact.name} from why their company might hire now.</p>
+          )}
         </div>
       )}
 
