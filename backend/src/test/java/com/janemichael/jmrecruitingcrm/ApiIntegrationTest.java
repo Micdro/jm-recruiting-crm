@@ -1101,7 +1101,9 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.interviewTime").value(containsString("14:00")))
                 .andExpect(jsonPath("$.interviewLabel").value("Round 1 with the CTO"))
                 .andExpect(jsonPath("$.debriefDue").value(true));
+        entityManager.flush();
         assertThat(jdbc.queryForObject("SELECT interview_label FROM pipeline_entry WHERE id = ?", String.class, entryId))
+                .isNotBlank()
                 .doesNotContain("CTO");
         mockMvc.perform(signedIn(get("/api/dashboard")))
                 .andExpect(jsonPath("$.interviews[?(@.id == " + entryId + ")].debriefDue").value(hasItem(true)));
