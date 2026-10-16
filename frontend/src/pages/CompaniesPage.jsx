@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
-import { BulkBar, RowBox, SelectAllBox, SkippedNote } from '../components/Bulk.jsx';
+import { BulkBar, DuplicatesNote, RowBox, SelectAllBox, SkippedNote } from '../components/Bulk.jsx';
+import MergeDialog from '../components/MergeDialog.jsx';
 import { ownerChoices, useBulkAction } from '../bulk.js';
 import ChoiceMenu from '../components/ChoiceMenu.jsx';
 import ExportButton from '../components/ExportButton.jsx';
@@ -13,6 +14,8 @@ import { COMPANY_STATUS, INDUSTRY, PARKED_COMPANY_STAGES, PRIORITY, SEGMENT, opt
 import { plural, todayIso } from '../format.js';
 import { matchesQuery, useAuth, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
 import { offLimitsLabel } from '../offLimits.js';
+import { duplicateGroups, duplicateRows } from '../duplicates.js';
+import { COMPANY_MERGE } from '../mergeFields.js';
 import { useSelection } from '../selection.js';
 
 const PAGE_SIZE = 200;
@@ -29,6 +32,7 @@ export default function CompaniesPage() {
   const { user: me } = useAuth();
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
+  const [merging, setMerging] = useState(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   const q = filters.get('q');
@@ -43,7 +47,7 @@ export default function CompaniesPage() {
   const today = todayIso();
 
   const waiting = (companies.data ?? []).filter((company) => company.status === 'AI_FOUND').length;
-  const rows = (companies.data ?? []).filter(
+  const filtered = (companies.data ?? []).filter(
     (company) =>
       (!status || company.status === status) &&
       (showParked || !PARKED_COMPANY_STAGES.includes(company.status)) &&
@@ -56,6 +60,10 @@ export default function CompaniesPage() {
       (!due || (company.followUpDate && company.followUpDate <= today)) &&
       matchesQuery(q, company.name, company.focus, company.location, company.website),
   );
+  // Possible duplicates among the companies the filters show; "Show them" lists just those, each group together.
+  const dupes = duplicateGroups('companies', filtered);
+  const showDupes = filters.get('dupes') === 'true';
+  const rows = showDupes ? duplicateRows(filtered, dupes) : filtered;
   const selection = useSelection(rows);
   const bulk = useBulkAction('companies', NOUN, selection, companies.reload);
   const owners = ownerChoices(users, me);
@@ -87,7 +95,23 @@ export default function CompaniesPage() {
       </div>
 
       <SkippedNote skipped={bulk.skipped} noun={NOUN} onDismiss={bulk.dismiss} />
+      <DuplicatesNote
+        count={dupes.size}
+        noun={NOUN}
+        showing={showDupes}
+        onShow={() => filters.set('dupes')(true)}
+        onHide={() => filters.set('dupes')('')}
+      />
       <BulkBar selection={selection} noun={NOUN} busy={bulk.busy} error={bulk.error}>
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={bulk.busy || selection.count !== 2}
+          title={selection.count === 2 ? undefined : 'Tick two to merge them'}
+          onClick={() => setMerging(selection.ids.map((id) => companies.data.find((record) => record.id === id)))}
+        >
+          Merge
+        </button>
         <ChoiceMenu
           label="Owner"
           buttonLabel="Change owner"
@@ -168,10 +192,16 @@ export default function CompaniesPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, limit).map((company) => (
+              {rows.slice(0, limit).map((company, index, shown) => (
                 <tr
                   key={company.id}
-                  className={selection.has(company.id) ? 'row-link row-ticked' : 'row-link'}
+                  className={[
+                    'row-link',
+                    selection.has(company.id) && 'row-ticked',
+                    showDupes && index > 0 && dupes.get(shown[index - 1].id) !== dupes.get(company.id) && 'dupe-group-start',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                   onClick={() => navigate(`/companies/${company.id}`)}
                 >
                   <RowBox selection={selection} id={company.id} name={company.name} />
@@ -203,6 +233,24 @@ export default function CompaniesPage() {
             <ShowMore shown={limit} total={rows.length} onMore={() => setLimit((value) => value + PAGE_SIZE)} />
           </p>
         </div>
+      )}
+
+      {merging && (
+        <Modal title="Merge duplicates" onClose={() => setMerging(null)} wide>
+          <MergeDialog
+            kind="companies"
+            records={merging}
+            fields={COMPANY_MERGE.fields}
+            moves={COMPANY_MERGE.moves}
+            onCancel={() => setMerging(null)}
+            onMerged={(result) => {
+              setMerging(null);
+              selection.clear();
+              toast(`Merged ${result.mergedName} into ${result.keptName}.`);
+              companies.reload();
+            }}
+          />
+        </Modal>
       )}
 
       {adding && (

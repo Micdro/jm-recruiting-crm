@@ -1075,6 +1075,130 @@ class ApiIntegrationTest {
                 });
     }
 
+    // Merging duplicates -----------------------------------------------------------
+
+    @Test
+    void mergingContactsMovesEverythingAndFillsTheGaps() throws Exception {
+        String today = LocalDate.now(clock).toString();
+        long first = id(mockMvc.perform(send(post("/api/companies"), body("name", "Merge Test Bank AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long second = id(mockMvc.perform(send(post("/api/companies"), body("name", "Merge Test Insurer AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long keep = id(mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Merge Keep", "title", "VP Engineering", "notes", "Met at Money20/20", "companyId", first)))
+                .andExpect(status().isCreated()).andReturn());
+        long duplicate = id(mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Merge Duplicate", "title", "CTO", "email", "duplicate@merge.test", "phone", "+1 212 555 0199",
+                        "notes", "Prefers mornings", "companyId", second)))
+                .andExpect(status().isCreated()).andReturn());
+        mockMvc.perform(send(post("/api/contacts/" + duplicate + "/activities"), body("type", "LINKEDIN")))
+                .andExpect(status().isOk());
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", second, "hiringManagerId", duplicate, "title", "Forward Deployed Engineer",
+                        "track", "PRODUCTION_AI_ENGINEERING")))
+                .andExpect(status().isCreated()).andReturn());
+
+        mockMvc.perform(send(post("/api/merge"), body("kind", "CONTACT", "keepId", keep, "mergeId", duplicate)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keptName").value("Merge Keep"))
+                .andExpect(jsonPath("$.mergedName").value("Merge Duplicate"));
+
+        mockMvc.perform(signedIn(get("/api/contacts/" + duplicate))).andExpect(status().isNotFound());
+        mockMvc.perform(signedIn(get("/api/contacts/" + keep)))
+                .andExpect(jsonPath("$.title").value("VP Engineering"))
+                .andExpect(jsonPath("$.email").value("duplicate@merge.test"))
+                .andExpect(jsonPath("$.phone").value("+1 212 555 0199"))
+                .andExpect(jsonPath("$.notes").value("Met at Money20/20\n\nPrefers mornings"))
+                .andExpect(jsonPath("$.lastContactedDate").value(today))
+                .andExpect(jsonPath("$.companyId").value(first));
+        mockMvc.perform(signedIn(get("/api/activities").param("contactId", String.valueOf(keep))))
+                .andExpect(jsonPath("$[*].type").value(hasItem("LINKEDIN")))
+                .andExpect(jsonPath("$[*].summary").value(hasItem(
+                        "Merged in Merge Duplicate (it had title CTO, company Merge Test Insurer AI)")));
+        mockMvc.perform(signedIn(get("/api/searches/" + searchId)))
+                .andExpect(jsonPath("$.hiringManagerName").value("Merge Keep"));
+        mockMvc.perform(signedIn(get("/api/trash")))
+                .andExpect(jsonPath("$[*].label").value(hasItem(containsString("Merge Duplicate"))));
+
+        mockMvc.perform(send(post("/api/merge"), body("kind", "CONTACT", "keepId", keep, "mergeId", keep)))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(send(post("/api/merge"), body("kind", "CONTACT", "keepId", keep, "mergeId", duplicate)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void mergingCandidatesKeepsTheFurthestStageInASharedSearch() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Merge Candidate Co AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long shared = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", companyId, "title", "Shared Search", "track", "PRODUCTION_AI_ENGINEERING")))
+                .andExpect(status().isCreated()).andReturn());
+        long only = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", companyId, "title", "Other Search", "track", "PRODUCTION_AI_ENGINEERING")))
+                .andExpect(status().isCreated()).andReturn());
+        long keep = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Merge Candidate Keep")))
+                .andExpect(status().isCreated()).andReturn());
+        long duplicate = id(mockMvc.perform(send(post("/api/candidates"), body(
+                        "name", "Merge Candidate Duplicate", "email", "candidate@merge.test")))
+                .andExpect(status().isCreated()).andReturn());
+        mockMvc.perform(send(post("/api/pipeline"), body("searchId", shared, "candidateId", keep, "stage", "SHORTLISTED")))
+                .andExpect(status().isCreated());
+        mockMvc.perform(send(post("/api/pipeline"), body("searchId", shared, "candidateId", duplicate, "stage", "INTERVIEWING")))
+                .andExpect(status().isCreated());
+        mockMvc.perform(send(post("/api/pipeline"), body("searchId", only, "candidateId", duplicate, "stage", "SOURCED")))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(send(post("/api/merge"), body("kind", "CANDIDATE", "keepId", keep, "mergeId", duplicate)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(signedIn(get("/api/candidates/" + keep + "/pipeline")))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[?(@.searchId == " + shared + ")].stage").value(hasItem("INTERVIEWING")))
+                .andExpect(jsonPath("$[?(@.searchId == " + only + ")].stage").value(hasItem("SOURCED")));
+        mockMvc.perform(signedIn(get("/api/candidates/" + keep)))
+                .andExpect(jsonPath("$.email").value("candidate@merge.test"));
+
+        // Two placements in one search have to be sorted out first.
+        long placedOne = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Placed One")))
+                .andExpect(status().isCreated()).andReturn());
+        long placedTwo = id(mockMvc.perform(send(post("/api/candidates"), body("name", "Placed Two")))
+                .andExpect(status().isCreated()).andReturn());
+        for (long candidate : List.of(placedOne, placedTwo)) {
+            mockMvc.perform(send(post("/api/placements"), body("searchId", shared, "candidateId", candidate, "baseSalary", 180000)))
+                    .andExpect(status().isCreated());
+        }
+        mockMvc.perform(send(post("/api/merge"), body("kind", "CANDIDATE", "keepId", placedOne, "mergeId", placedTwo)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.messages[0]").value(containsString("Both have a placement in Shared Search")));
+    }
+
+    @Test
+    void mergingCompaniesMovesTheirContactsAndSearches() throws Exception {
+        long keep = id(mockMvc.perform(send(post("/api/companies"), body("name", "Merge Ledger AI")))
+                .andExpect(status().isCreated()).andReturn());
+        long duplicate = id(mockMvc.perform(send(post("/api/companies"), body(
+                        "name", "Merge Ledger AI, Inc.", "website", "https://ledger.merge.test")))
+                .andExpect(status().isCreated()).andReturn());
+        long contactId = id(mockMvc.perform(send(post("/api/contacts"), body("name", "Ledger Person", "companyId", duplicate)))
+                .andExpect(status().isCreated()).andReturn());
+        long searchId = id(mockMvc.perform(send(post("/api/searches"), body(
+                        "companyId", duplicate, "title", "AI Platform Engineer", "track", "PRODUCTION_AI_ENGINEERING")))
+                .andExpect(status().isCreated()).andReturn());
+
+        mockMvc.perform(send(post("/api/merge"), body("kind", "COMPANY", "keepId", keep, "mergeId", duplicate)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(signedIn(get("/api/companies/" + duplicate))).andExpect(status().isNotFound());
+        mockMvc.perform(signedIn(get("/api/companies/" + keep)))
+                .andExpect(jsonPath("$.website").value("https://ledger.merge.test"))
+                .andExpect(jsonPath("$.contactCount").value(1))
+                .andExpect(jsonPath("$.openSearchCount").value(1));
+        mockMvc.perform(signedIn(get("/api/contacts/" + contactId)))
+                .andExpect(jsonPath("$.companyId").value(keep));
+        mockMvc.perform(signedIn(get("/api/searches/" + searchId)))
+                .andExpect(jsonPath("$.companyId").value(keep));
+    }
+
     // Revisits after a sequence with no reply -----------------------------------------
 
     @Test

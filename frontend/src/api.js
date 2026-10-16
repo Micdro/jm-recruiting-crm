@@ -125,6 +125,8 @@ export const api = {
     unlock: (key, password) => post('/api/desktop/unlock', { key, password }),
   },
   dashboard: (scope) => get('/api/dashboard', { scope }),
+  /** Merges a duplicate into the record kept: { kind: CONTACT | COMPANY | CANDIDATE, keepId, mergeId }. */
+  merge: (body) => post('/api/merge', body),
   exportData: (parts) => get('/api/export', parts ? { include: parts.join(',') } : undefined),
   reports: {
     weekly: (scope) => get('/api/reports/weekly', { scope }),

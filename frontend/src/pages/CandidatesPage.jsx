@@ -2,17 +2,23 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '../components/Bits.jsx';
+import { BulkBar, DuplicatesNote, RowBox, SelectAllBox } from '../components/Bulk.jsx';
 import ExportButton from '../components/ExportButton.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
+import MergeDialog from '../components/MergeDialog.jsx';
 import Modal from '../components/Modal.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
 import { CANDIDATE_STATUS, EMPLOYMENT_TYPE, ROLE_AREA, TRACK, WORK_MODEL, options } from '../labels.js';
 import { todayIso } from '../format.js';
 import { matchesQuery, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
 import { candidateOffLimits } from '../offLimits.js';
-
+import { duplicateGroups, duplicateRows } from '../duplicates.js';
+import { CANDIDATE_MERGE } from '../mergeFields.js';
+import { useSelection } from '../selection.js';
 
 const PAGE_SIZE = 200;
+const NOUN = ['candidate', 'candidates'];
+
 export default function CandidatesPage() {
   useTitle('Candidates');
   const navigate = useNavigate();
@@ -22,6 +28,7 @@ export default function CandidatesPage() {
   const companies = useLoader(() => api.companies.list(), [], 'companies');
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
+  const [merging, setMerging] = useState(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   const q = filters.get('q');
@@ -32,7 +39,7 @@ export default function CandidatesPage() {
   const regulated = filters.get('regulated') === 'true';
   const today = todayIso();
 
-  const rows = (candidates.data ?? []).filter(
+  const filtered = (candidates.data ?? []).filter(
     (candidate) =>
       (!status || candidate.status === status) &&
       (!track || candidate.track === track) &&
@@ -49,6 +56,11 @@ export default function CandidatesPage() {
         candidate.productionEvidence,
       ),
   );
+  // Possible duplicates among the candidates the filters show; "Show them" lists just those, each group together.
+  const dupes = duplicateGroups('candidates', filtered);
+  const showDupes = filters.get('dupes') === 'true';
+  const rows = showDupes ? duplicateRows(filtered, dupes) : filtered;
+  const selection = useSelection(rows);
 
   return (
     <>
@@ -74,6 +86,25 @@ export default function CandidatesPage() {
         <FilterCheck label="Regulated experience" checked={regulated} onChange={filters.set('regulated')} />
       </div>
 
+      <DuplicatesNote
+        count={dupes.size}
+        noun={NOUN}
+        showing={showDupes}
+        onShow={() => filters.set('dupes')(true)}
+        onHide={() => filters.set('dupes')('')}
+      />
+      <BulkBar selection={selection} noun={NOUN} busy={false} error="">
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={selection.count !== 2}
+          title={selection.count === 2 ? undefined : 'Tick two to merge them'}
+          onClick={() => setMerging(selection.ids.map((id) => candidates.data.find((record) => record.id === id)))}
+        >
+          Merge
+        </button>
+      </BulkBar>
+
       {candidates.error && <ErrorNote>{errorMessage(candidates.error)}</ErrorNote>}
       {!candidates.data && candidates.loading && <Loading label="Loading candidates" />}
 
@@ -93,6 +124,7 @@ export default function CandidatesPage() {
             <caption className="visually-hidden">Candidates</caption>
             <thead>
               <tr>
+                <SelectAllBox selection={selection} total={rows.length} noun={NOUN} />
                 <th scope="col">Name</th>
                 <th scope="col">Track</th>
                 <th scope="col">Status</th>
@@ -102,8 +134,19 @@ export default function CandidatesPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, limit).map((candidate) => (
-                <tr key={candidate.id} className="row-link" onClick={() => navigate(`/candidates/${candidate.id}`)}>
+              {rows.slice(0, limit).map((candidate, index, shown) => (
+                <tr
+                  key={candidate.id}
+                  className={[
+                    'row-link',
+                    selection.has(candidate.id) && 'row-ticked',
+                    showDupes && index > 0 && dupes.get(shown[index - 1].id) !== dupes.get(candidate.id) && 'dupe-group-start',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => navigate(`/candidates/${candidate.id}`)}
+                >
+                  <RowBox selection={selection} id={candidate.id} name={candidate.name} />
                   <td>
                     <Link to={`/candidates/${candidate.id}`} className="cell-title" onClick={(event) => event.stopPropagation()}>
                       {candidate.name}
@@ -140,6 +183,24 @@ export default function CandidatesPage() {
             <ShowMore shown={limit} total={rows.length} onMore={() => setLimit((value) => value + PAGE_SIZE)} />
           </p>
         </div>
+      )}
+
+      {merging && (
+        <Modal title="Merge duplicates" onClose={() => setMerging(null)} wide>
+          <MergeDialog
+            kind="candidates"
+            records={merging}
+            fields={CANDIDATE_MERGE.fields}
+            moves={CANDIDATE_MERGE.moves}
+            onCancel={() => setMerging(null)}
+            onMerged={(result) => {
+              setMerging(null);
+              selection.clear();
+              toast(`Merged ${result.mergedName} into ${result.keptName}.`);
+              candidates.reload();
+            }}
+          />
+        </Modal>
       )}
 
       {adding && (

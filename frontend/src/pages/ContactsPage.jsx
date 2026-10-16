@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore, TouchPips } from '../components/Bits.jsx';
-import { BulkBar, RowBox, SelectAllBox, SkippedNote } from '../components/Bulk.jsx';
+import { BulkBar, DuplicatesNote, RowBox, SelectAllBox, SkippedNote } from '../components/Bulk.jsx';
+import MergeDialog from '../components/MergeDialog.jsx';
 import { ownerChoices, useBulkAction } from '../bulk.js';
 import ChoiceMenu from '../components/ChoiceMenu.jsx';
 import ExportButton from '../components/ExportButton.jsx';
@@ -12,6 +13,8 @@ import ContactForm from '../forms/ContactForm.jsx';
 import { ACTION_TYPE, BUYING_ROLE, OUTREACH_STATUS, options } from '../labels.js';
 import { todayIso } from '../format.js';
 import { matchesQuery, useAuth, useFilterParams, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
+import { duplicateGroups, duplicateRows } from '../duplicates.js';
+import { CONTACT_MERGE } from '../mergeFields.js';
 import { useSelection } from '../selection.js';
 
 const CLOSED = ['NOT_INTERESTED', 'DO_NOT_CONTACT'];
@@ -27,6 +30,7 @@ export default function ContactsPage() {
   const contacts = useLoader(() => api.contacts.list(), [], 'contacts');
   const filters = useFilterParams();
   const [adding, setAdding] = useState(false);
+  const [merging, setMerging] = useState(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   const q = filters.get('q');
@@ -35,13 +39,17 @@ export default function ContactsPage() {
   const due = filters.get('due') === 'true';
   const today = todayIso();
 
-  const rows = (contacts.data ?? []).filter(
+  const filtered = (contacts.data ?? []).filter(
     (contact) =>
       (!status || contact.status === status) &&
       (!owner || String(contact.ownerId) === owner) &&
       (!due || (contact.nextActionDate && contact.nextActionDate <= today && !CLOSED.includes(contact.status))) &&
       matchesQuery(q, contact.name, contact.email, contact.title, contact.companyName),
   );
+  // Possible duplicates among the contacts the filters show; "Show them" lists just those, each group together.
+  const dupes = duplicateGroups('contacts', filtered);
+  const showDupes = filters.get('dupes') === 'true';
+  const rows = showDupes ? duplicateRows(filtered, dupes) : filtered;
   const selection = useSelection(rows);
   const bulk = useBulkAction('contacts', NOUN, selection, contacts.reload);
   const owners = ownerChoices(users, user);
@@ -72,7 +80,23 @@ export default function ContactsPage() {
       </div>
 
       <SkippedNote skipped={bulk.skipped} noun={NOUN} onDismiss={bulk.dismiss} />
+      <DuplicatesNote
+        count={dupes.size}
+        noun={NOUN}
+        showing={showDupes}
+        onShow={() => filters.set('dupes')(true)}
+        onHide={() => filters.set('dupes')('')}
+      />
       <BulkBar selection={selection} noun={NOUN} busy={bulk.busy} error={bulk.error}>
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={bulk.busy || selection.count !== 2}
+          title={selection.count === 2 ? undefined : 'Tick two to merge them'}
+          onClick={() => setMerging(selection.ids.map((id) => contacts.data.find((record) => record.id === id)))}
+        >
+          Merge
+        </button>
         <ChoiceMenu
           label="Owner"
           buttonLabel="Change owner"
@@ -149,10 +173,16 @@ export default function ContactsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, limit).map((contact) => (
+              {rows.slice(0, limit).map((contact, index, shown) => (
                 <tr
                   key={contact.id}
-                  className={selection.has(contact.id) ? 'row-link row-ticked' : 'row-link'}
+                  className={[
+                    'row-link',
+                    selection.has(contact.id) && 'row-ticked',
+                    showDupes && index > 0 && dupes.get(shown[index - 1].id) !== dupes.get(contact.id) && 'dupe-group-start',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                   onClick={() => navigate(`/contacts/${contact.id}`)}
                 >
                   <RowBox selection={selection} id={contact.id} name={contact.name} />
@@ -195,6 +225,24 @@ export default function ContactsPage() {
             <ShowMore shown={limit} total={rows.length} onMore={() => setLimit((value) => value + PAGE_SIZE)} />
           </p>
         </div>
+      )}
+
+      {merging && (
+        <Modal title="Merge duplicates" onClose={() => setMerging(null)} wide>
+          <MergeDialog
+            kind="contacts"
+            records={merging}
+            fields={CONTACT_MERGE.fields}
+            moves={CONTACT_MERGE.moves}
+            onCancel={() => setMerging(null)}
+            onMerged={(result) => {
+              setMerging(null);
+              selection.clear();
+              toast(`Merged ${result.mergedName} into ${result.keptName}.`);
+              contacts.reload();
+            }}
+          />
+        </Modal>
       )}
 
       {adding && (

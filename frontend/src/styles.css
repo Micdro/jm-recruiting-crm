@@ -1234,6 +1234,44 @@ textarea {
   padding-left: 18px;
 }
 
+/* Possible duplicates on a list, and the merge dialog. */
+.dupes-note {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.dupe-group-start td {
+  border-top: 2px solid var(--rule-strong);
+}
+
+.merge-table th[scope='row'] {
+  font-weight: 500;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.merge-table .merge-kept {
+  background: var(--brand-soft);
+}
+
+.merge-table .merge-after {
+  font-weight: 500;
+}
+
+.merge-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.merge-pick input {
+  accent-color: var(--brand);
+}
+
 .row-link:hover td {
   background: #f7f9fb;
 }

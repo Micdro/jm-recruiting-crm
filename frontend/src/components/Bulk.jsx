@@ -91,3 +91,28 @@ export function SkippedNote({ skipped, noun, onDismiss }) {
     </div>
   );
 }
+
+/** "4 contacts look like duplicates. Show them", above a list; and the way back when they're shown. */
+export function DuplicatesNote({ count, noun, showing, onShow, onHide }) {
+  if (count === 0 && !showing) return null;
+  if (showing) {
+    return (
+      <p className="dupes-note">
+        {count === 0
+          ? `No ${noun[1]} look like duplicates now.`
+          : `Possible duplicates, each group together. Tick two and choose Merge.`}{' '}
+        <button type="button" className="link-button" onClick={onHide}>
+          Show all {noun[1]}
+        </button>
+      </p>
+    );
+  }
+  return (
+    <p className="dupes-note">
+      {plural(count, noun[0], noun[1])} look like duplicates (same email, LinkedIn profile or name).{' '}
+      <button type="button" className="link-button" onClick={onShow}>
+        Show them
+      </button>
+    </p>
+  );
+}
