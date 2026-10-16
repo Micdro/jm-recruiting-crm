@@ -65,4 +65,38 @@ test.describe('Add from LinkedIn', () => {
     const saved = await crm.getJson(`/api/candidates/${id}`);
     expect(saved).toMatchObject({ name, currentTitle: 'Staff ML Engineer', currentCompany: 'Cardwise', source: 'LINKEDIN' });
   });
+
+  test('spots a new job for someone already in the CRM and updates their record', async ({ page, crm }) => {
+    const url = `https://www.linkedin.com/in/job-change-${Date.now()}/`;
+    const candidate = await crm.createCandidate({
+      name: uniqueName('Lea Novak'),
+      currentTitle: 'Staff ML Engineer',
+      currentCompany: 'Cardwise',
+      linkedinUrl: url,
+      notes: 'Prefers hybrid roles.',
+    });
+    const newEmployer = uniqueName('Harbor Trust');
+    const open = (headline, company) =>
+      page.goto(`/linkedin?${new URLSearchParams({ name: candidate.name, headline, company, url })}`);
+
+    // The same job, written differently, isn't a change.
+    await open('Staff ML Engineer at Cardwise', 'Cardwise, Inc.');
+    await expect(page.getByText('Already in the CRM')).toBeVisible();
+    await expect(page.getByText('New job.')).toHaveCount(0);
+
+    await open(`Head of ML Platform at ${newEmployer} | ex-Cardwise`, newEmployer);
+    await expect(page.locator('.linkedin-existing')).toContainText(
+      `LinkedIn shows Head of ML Platform at ${newEmployer}. The candidate record has Staff ML Engineer at Cardwise.`,
+    );
+    await page.getByRole('button', { name: 'Update candidate' }).click();
+    const update = page.getByRole('region', { name: `Update ${candidate.name}` });
+    await expect(update.getByLabel('Current title')).toHaveValue('Head of ML Platform');
+    await expect(update.getByLabel('Current company')).toHaveValue(newEmployer);
+    await update.getByRole('button', { name: 'Save candidate' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/candidates/${candidate.id}$`));
+    await expect(page.getByText(`Job change from LinkedIn: Head of ML Platform at ${newEmployer} (was Staff ML Engineer at Cardwise).`)).toBeVisible();
+    const saved = await crm.getJson(`/api/candidates/${candidate.id}`);
+    expect(saved).toMatchObject({ currentTitle: 'Head of ML Platform', currentCompany: newEmployer, notes: 'Prefers hybrid roles.' });
+  });
 });

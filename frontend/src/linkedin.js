@@ -1,4 +1,5 @@
 // "Add to JM CRM": a bookmark that, on a LinkedIn profile, opens the CRM with that person's details.
+import { sameCompany } from './companyNames.js';
 import { fold } from './quickSearch.js';
 
 /**
@@ -77,9 +78,36 @@ export function findExisting({ name, url }, contacts, candidates) {
   ];
 }
 
-/** The company with this name, ignoring case and accents. */
+/** The company with this name, however it's written ("Ledgerlight AI, Inc." finds Ledgerlight AI). */
 export function findCompany(name, companies) {
   const wanted = fold(name).trim();
   if (!wanted) return null;
-  return (companies ?? []).find((company) => fold(company.name).trim() === wanted) ?? null;
+  const list = companies ?? [];
+  return (
+    list.find((company) => fold(company.name).trim() === wanted) ?? list.find((company) => sameCompany(company.name, name)) ?? null
+  );
+}
+
+/** "Staff ML Engineer at Cardwise", or whichever part there is. */
+export function describeJob(title, company) {
+  return [title, company].filter(Boolean).join(' at ');
+}
+
+/**
+ * How someone's job on LinkedIn differs from their record, or null when it doesn't: a new employer
+ * or a new title. {@code job} is what LinkedIn shows; leave its title empty when the headline
+ * doesn't clearly give one ("Helping banks ship AI" isn't a title).
+ */
+export function jobChange(kind, record, job) {
+  const was = kind === 'contact' ? { title: record.title, company: record.companyName } : { title: record.currentTitle, company: record.currentCompany };
+  const companyChanged = Boolean(job.company) && !sameCompany(job.company, was.company);
+  const titleChanged = Boolean(job.title) && fold(job.title).trim() !== fold(was.title ?? '').trim();
+  if (!companyChanged && !titleChanged) return null;
+  return {
+    companyChanged,
+    title: job.title || (companyChanged ? '' : was.title),
+    company: job.company || was.company,
+    now: describeJob(job.title || (companyChanged ? '' : was.title), job.company || was.company),
+    was: describeJob(was.title, was.company),
+  };
 }

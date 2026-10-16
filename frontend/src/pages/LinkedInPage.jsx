@@ -5,7 +5,7 @@ import { ErrorNote, ExternalLink, PageHeader } from '../components/Bits.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
 import { useLoader, useTitle, useToast } from '../hooks.js';
-import { bookmarklet, findCompany, findExisting, parseHeadline } from '../linkedin.js';
+import { bookmarklet, findCompany, findExisting, jobChange, parseHeadline } from '../linkedin.js';
 
 /**
  * Without details: how to set up the Add to JM CRM bookmark. With them (the bookmark opens this
@@ -81,6 +81,7 @@ function AddPerson({ capture }) {
   const candidates = useLoader(() => api.candidates.list(), [], 'candidates');
   const companies = useLoader(() => api.companies.list(), [], 'companies');
   const [kind, setKind] = useState('contact');
+  const [updating, setUpdating] = useState(null);
   const [addedCompany, setAddedCompany] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -88,7 +89,41 @@ function AddPerson({ capture }) {
   const headline = parseHeadline(capture.headline);
   const companyName = capture.company || headline.company;
   const company = addedCompany ?? findCompany(companyName, companies.data);
-  const existing = findExisting(capture, contacts.data, candidates.data);
+  // A title only counts when the headline clearly gives one: "Head of ML at Northwind".
+  const job = { title: headline.company ? headline.title : '', company: companyName };
+  const existing = findExisting(capture, contacts.data, candidates.data).map((match) => ({
+    ...match,
+    change: jobChange(match.kind, match.record, job),
+  }));
+  const changed = existing.filter((match) => match.change);
+
+  /** Opens the full record (lists leave out notes) to update it with the new job. */
+  async function startUpdate({ kind: which, record, change }) {
+    setBusy(true);
+    setError('');
+    try {
+      const full = which === 'contact' ? await api.contacts.get(record.id) : await api.candidates.get(record.id);
+      setUpdating({ kind: which, record: full, change });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Notes the move in their history, then opens the record. */
+  async function updated(record) {
+    const { kind: which, change } = updating;
+    const notes = `Job change from LinkedIn: ${change.now}${change.was ? ` (was ${change.was})` : ''}.`;
+    const log = which === 'contact' ? api.contacts.logActivity : api.candidates.logActivity;
+    try {
+      await log(record.id, { type: 'NOTE', notes });
+      toast(`Updated ${record.name}`);
+    } catch {
+      toast(`Updated ${record.name}, but the job change couldn’t be noted in the history.`);
+    }
+    navigate(`/${which === 'contact' ? 'contacts' : 'candidates'}/${record.id}`);
+  }
 
   async function addCompany() {
     setBusy(true);
@@ -127,75 +162,161 @@ function AddPerson({ capture }) {
           )}
         </div>
         {existing.length > 0 && (
-          <div className="warn-note">
-            Already in the CRM:{' '}
-            {existing.map(({ kind: which, record }, index) => (
-              <span key={`${which}-${record.id}`}>
-                {index > 0 && ', '}
-                <Link to={`/${which === 'contact' ? 'contacts' : 'candidates'}/${record.id}`}>{record.name}</Link> ({which}
-                {which === 'contact' && record.companyName ? ` at ${record.companyName}` : ''})
-              </span>
+          <div className="warn-note linkedin-existing">
+            <p>
+              Already in the CRM:{' '}
+              {existing.map(({ kind: which, record }, index) => (
+                <span key={`${which}-${record.id}`}>
+                  {index > 0 && ', '}
+                  <Link to={`/${which === 'contact' ? 'contacts' : 'candidates'}/${record.id}`}>{record.name}</Link> ({which}
+                  {which === 'contact' && record.companyName ? ` at ${record.companyName}` : ''})
+                </span>
+              ))}
+              .{changed.length === 0 && ' Open that record instead, or add them again below.'}
+            </p>
+            {changed.map((match) => (
+              <p key={`${match.kind}-${match.record.id}`} className="linkedin-change">
+                <span>
+                  <strong>New job.</strong> LinkedIn shows {match.change.now}. The {match.kind} record has{' '}
+                  {match.change.was || 'no job'}.
+                </span>
+                <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startUpdate(match)}>
+                  Update {match.kind}
+                </button>
+              </p>
             ))}
-            . Open that record instead, or add them again below.
           </div>
         )}
       </section>
 
-      <section className="panel" aria-labelledby="linkedin-add">
-        <div className="panel-head">
-          <h2 id="linkedin-add">Add as</h2>
-          <fieldset className="segmented segmented-small">
-            <legend className="visually-hidden">Add as</legend>
-            {[
-              ['contact', 'Contact at a client'],
-              ['candidate', 'Candidate'],
-            ].map(([value, label]) => (
-              <label key={value} className={kind === value ? 'segment segment-on' : 'segment'}>
-                <input type="radio" name="linkedin-kind" checked={kind === value} onChange={() => setKind(value)} />
-                {label}
-              </label>
-            ))}
-          </fieldset>
-        </div>
-        <ErrorNote>{error}</ErrorNote>
+      {updating ? (
+        <UpdatePerson
+          updating={updating}
+          capture={capture}
+          company={addedCompany ?? findCompany(updating.change.company, companies.data)}
+          companyName={companyName}
+          busy={busy}
+          error={error}
+          onAddCompany={addCompany}
+          onSaved={updated}
+          onCancel={() => setUpdating(null)}
+        />
+      ) : (
+        <section className="panel" aria-labelledby="linkedin-add">
+          <div className="panel-head">
+            <h2 id="linkedin-add">Add as</h2>
+            <fieldset className="segmented segmented-small">
+              <legend className="visually-hidden">Add as</legend>
+              {[
+                ['contact', 'Contact at a client'],
+                ['candidate', 'Candidate'],
+              ].map(([value, label]) => (
+                <label key={value} className={kind === value ? 'segment segment-on' : 'segment'}>
+                  <input type="radio" name="linkedin-kind" checked={kind === value} onChange={() => setKind(value)} />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+          </div>
+          <ErrorNote>{error}</ErrorNote>
 
-        {kind === 'contact' ? (
-          <>
-            {companyName && !company && companies.data && (
-              <p className="setup-note linkedin-company">
-                {companyName} isn’t in the CRM yet.{' '}
-                <button type="button" className="btn btn-sm" disabled={busy} onClick={addCompany}>
-                  {busy ? 'Adding…' : `Add ${companyName} as a company`}
-                </button>
-              </p>
-            )}
-            <ContactForm
-              key={company?.id ?? 'no-company'}
-              contact={{
+          {kind === 'contact' ? (
+            <>
+              {companyName && !company && companies.data && (
+                <p className="setup-note linkedin-company">
+                  {companyName} isn’t in the CRM yet.{' '}
+                  <button type="button" className="btn btn-sm" disabled={busy} onClick={addCompany}>
+                    {busy ? 'Adding…' : `Add ${companyName} as a company`}
+                  </button>
+                </p>
+              )}
+              <ContactForm
+                key={company?.id ?? 'no-company'}
+                contact={{
+                  name: capture.name,
+                  title: headline.title,
+                  linkedinUrl: capture.url,
+                  companyId: company?.id ?? '',
+                }}
+                onSaved={(record) => saved(record, `/contacts/${record.id}`)}
+                onCancel={() => navigate('/')}
+              />
+            </>
+          ) : (
+            <CandidateForm
+              candidate={{
                 name: capture.name,
-                title: headline.title,
+                currentTitle: headline.title,
+                currentCompany: companyName,
+                location: capture.location,
                 linkedinUrl: capture.url,
-                companyId: company?.id ?? '',
+                source: 'LINKEDIN',
               }}
-              onSaved={(record) => saved(record, `/contacts/${record.id}`)}
+              onSaved={(record) => saved(record, `/candidates/${record.id}`)}
               onCancel={() => navigate('/')}
             />
-          </>
-        ) : (
-          <CandidateForm
-            candidate={{
-              name: capture.name,
-              currentTitle: headline.title,
-              currentCompany: companyName,
-              location: capture.location,
-              linkedinUrl: capture.url,
-              source: 'LINKEDIN',
-            }}
-            onSaved={(record) => saved(record, `/candidates/${record.id}`)}
-            onCancel={() => navigate('/')}
-          />
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </>
+  );
+}
+
+/** The record they're already in, with the job LinkedIn shows filled in, to check and save. */
+function UpdatePerson({ updating, capture, company, companyName, busy, error, onAddCompany, onSaved, onCancel }) {
+  const { kind, record, change } = updating;
+  const ended = ['NO_RESPONSE', 'NOT_INTERESTED', 'NURTURE'].includes(record.status);
+  const newCompany = kind === 'contact' && change.companyChanged ? company : null;
+
+  return (
+    <section className="panel" aria-labelledby="linkedin-update">
+      <div className="panel-head">
+        <h2 id="linkedin-update">Update {record.name}</h2>
+        <button type="button" className="btn btn-sm" onClick={onCancel}>
+          Back
+        </button>
+      </div>
+      <p className="form-intro">
+        LinkedIn shows {change.now}. Check the details and save. The move is noted in their history.
+      </p>
+      <ErrorNote>{error}</ErrorNote>
+      {kind === 'contact' ? (
+        <>
+          {change.companyChanged && !newCompany && (
+            <p className="setup-note linkedin-company">
+              {companyName} isn’t in the CRM yet.{' '}
+              <button type="button" className="btn btn-sm" disabled={busy} onClick={onAddCompany}>
+                {busy ? 'Adding…' : `Add ${companyName} as a company`}
+              </button>
+            </p>
+          )}
+          {change.companyChanged && ended && (
+            <p className="setup-note">Their sequence has ended. A new job is a good reason to restart it on their page.</p>
+          )}
+          <ContactForm
+            key={newCompany?.id ?? 'same-company'}
+            contact={{
+              ...record,
+              title: change.title || record.title,
+              companyId: newCompany?.id ?? record.companyId,
+              linkedinUrl: record.linkedinUrl || capture.url,
+            }}
+            onSaved={onSaved}
+            onCancel={onCancel}
+          />
+        </>
+      ) : (
+        <CandidateForm
+          candidate={{
+            ...record,
+            currentTitle: change.title || record.currentTitle,
+            currentCompany: change.company,
+            linkedinUrl: record.linkedinUrl || capture.url,
+          }}
+          onSaved={onSaved}
+          onCancel={onCancel}
+        />
+      )}
+    </section>
   );
 }

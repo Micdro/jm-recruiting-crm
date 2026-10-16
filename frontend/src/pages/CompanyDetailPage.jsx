@@ -28,7 +28,8 @@ import {
 } from '../labels.js';
 import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
-import { offLimitsLabel, offLimitsNote, sameCompany } from '../offLimits.js';
+import { sameCompany } from '../companyNames.js';
+import { offLimitsLabel, offLimitsNote } from '../offLimits.js';
 
 export default function CompanyDetailPage() {
   const { id } = useParams();
