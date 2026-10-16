@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
-import { useUndoableDelete } from '../undo.js';
+import { useUndoableChange, useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, ErrorNote, ExternalLink, Loading, Pill, TouchPips } from '../components/Bits.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
 import MessageComposer from '../components/MessageComposer.jsx';
@@ -17,6 +17,7 @@ export default function ContactDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const undoable = useUndoableDelete();
+  const offerUndo = useUndoableChange();
   const contact = useLoader(() => api.contacts.get(id), [id], `contact:${id}`);
   const history = useLoader(() => api.activities.list({ contactId: id }), [id], `contact:${id}:history`);
   const [editing, setEditing] = useState(false);
@@ -168,7 +169,7 @@ export default function ContactDetailPage() {
             contact={record}
             onLogged={(updated, type) => {
               setWriting(false);
-              toast(`${ACTIVITY_TYPE[type]} logged.`);
+              offerUndo('contacts', record.id, `${ACTIVITY_TYPE[type]} logged.`, refresh);
               refresh(updated);
             }}
           />

@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
+import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.contact.ContactService.FillQueueResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -69,6 +70,18 @@ public class ContactController {
     @PostMapping("/{id}/restart-sequence")
     public ContactResponse restartSequence(@PathVariable Long id) {
         return contactService.restartSequence(id);
+    }
+
+    /** Moves the next action to the next business day or a week out. */
+    @PostMapping("/{id}/snooze")
+    public ContactResponse snooze(@PathVariable Long id, @Valid @RequestBody Later.Request request) {
+        return contactService.snooze(id, request.until());
+    }
+
+    /** Undoes your last touch, reply, note or snooze on this contact from the last few minutes. */
+    @PostMapping("/{id}/undo")
+    public ContactResponse undo(@PathVariable Long id) {
+        return contactService.undo(id);
     }
 
     @PostMapping("/fill-queue")

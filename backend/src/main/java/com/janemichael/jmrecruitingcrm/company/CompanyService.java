@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.company;
 
+import com.janemichael.jmrecruitingcrm.activity.Activity;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.auth.AppUser;
@@ -8,7 +9,9 @@ import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.EnumCsv;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.Labels;
+import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
+import com.janemichael.jmrecruitingcrm.common.RecentChanges;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import com.janemichael.jmrecruitingcrm.placement.PlacementRepository;
@@ -45,6 +48,7 @@ public class CompanyService {
     private final FieldEncryptor encryptor;
     private final TrashService trash;
     private final Clock clock;
+    private final RecentChanges recentChanges;
 
     public CompanyService(
             CompanyRepository companyRepository,
@@ -55,10 +59,12 @@ public class CompanyService {
             ActivityLogger activityLogger,
             FieldEncryptor encryptor,
             TrashService trash,
-            Clock clock
+            Clock clock,
+            RecentChanges recentChanges
     ) {
         this.trash = trash;
         this.clock = clock;
+        this.recentChanges = recentChanges;
         this.companyRepository = companyRepository;
         this.contactRepository = contactRepository;
         this.searchRepository = searchRepository;
@@ -150,6 +156,48 @@ public class CompanyService {
         if (companyRepository.deleteCompanyById(id) == 0) {
             throw new NotFoundException("Company not found");
         }
+    }
+
+    /** Moves the follow-up date to the next business day or a week out, from the Today queue. */
+    @Transactional
+    public CompanyResponse snooze(Long id, Later until) {
+        Company company = find(id);
+        if (company.getFollowUpDate() == null) {
+            throw new ConflictException(company.getName() + " has no follow-up date to move.");
+        }
+
+        AppUser user = currentUserService.get();
+        FollowUp before = new FollowUp(company.getFollowUpDate());
+        LocalDate date = until.from(LocalDate.now(clock));
+        company.setFollowUpDate(date);
+
+        Activity activity = activityLogger.forCompany(company, ActivityType.STATUS_CHANGE,
+                "Follow-up moved to " + Later.day(date), user);
+        recentChanges.remember(RecentChanges.Kind.COMPANY, id, user.getId(), activity.getId(),
+                before, new FollowUp(date));
+
+        return response(company);
+    }
+
+    /** Undoes your last snooze of this company's follow-up from the last few minutes. */
+    @Transactional
+    public CompanyResponse undo(Long id) {
+        Company company = find(id);
+        RecentChanges.Change<FollowUp> change = recentChanges.take(
+                RecentChanges.Kind.COMPANY, id, currentUserService.get().getId(), FollowUp.class);
+
+        if (!new FollowUp(company.getFollowUpDate()).equals(change.after())) {
+            throw new ConflictException(company.getName() + " changed after that, so it can't be undone.");
+        }
+
+        company.setFollowUpDate(change.before().date());
+        activityLogger.remove(change.activityId());
+
+        return response(company);
+    }
+
+    /** The part of a company that moving its follow-up changes. */
+    record FollowUp(LocalDate date) {
     }
 
     private CompanyResponse response(Company company) {

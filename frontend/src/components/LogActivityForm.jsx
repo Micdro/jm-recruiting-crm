@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { ACTION_TYPE, ACTIVITY_TYPE, LOGGABLE_TYPES, MAX_TOUCHES, OUTREACH_TYPES, options } from '../labels.js';
 import { addBusinessDays, formatWeekday, todayIso } from '../format.js';
-import { useToast } from '../hooks.js';
+import { useUndoableChange } from '../undo.js';
 import { ErrorNote } from './Bits.jsx';
 import { SelectField, TextArea, TextField } from './Fields.jsx';
 
@@ -53,7 +53,7 @@ function preview(kind, record, type, today) {
  * `searches` (candidates only) lets the activity be tied to one search.
  */
 export default function LogActivityForm({ kind, record, onLogged, searches = [], compact = false }) {
-  const toast = useToast();
+  const offerUndo = useUndoableChange();
   const groupId = useId();
   const today = todayIso();
 
@@ -90,7 +90,9 @@ export default function LogActivityForm({ kind, record, onLogged, searches = [],
       setNotes('');
       setPlan('default');
       setNextDate('');
-      toast(`${ACTIVITY_TYPE[type]} logged for ${record.name}`);
+      // Undo hands back the restored record, so the page refreshes the same way it did after logging.
+      offerUndo(kind === 'contact' ? 'contacts' : 'candidates', record.id,
+        `${ACTIVITY_TYPE[type]} logged for ${record.name}`, onLogged);
       onLogged(updated);
     } catch (err) {
       setError(errorMessage(err));

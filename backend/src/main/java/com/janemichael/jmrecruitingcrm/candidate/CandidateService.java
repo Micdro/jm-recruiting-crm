@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.candidate;
 
+import com.janemichael.jmrecruitingcrm.activity.Activity;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -11,7 +12,9 @@ import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.EnumCsv;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.Labels;
+import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
+import com.janemichael.jmrecruitingcrm.common.RecentChanges;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineRepository;
 import com.janemichael.jmrecruitingcrm.pipeline.PipelineStage;
@@ -45,6 +48,7 @@ public class CandidateService {
     private final FieldEncryptor encryptor;
     private final Clock clock;
     private final TrashService trash;
+    private final RecentChanges recentChanges;
 
     public CandidateService(
             CandidateRepository candidateRepository,
@@ -55,9 +59,11 @@ public class CandidateService {
             ActivityLogger activityLogger,
             FieldEncryptor encryptor,
             Clock clock,
-            TrashService trash
+            TrashService trash,
+            RecentChanges recentChanges
     ) {
         this.trash = trash;
+        this.recentChanges = recentChanges;
         this.candidateRepository = candidateRepository;
         this.pipelineRepository = pipelineRepository;
         this.placementRepository = placementRepository;
@@ -159,6 +165,7 @@ public class CandidateService {
         AppUser user = currentUserService.get();
         ActivityType type = request.type();
         LocalDate today = LocalDate.now(clock);
+        FollowUpState before = FollowUpState.of(candidate);
 
         if (!type.isManual()) {
             throw new BadRequestException("That activity type is recorded automatically");
@@ -195,9 +202,67 @@ public class CandidateService {
             candidate.setNextActionType(null);
         }
 
-        activityLogger.forCandidate(candidate, search, type, type.isOutreach(), request.notes(), user);
+        Activity activity = activityLogger.forCandidate(
+                candidate, search, type, type.isOutreach(), request.notes(), user);
+        rememberChange(candidate, user, activity, before);
 
         return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
+    }
+
+    /** Moves the next follow-up to the next business day or a week out, from the Today queue. */
+    @Transactional
+    public CandidateResponse snooze(Long id, Later until) {
+        Candidate candidate = find(id);
+        if (candidate.getNextActionDate() == null) {
+            throw new ConflictException(candidate.getName() + " has no follow-up to move.");
+        }
+
+        AppUser user = currentUserService.get();
+        FollowUpState before = FollowUpState.of(candidate);
+        LocalDate date = until.from(LocalDate.now(clock));
+        candidate.setNextActionDate(date);
+
+        Activity activity = activityLogger.forCandidate(candidate, null, ActivityType.STATUS_CHANGE, false,
+                "Next follow-up moved to " + Later.day(date), user);
+        rememberChange(candidate, user, activity, before);
+
+        return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
+    }
+
+    /** Undoes your last follow-up or snooze on this candidate from the last few minutes. */
+    @Transactional
+    public CandidateResponse undo(Long id) {
+        Candidate candidate = find(id);
+        RecentChanges.Change<FollowUpState> change = recentChanges.take(
+                RecentChanges.Kind.CANDIDATE, id, currentUserService.get().getId(), FollowUpState.class);
+
+        if (!FollowUpState.of(candidate).equals(change.after())) {
+            throw new ConflictException(candidate.getName() + " changed after that, so it can't be undone.");
+        }
+
+        change.before().applyTo(candidate);
+        activityLogger.remove(change.activityId());
+
+        return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
+    }
+
+    private void rememberChange(Candidate candidate, AppUser user, Activity activity, FollowUpState before) {
+        recentChanges.remember(RecentChanges.Kind.CANDIDATE, candidate.getId(), user.getId(), activity.getId(),
+                before, FollowUpState.of(candidate));
+    }
+
+    /** The parts of a candidate that logging a follow-up or moving it changes. */
+    record FollowUpState(LocalDate lastContactedDate, LocalDate nextActionDate, ActionType nextActionType) {
+        static FollowUpState of(Candidate candidate) {
+            return new FollowUpState(candidate.getLastContactedDate(), candidate.getNextActionDate(),
+                    candidate.getNextActionType());
+        }
+
+        void applyTo(Candidate candidate) {
+            candidate.setLastContactedDate(lastContactedDate);
+            candidate.setNextActionDate(nextActionDate);
+            candidate.setNextActionType(nextActionType);
+        }
     }
 
     public static boolean isDue(Candidate candidate, LocalDate today) {

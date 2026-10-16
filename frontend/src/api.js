@@ -127,12 +127,20 @@ export const api = {
   reports: {
     weekly: (scope) => get('/api/reports/weekly', { scope }),
   },
-  companies: crud('/api/companies'),
+  companies: {
+    ...crud('/api/companies'),
+    /** Moves the follow-up date: until is 'TOMORROW' (next business day) or 'NEXT_WEEK'. */
+    snooze: (id, until) => post(`/api/companies/${id}/snooze`, { until }),
+    undo: (id) => post(`/api/companies/${id}/undo`),
+  },
   contacts: {
     ...crud('/api/contacts'),
     logActivity: (id, body) => post(`/api/contacts/${id}/activities`, body),
     restartSequence: (id) => post(`/api/contacts/${id}/restart-sequence`),
     fillQueue: (count) => post('/api/contacts/fill-queue', { count }),
+    snooze: (id, until) => post(`/api/contacts/${id}/snooze`, { until }),
+    /** Undoes your last touch, reply, note or snooze on this contact, within a few minutes. */
+    undo: (id) => post(`/api/contacts/${id}/undo`),
   },
   searches: {
     ...crud('/api/searches'),
@@ -142,6 +150,8 @@ export const api = {
     ...crud('/api/candidates'),
     pipeline: (id) => get(`/api/candidates/${id}/pipeline`),
     logActivity: (id, body) => post(`/api/candidates/${id}/activities`, body),
+    snooze: (id, until) => post(`/api/candidates/${id}/snooze`, { until }),
+    undo: (id) => post(`/api/candidates/${id}/undo`),
     files: (id) => get(`/api/candidates/${id}/files`),
     /** Sends the file as is, with its name; the server encrypts it before storing it. */
     addFile: (id, file) =>

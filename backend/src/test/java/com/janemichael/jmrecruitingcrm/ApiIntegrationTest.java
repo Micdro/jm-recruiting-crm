@@ -7,6 +7,7 @@ import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.common.EncryptionBackfill;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.KeyWrap;
+import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.desktop.MorningReminder;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManager;
@@ -1069,6 +1070,103 @@ class ApiIntegrationTest {
                     request.setRemoteAddr(address);
                     return request;
                 });
+    }
+
+    // Undo and Later ---------------------------------------------------------------
+
+    @Test
+    void aMisloggedTouchCanBeUndoneAndLeavesNoTrace() throws Exception {
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body("name", "Undo Test Bank AI")))
+                .andExpect(status().isCreated())
+                .andReturn());
+        long contactId = id(mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Riley Undo", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        int touchesBefore = JsonPath.read(mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andReturn().getResponse().getContentAsString(), "$.myTouchesToday");
+
+        mockMvc.perform(send(post("/api/contacts/" + contactId + "/activities"), body("type", "LINKEDIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.touchCount").value(1));
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.myTouchesToday").value(touchesBefore + 1));
+
+        mockMvc.perform(signedIn(post("/api/contacts/" + contactId + "/undo")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.touchCount").value(0))
+                .andExpect(jsonPath("$.status").value("NEW"))
+                .andExpect(jsonPath("$.nextActionDate").value(nullValue()))
+                .andExpect(jsonPath("$.lastContactedDate").value(nullValue()));
+
+        // The touch is gone from the day's tally and the history, and can't be undone twice.
+        mockMvc.perform(signedIn(get("/api/dashboard")))
+                .andExpect(jsonPath("$.myTouchesToday").value(touchesBefore));
+        mockMvc.perform(signedIn(get("/api/activities").param("contactId", String.valueOf(contactId))))
+                .andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(signedIn(post("/api/contacts/" + contactId + "/undo")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.messages[0]").value(containsString("nothing to undo")));
+    }
+
+    @Test
+    void laterMovesTodaysFollowUpsAndCanBeUndone() throws Exception {
+        LocalDate today = LocalDate.now(clock);
+        String tomorrow = Later.TOMORROW.from(today).toString();
+        String nextWeek = Later.NEXT_WEEK.from(today).toString();
+
+        long companyId = id(mockMvc.perform(send(post("/api/companies"), body(
+                        "name", "Later Test Insurer AI", "followUpDate", today.toString())))
+                .andExpect(status().isCreated())
+                .andReturn());
+        long contactId = id(mockMvc.perform(send(post("/api/contacts"), body(
+                        "name", "Morgan Later", "companyId", companyId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+        String nextTouch = JsonPath.read(mockMvc.perform(
+                        send(post("/api/contacts/" + contactId + "/activities"), body("type", "LINKEDIN")))
+                .andReturn().getResponse().getContentAsString(), "$.nextActionDate");
+
+        // A contact: the next touch moves, and the move is in the history until it's undone.
+        mockMvc.perform(send(post("/api/contacts/" + contactId + "/snooze"), body("until", "TOMORROW")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextActionDate").value(tomorrow))
+                .andExpect(jsonPath("$.touchCount").value(1));
+        mockMvc.perform(signedIn(get("/api/activities").param("contactId", String.valueOf(contactId))))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].type").value("STATUS_CHANGE"));
+        mockMvc.perform(signedIn(post("/api/contacts/" + contactId + "/undo")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextActionDate").value(nextTouch))
+                .andExpect(jsonPath("$.touchCount").value(1));
+        mockMvc.perform(signedIn(get("/api/activities").param("contactId", String.valueOf(contactId))))
+                .andExpect(jsonPath("$.length()").value(1));
+
+        // A company's follow-up.
+        mockMvc.perform(send(post("/api/companies/" + companyId + "/snooze"), body("until", "NEXT_WEEK")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followUpDate").value(nextWeek));
+        mockMvc.perform(signedIn(post("/api/companies/" + companyId + "/undo")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followUpDate").value(today.toString()));
+
+        // A candidate's follow-up.
+        long candidateId = id(mockMvc.perform(send(post("/api/candidates"), body(
+                        "name", "Casey Later", "nextActionDate", today.toString())))
+                .andExpect(status().isCreated())
+                .andReturn());
+        mockMvc.perform(send(post("/api/candidates/" + candidateId + "/snooze"), body("until", "TOMORROW")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextActionDate").value(tomorrow));
+        mockMvc.perform(signedIn(post("/api/candidates/" + candidateId + "/undo")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextActionDate").value(today.toString()));
+
+        // Later needs a choice.
+        mockMvc.perform(send(post("/api/contacts/" + contactId + "/snooze"), body("until", "SOMEDAY")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(send(post("/api/contacts/" + contactId + "/snooze"), Map.of()))
+                .andExpect(status().isBadRequest());
     }
 
     private MockHttpServletRequestBuilder signedIn(MockHttpServletRequestBuilder request) {

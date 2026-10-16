@@ -861,6 +861,49 @@ textarea {
   gap: 4px;
 }
 
+/* Later on a Today row: a small menu of where to move the follow-up. */
+.later {
+  position: relative;
+}
+
+.later-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 210px;
+  padding: 4px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(23, 36, 45, 0.16);
+}
+
+.later-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.later-option:hover,
+.later-option:focus-visible {
+  background: var(--green-soft);
+}
+
+.later-day {
+  color: var(--ink-3);
+}
+
 .search-list {
   margin: 0;
   padding: 0;

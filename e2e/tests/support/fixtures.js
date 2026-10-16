@@ -22,6 +22,17 @@ export function isoDate(offsetDays = 0) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/**
+ * The weekday a number of days after a YYYY-MM-DD date, moved off a weekend: where Later puts a
+ * follow-up (1 for Tomorrow, 7 for Next week), counted from the server's today.
+ */
+export function laterFrom(todayIso, days) {
+  const [year, month, day] = todayIso.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  while (date.getUTCDay() === 0 || date.getUTCDay() === 6) date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 export function companyPayload(overrides = {}) {
   return {
     name: uniqueName('Acme AI'),

@@ -55,6 +55,13 @@ public class ActivityLogger {
         return activityRepository.save(activity);
     }
 
+    /** Removes an entry when the change that wrote it is undone. Missing entries are ignored. */
+    public void remove(Long activityId) {
+        if (activityId != null) {
+            activityRepository.findById(activityId).ifPresent(activityRepository::delete);
+        }
+    }
+
     private Activity base(ActivityType type, boolean touch, String summary, AppUser user) {
         Activity activity = new Activity();
         activity.setType(type);

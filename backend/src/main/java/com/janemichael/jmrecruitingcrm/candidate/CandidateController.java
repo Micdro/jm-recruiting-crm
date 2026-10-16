@@ -1,6 +1,7 @@
 package com.janemichael.jmrecruitingcrm.candidate;
 
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
+import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -63,5 +64,17 @@ public class CandidateController {
     @PostMapping("/{id}/activities")
     public CandidateResponse logActivity(@PathVariable Long id, @Valid @RequestBody LogActivityRequest request) {
         return candidateService.logActivity(id, request);
+    }
+
+    /** Moves the next follow-up to the next business day or a week out. */
+    @PostMapping("/{id}/snooze")
+    public CandidateResponse snooze(@PathVariable Long id, @Valid @RequestBody Later.Request request) {
+        return candidateService.snooze(id, request.until());
+    }
+
+    /** Undoes your last follow-up or snooze on this candidate from the last few minutes. */
+    @PostMapping("/{id}/undo")
+    public CandidateResponse undo(@PathVariable Long id) {
+        return candidateService.undo(id);
     }
 }

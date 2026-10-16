@@ -31,3 +31,33 @@ export function useUndoableDelete() {
     [toast, navigate],
   );
 }
+
+/**
+ * After logging a touch or moving a follow-up: a confirmation with Undo, which puts the record
+ * back the way it was and removes the history entry, so the day's tally drops it too. The server
+ * keeps the change for 10 minutes, on the computer it was made on.
+ *
+ * kind is 'contacts', 'candidates' or 'companies'; onUndone gets the restored record.
+ */
+export function useUndoableChange() {
+  const toast = useToast();
+  return useCallback(
+    (kind, recordId, message, onUndone) => {
+      toast(message, {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            try {
+              const restored = await api[kind].undo(recordId);
+              toast('Undone.');
+              if (onUndone) onUndone(restored);
+            } catch (err) {
+              toast(errorMessage(err));
+            }
+          },
+        },
+      });
+    },
+    [toast],
+  );
+}

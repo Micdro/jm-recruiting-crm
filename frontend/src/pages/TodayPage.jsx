@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { affirmationFor } from '../affirmations.js';
 import { api, errorMessage } from '../api.js';
 import { DueTag, Empty, ErrorNote, Loading, Pill, TouchPips } from '../components/Bits.jsx';
+import LaterMenu from '../components/LaterMenu.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
 import MessageComposer from '../components/MessageComposer.jsx';
 import Modal from '../components/Modal.jsx';
@@ -23,6 +24,7 @@ import {
 } from '../labels.js';
 import { formatDate, formatLongDay, formatWeekday, money, plural } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
+import { useUndoableChange } from '../undo.js';
 
 const QUICK_TYPES = ['LINKEDIN', 'CALL'];
 
@@ -32,7 +34,7 @@ export default function TodayPage() {
   const dashboard = useLoader(() => api.dashboard(scope), [scope], `dashboard:${scope}`);
   const [logging, setLogging] = useState(null);
   const [writing, setWriting] = useState(null);
-  const toast = useToast();
+  const offerUndo = useUndoableChange();
 
   const data = dashboard.data;
 
@@ -80,9 +82,13 @@ export default function TodayPage() {
                 onLog={(contact) => setLogging({ kind: 'contact', record: contact })}
                 onWrite={setWriting}
               />
-              <CompanyFollowUps data={data} />
+              <CompanyFollowUps data={data} onChanged={dashboard.reload} />
               <HiringSignals />
-              <CandidateQueue data={data} onLog={(candidate) => setLogging({ kind: 'candidate', record: candidate })} />
+              <CandidateQueue
+                data={data}
+                onChanged={dashboard.reload}
+                onLog={(candidate) => setLogging({ kind: 'candidate', record: candidate })}
+              />
             </div>
 
             <aside className="today-side">
@@ -104,7 +110,7 @@ export default function TodayPage() {
           <MessageComposer
             contact={writing}
             onLogged={(updated, type) => {
-              toast(touchLoggedMessage(writing, updated, type));
+              offerUndo('contacts', writing.id, touchLoggedMessage(writing, updated, type), dashboard.reload);
               setWriting(null);
               dashboard.reload();
             }}
@@ -176,6 +182,7 @@ function touchLoggedMessage(contact, updated, type) {
 
 function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
   const toast = useToast();
+  const offerUndo = useUndoableChange();
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
   const [fillCount, setFillCount] = useState(10);
@@ -185,7 +192,21 @@ function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
     setError('');
     try {
       const updated = await api.contacts.logActivity(contact.id, { type });
-      toast(touchLoggedMessage(contact, updated, type));
+      offerUndo('contacts', contact.id, touchLoggedMessage(contact, updated, type), onChanged);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function later(contact, until) {
+    setBusyId(contact.id);
+    setError('');
+    try {
+      const updated = await api.contacts.snooze(contact.id, until);
+      offerUndo('contacts', contact.id, `Moved ${contact.name} to ${formatWeekday(updated.nextActionDate)}.`, onChanged);
       onChanged();
     } catch (err) {
       setError(errorMessage(err));
@@ -313,6 +334,12 @@ function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
                   >
                     Replied
                   </button>
+                  <LaterMenu
+                    name={contact.name}
+                    today={data.today}
+                    disabled={busyId === contact.id || !contact.nextActionDate}
+                    onPick={(until) => later(contact, until)}
+                  />
                   <button
                     type="button"
                     className="btn btn-sm btn-quiet"
@@ -336,8 +363,32 @@ function ContactQueue({ data, scope, onChanged, onLog, onWrite }) {
   );
 }
 
+/** Later on a company or candidate row: moves its follow-up and offers Undo. kind is the api name. */
+function useLater(kind, dateOf, onChanged) {
+  const offerUndo = useUndoableChange();
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState('');
+
+  async function later(record, until) {
+    setBusyId(record.id);
+    setError('');
+    try {
+      const updated = await api[kind].snooze(record.id, until);
+      offerUndo(kind, record.id, `Moved ${record.name} to ${formatWeekday(dateOf(updated))}.`, onChanged);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return { busyId, error, later };
+}
+
 /** Client and prospect companies whose follow-up date has come (ClickUp's Follow-Up Date). */
-function CompanyFollowUps({ data }) {
+function CompanyFollowUps({ data, onChanged }) {
+  const { busyId, error, later } = useLater('companies', (company) => company.followUpDate, onChanged);
   const companies = data.companiesDue ?? [];
   if (companies.length === 0) return null;
 
@@ -351,6 +402,7 @@ function CompanyFollowUps({ data }) {
           All due
         </Link>
       </div>
+      <ErrorNote>{error}</ErrorNote>
       <ul className="queue">
         {companies.map((company) => (
           <li key={company.id} className="queue-row">
@@ -373,6 +425,12 @@ function CompanyFollowUps({ data }) {
               <Link to={`/companies/${company.id}`} className="btn btn-sm">
                 Open
               </Link>
+              <LaterMenu
+                name={company.name}
+                today={data.today}
+                disabled={busyId === company.id}
+                onPick={(until) => later(company, until)}
+              />
             </div>
           </li>
         ))}
@@ -430,7 +488,8 @@ function HiringSignals() {
   );
 }
 
-function CandidateQueue({ data, onLog }) {
+function CandidateQueue({ data, onChanged, onLog }) {
+  const { busyId, error, later } = useLater('candidates', (candidate) => candidate.nextActionDate, onChanged);
   const candidates = data.candidatesDue;
   if (candidates.length === 0) return null;
 
@@ -441,6 +500,7 @@ function CandidateQueue({ data, onLog }) {
           Candidates to follow up <span className="count">{data.candidatesDueTotal}</span>
         </h2>
       </div>
+      <ErrorNote>{error}</ErrorNote>
       <ul className="queue">
         {candidates.map((candidate) => (
           <li key={candidate.id} className="queue-row">
@@ -463,6 +523,12 @@ function CandidateQueue({ data, onLog }) {
               <button type="button" className="btn btn-sm" onClick={() => onLog(candidate)}>
                 Log follow-up
               </button>
+              <LaterMenu
+                name={candidate.name}
+                today={data.today}
+                disabled={busyId === candidate.id}
+                onPick={(until) => later(candidate, until)}
+              />
             </div>
           </li>
         ))}

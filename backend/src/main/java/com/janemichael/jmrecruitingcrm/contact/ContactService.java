@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
+import com.janemichael.jmrecruitingcrm.activity.Activity;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -11,7 +12,9 @@ import com.janemichael.jmrecruitingcrm.common.BusinessDays;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.Labels;
+import com.janemichael.jmrecruitingcrm.common.Later;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
+import com.janemichael.jmrecruitingcrm.common.RecentChanges;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
@@ -54,6 +57,7 @@ public class ContactService {
     private final FieldEncryptor encryptor;
     private final Clock clock;
     private final TrashService trash;
+    private final RecentChanges recentChanges;
 
     public ContactService(
             ContactRepository contactRepository,
@@ -62,9 +66,11 @@ public class ContactService {
             ActivityLogger activityLogger,
             FieldEncryptor encryptor,
             Clock clock,
-            TrashService trash
+            TrashService trash,
+            RecentChanges recentChanges
     ) {
         this.trash = trash;
+        this.recentChanges = recentChanges;
         this.contactRepository = contactRepository;
         this.companyRepository = companyRepository;
         this.currentUserService = currentUserService;
@@ -164,6 +170,7 @@ public class ContactService {
         AppUser user = currentUserService.get();
         ActivityType type = request.type();
         LocalDate today = LocalDate.now(clock);
+        OutreachState before = OutreachState.of(contact);
 
         if (!type.isManual()) {
             throw new BadRequestException("That activity type is recorded automatically");
@@ -205,9 +212,83 @@ public class ContactService {
 
         applyNextAction(contact, request, today, sequenceTouch, sequenceFinished);
 
-        activityLogger.forContact(contact, type, outreach, joinSummary(prefix, request.notes()), user);
+        Activity activity = activityLogger.forContact(
+                contact, type, outreach, joinSummary(prefix, request.notes()), user);
+        rememberChange(contact, user, activity, before);
 
         return ContactResponse.from(contact);
+    }
+
+    /**
+     * Moves the next action to the next business day or a week out, without opening the contact.
+     * Recorded in the history, and can be undone like a touch.
+     */
+    @Transactional
+    public ContactResponse snooze(Long id, Later until) {
+        Contact contact = findContact(id);
+        if (contact.getNextActionDate() == null) {
+            throw new ConflictException(contact.getName() + " has no next action to move.");
+        }
+
+        AppUser user = currentUserService.get();
+        OutreachState before = OutreachState.of(contact);
+        LocalDate date = until.from(LocalDate.now(clock));
+        contact.setNextActionDate(date);
+
+        Activity activity = activityLogger.forContact(contact, ActivityType.STATUS_CHANGE, false,
+                "Next action moved to " + Later.day(date), user);
+        rememberChange(contact, user, activity, before);
+
+        return ContactResponse.from(contact);
+    }
+
+    /**
+     * Undoes the signed-in person's last touch, reply, note or snooze on this contact, made in the
+     * last few minutes: the touch count, status and next action go back to what they were, and
+     * the history entry goes, so the day's tally and the weekly numbers drop it too.
+     */
+    @Transactional
+    public ContactResponse undo(Long id) {
+        Contact contact = findContact(id);
+        AppUser user = currentUserService.get();
+        RecentChanges.Change<OutreachState> change =
+                recentChanges.take(RecentChanges.Kind.CONTACT, id, user.getId(), OutreachState.class);
+
+        if (!OutreachState.of(contact).equals(change.after())) {
+            throw new ConflictException(contact.getName() + " changed after that, so it can't be undone.");
+        }
+
+        change.before().applyTo(contact);
+        activityLogger.remove(change.activityId());
+
+        return ContactResponse.from(contact);
+    }
+
+    private void rememberChange(Contact contact, AppUser user, Activity activity, OutreachState before) {
+        recentChanges.remember(RecentChanges.Kind.CONTACT, contact.getId(), user.getId(), activity.getId(),
+                before, OutreachState.of(contact));
+    }
+
+    /** The parts of a contact that logging a touch or moving the next action can change. */
+    record OutreachState(
+            OutreachStatus status,
+            int touchCount,
+            LocalDate lastContactedDate,
+            LocalDate nextActionDate,
+            ActionType nextActionType
+    ) {
+        static OutreachState of(Contact contact) {
+            return new OutreachState(contact.getStatus(), contact.getTouchCount(), contact.getLastContactedDate(),
+                    contact.getNextActionDate(), contact.getNextActionType());
+        }
+
+        void applyTo(Contact contact) {
+            contact.setStatus(status);
+            contact.setTouchCount(touchCount);
+            contact.setLastContactedDate(lastContactedDate);
+            contact.setNextActionDate(nextActionDate);
+            contact.setNextActionType(nextActionType);
+        }
     }
 
     /** Starts a fresh four-touch sequence, due today. */

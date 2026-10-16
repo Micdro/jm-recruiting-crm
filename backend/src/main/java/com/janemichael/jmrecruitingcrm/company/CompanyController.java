@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.company;
 
+import com.janemichael.jmrecruitingcrm.common.Later;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -53,5 +54,17 @@ public class CompanyController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         companyService.delete(id);
+    }
+
+    /** Moves the follow-up date to the next business day or a week out. */
+    @PostMapping("/{id}/snooze")
+    public CompanyResponse snooze(@PathVariable Long id, @Valid @RequestBody Later.Request request) {
+        return companyService.snooze(id, request.until());
+    }
+
+    /** Undoes your last snooze of this company from the last few minutes. */
+    @PostMapping("/{id}/undo")
+    public CompanyResponse undo(@PathVariable Long id) {
+        return companyService.undo(id);
     }
 }

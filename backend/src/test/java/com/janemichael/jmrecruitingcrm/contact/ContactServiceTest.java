@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.contact;
 
+import com.janemichael.jmrecruitingcrm.activity.Activity;
 import com.janemichael.jmrecruitingcrm.activity.ActivityLogger;
 import com.janemichael.jmrecruitingcrm.activity.ActivityType;
 import com.janemichael.jmrecruitingcrm.activity.LogActivityRequest;
@@ -10,6 +11,8 @@ import com.janemichael.jmrecruitingcrm.common.ActionType;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.ConflictException;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
+import com.janemichael.jmrecruitingcrm.common.Later;
+import com.janemichael.jmrecruitingcrm.common.RecentChanges;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
@@ -27,9 +30,11 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -52,7 +57,7 @@ class ContactServiceTest {
 
     private final ContactService contactService = new ContactService(
             contactRepository, companyRepository, currentUserService, activityLogger, encryptor, clock,
-            mock(TrashService.class));
+            mock(TrashService.class), new RecentChanges(clock));
 
     private final AppUser user = new AppUser();
 
@@ -63,6 +68,13 @@ class ContactServiceTest {
         user.setDisplayName("Michael");
         user.setRole(UserRole.ADMIN);
         when(currentUserService.get()).thenReturn(user);
+        // Each history entry gets the next id, as the database would give it.
+        long[] nextId = {100};
+        when(activityLogger.forContact(any(), any(), anyBoolean(), any(), any())).thenAnswer(invocation -> {
+            Activity activity = new Activity();
+            activity.setId(nextId[0]++);
+            return activity;
+        });
     }
 
     @Test
@@ -247,6 +259,121 @@ class ContactServiceTest {
                 "Priya Shah", null, "priya@acme.ai", null, null, null,
                 null, null, null, null, null, 10L, null)))
                 .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void undoingATouchPutsTheContactBackAndRemovesTheHistoryEntry() {
+        Contact contact = contact(OutreachStatus.IN_SEQUENCE, 1);
+        contact.setNextActionDate(TODAY);
+        contact.setNextActionType(ActionType.LINKEDIN);
+        contact.setLastContactedDate(LocalDate.of(2026, 10, 9));
+
+        contactService.logActivity(1L, request(ActivityType.LINKEDIN));
+        assertThat(contact.getTouchCount()).isEqualTo(2);
+
+        ContactResponse undone = contactService.undo(1L);
+
+        assertThat(undone.status()).isEqualTo(OutreachStatus.IN_SEQUENCE);
+        assertThat(undone.touchCount()).isEqualTo(1);
+        assertThat(undone.nextActionDate()).isEqualTo(TODAY);
+        assertThat(undone.nextActionType()).isEqualTo(ActionType.LINKEDIN);
+        assertThat(undone.lastContactedDate()).isEqualTo(LocalDate.of(2026, 10, 9));
+        verify(activityLogger).remove(100L);
+    }
+
+    @Test
+    void undoingTheFourthTouchReopensTheSequence() {
+        Contact contact = contact(OutreachStatus.IN_SEQUENCE, 3);
+        contact.setNextActionDate(TODAY);
+        contact.setNextActionType(ActionType.LINKEDIN);
+
+        contactService.logActivity(1L, request(ActivityType.LINKEDIN));
+        assertThat(contact.getStatus()).isEqualTo(OutreachStatus.NO_RESPONSE);
+
+        ContactResponse undone = contactService.undo(1L);
+
+        assertThat(undone.status()).isEqualTo(OutreachStatus.IN_SEQUENCE);
+        assertThat(undone.touchCount()).isEqualTo(3);
+        assertThat(undone.nextActionDate()).isEqualTo(TODAY);
+    }
+
+    @Test
+    void aChangeCanOnlyBeUndoneOnce() {
+        contact(OutreachStatus.IN_SEQUENCE, 1).setNextActionDate(TODAY);
+        contactService.logActivity(1L, request(ActivityType.LINKEDIN));
+        contactService.undo(1L);
+
+        assertThatThrownBy(() -> contactService.undo(1L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage(RecentChanges.NOTHING_TO_UNDO);
+    }
+
+    @Test
+    void undoRefusesWhenTheContactChangedSince() {
+        Contact contact = contact(OutreachStatus.IN_SEQUENCE, 1);
+        contact.setNextActionDate(TODAY);
+        contactService.logActivity(1L, request(ActivityType.LINKEDIN));
+
+        // A teammate (or a sync) moved the contact on in the meantime.
+        contact.setStatus(OutreachStatus.REPLIED);
+
+        assertThatThrownBy(() -> contactService.undo(1L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("changed after that");
+        assertThat(contact.getStatus()).isEqualTo(OutreachStatus.REPLIED);
+        verify(activityLogger, never()).remove(any());
+    }
+
+    @Test
+    void onlyThePersonWhoMadeTheChangeCanUndoIt() {
+        contact(OutreachStatus.IN_SEQUENCE, 1).setNextActionDate(TODAY);
+        contactService.logActivity(1L, request(ActivityType.LINKEDIN));
+
+        AppUser teammate = new AppUser();
+        teammate.setId(8L);
+        when(currentUserService.get()).thenReturn(teammate);
+
+        assertThatThrownBy(() -> contactService.undo(1L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage(RecentChanges.NOTHING_TO_UNDO);
+    }
+
+    @Test
+    void laterMovesTheNextActionToTheNextBusinessDayAndRecordsIt() {
+        Contact contact = contact(OutreachStatus.IN_SEQUENCE, 2);
+        contact.setNextActionDate(LocalDate.of(2026, 10, 12));
+        contact.setNextActionType(ActionType.LINKEDIN);
+
+        ContactResponse response = contactService.snooze(1L, Later.TOMORROW);
+
+        assertThat(response.nextActionDate()).isEqualTo(LocalDate.of(2026, 10, 15));
+        assertThat(response.nextActionType()).isEqualTo(ActionType.LINKEDIN);
+        assertThat(response.touchCount()).isEqualTo(2);
+        verify(activityLogger).forContact(contact, ActivityType.STATUS_CHANGE, false,
+                "Next action moved to Thu, Oct 15", user);
+    }
+
+    @Test
+    void aSnoozeCanBeUndone() {
+        Contact contact = contact(OutreachStatus.IN_SEQUENCE, 2);
+        contact.setNextActionDate(LocalDate.of(2026, 10, 12));
+
+        contactService.snooze(1L, Later.NEXT_WEEK);
+        assertThat(contact.getNextActionDate()).isEqualTo(LocalDate.of(2026, 10, 21));
+
+        contactService.undo(1L);
+
+        assertThat(contact.getNextActionDate()).isEqualTo(LocalDate.of(2026, 10, 12));
+        verify(activityLogger).remove(100L);
+    }
+
+    @Test
+    void aContactWithNothingScheduledCannotBeSnoozed() {
+        contact(OutreachStatus.ENGAGED, 0);
+
+        assertThatThrownBy(() -> contactService.snooze(1L, Later.TOMORROW))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("no next action");
     }
 
     private Contact contact(OutreachStatus status, int touches) {
