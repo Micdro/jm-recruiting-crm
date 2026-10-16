@@ -48,8 +48,10 @@ class GuaranteeCheckInsTest {
     @Test
     void nothingIsDueOutsideTheGuarantee() {
         assertThat(GuaranteeCheckIns.next(placement(START.plusDays(90)), START.plusDays(91))).isEmpty();
-        assertThat(GuaranteeCheckIns.next(placement(START.plusDays(45)), START.plusDays(50)))
+        // A 45-day guarantee has only the 30-day check-in, due until the guarantee ends.
+        assertThat(GuaranteeCheckIns.next(placement(START.plusDays(45)), START.plusDays(40)))
                 .contains(new CheckIn(30, START.plusDays(30), true));
+        assertThat(GuaranteeCheckIns.next(placement(START.plusDays(45)), START.plusDays(46))).isEmpty();
 
         Placement shortGuarantee = placement(START.plusDays(45));
         shortGuarantee.setCheckedInOn(START.plusDays(31));
