@@ -42,10 +42,11 @@ export default function SignalsGuidePage() {
               <strong>Update now</strong>. Do this on each computer.
             </li>
             <li>
-              <strong>Find the boards.</strong> On one computer, open <Link to="/signals">Hiring signals</Link> and
-              click <strong>Find job boards</strong>. It checks each company’s website and name against Greenhouse,
-              Lever and Ashby. A few hundred companies take a few minutes, and the page shows progress. Board links
-              sync to the other computers, so only one person needs to do this.
+              <strong>Let it find the boards.</strong> Once the CRM is updated, it checks each company’s website and
+              name against Greenhouse, Lever and Ashby on its own, a batch every 15 minutes while it’s open. New
+              companies are covered the same way, including ones accepted on AI Found. To do them all at once, open{' '}
+              <Link to="/signals">Hiring signals</Link> and click <strong>Find job boards</strong>. Board links sync
+              to the other computers.
             </li>
             <li>
               <strong>Check the boards it found.</strong> Each one shows a yellow note. Click{' '}

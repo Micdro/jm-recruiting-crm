@@ -294,8 +294,9 @@ function NothingYet({ overview, view, hasAny, onFind }) {
     return (
       <Empty title="No job boards on file yet">
         <p>
-          Find job boards looks up each company’s Greenhouse, Lever or Ashby board from its website and name. You can
-          also paste a board link on a company’s page. <Link to="/signals/guide">Read the setup guide</Link>.
+          The CRM looks up each company’s Greenhouse, Lever or Ashby board from its website and name on its own, a batch
+          every 15 minutes while it’s open. Find job boards does them all now. You can also paste a board link on a
+          company’s page. <Link to="/signals/guide">Read the setup guide</Link>.
         </p>
         {!overview.running && (
           <button type="button" className="btn btn-sm" onClick={onFind}>
@@ -499,8 +500,9 @@ function WithoutBoard({ companies }) {
         </h2>
       </div>
       <p className="panel-meta">
-        Find job boards looks these up. If a company uses another system or posts on its own site, open it and mark that
-        it has no board, so it isn’t looked up again.
+        The CRM looks these up on its own, a batch every 15 minutes, and tries again every 30 days for any it couldn’t
+        find. Companies waiting on AI Found are looked up once accepted. If a company uses another system or posts on its
+        own site, open it and mark that it has no board, so it isn’t looked up again.
       </p>
       <ul className="plain-list boardless">
         {companies.slice(0, limit).map((company) => (

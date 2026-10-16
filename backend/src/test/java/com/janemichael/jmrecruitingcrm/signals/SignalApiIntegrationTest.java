@@ -7,6 +7,7 @@ import com.janemichael.jmrecruitingcrm.auth.AppUserRepository;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
+import com.janemichael.jmrecruitingcrm.company.CompanyStatus;
 import com.janemichael.jmrecruitingcrm.contact.Contact;
 import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import jakarta.servlet.http.Cookie;
@@ -225,6 +226,49 @@ class SignalApiIntegrationTest {
                 .andExpect(jsonPath("$.provider").isEmpty());
         mockMvc.perform(signedIn(get("/api/signals")))
                 .andExpect(jsonPath("$.withoutBoard[*].companyId").value(hasItem(acme.getId().intValue())));
+    }
+
+    @Test
+    void newCompaniesAreLookedUpOnTheirOwnExceptOnesThatArentAFit() {
+        Company lead = company("Acme Auto Find Lead", "acme-auto.example");
+        Company waiting = company("Acme Auto Find Waiting", null);
+        waiting.setStatus(CompanyStatus.AI_FOUND);
+        Company dismissed = company("Acme Auto Find Dismissed", null);
+        dismissed.setStatus(CompanyStatus.NOT_QUALIFIED);
+        Company searchedLongAgo = company("Acme Auto Find Old", null);
+        Company searchedRecently = company("Acme Auto Find Recent", null);
+        Company withBoard = company("Acme Auto Find Board", null);
+        withBoard.setJobBoard(JobBoardProvider.GREENHOUSE, "acmeautofind", true);
+        companies.flush();
+        Instant now = Instant.now();
+        searched(searchedLongAgo, now.minus(Duration.ofDays(45)));
+        searched(searchedRecently, now.minus(Duration.ofDays(2)));
+
+        List<Long> automatic = signals.findTargets(true).stream().map(SignalService.Target::companyId).toList();
+        assertThat(automatic).contains(lead.getId(), searchedLongAgo.getId())
+                .doesNotContain(waiting.getId(), dismissed.getId(), searchedRecently.getId(), withBoard.getId());
+        // Never looked up comes before looked up a while ago.
+        assertThat(automatic.indexOf(lead.getId())).isLessThan(automatic.indexOf(searchedLongAgo.getId()));
+        assertThat(automatic).hasSizeLessThanOrEqualTo(SignalService.AUTO_FIND_BATCH);
+
+        // Find job boards still covers companies marked not a fit, but never ones waiting on AI Found.
+        List<Long> byHand = signals.findTargets(false).stream().map(SignalService.Target::companyId).toList();
+        assertThat(byHand).contains(lead.getId(), dismissed.getId()).doesNotContain(waiting.getId());
+    }
+
+    @Test
+    void companiesWaitingOnAiFoundArentListedAsMissingABoard() throws Exception {
+        Company waiting = company("Acme Waiting Review Test", null);
+        waiting.setStatus(CompanyStatus.AI_FOUND);
+        companies.flush();
+
+        mockMvc.perform(signedIn(get("/api/signals")))
+                .andExpect(jsonPath("$.withoutBoard[*].companyId").value(not(hasItem(waiting.getId().intValue()))));
+    }
+
+    private void searched(Company company, Instant when) {
+        jdbc.update("INSERT INTO job_board_check (company_id, searched_at) VALUES (?, ?)",
+                company.getId(), java.sql.Timestamp.from(when));
     }
 
     private Company company(String name, String website) {

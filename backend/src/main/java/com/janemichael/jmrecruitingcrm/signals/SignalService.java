@@ -6,6 +6,7 @@ import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
+import com.janemichael.jmrecruitingcrm.company.CompanyStatus;
 import com.janemichael.jmrecruitingcrm.contact.Contact;
 import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import com.janemichael.jmrecruitingcrm.contact.OutreachStatus;
@@ -38,6 +39,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -61,6 +63,10 @@ import java.util.function.Consumer;
  *   <li>A role is new until the team marks the company reviewed, for 30 days after it was posted.</li>
  *   <li>The finder guesses boards from each company's website and name. Boards it finds wait for
  *       someone to confirm them.</li>
+ *   <li>The finder also runs on its own: every 15 minutes it looks up a batch of companies with no
+ *       board on file that it hasn't looked up in the last 30 days, so new companies (accepted from
+ *       AI Found, imported or added by hand) are covered without anyone clicking Find job boards.</li>
+ *   <li>Companies waiting on AI Found aren't looked up until someone accepts them.</li>
  * </ul>
  */
 @Service
@@ -77,6 +83,13 @@ public class SignalService {
     static final int PARALLEL = 6;
     static final int PEOPLE_SHOWN = 3;
     static final int SUMMARY_SIZE = 5;
+    /** Companies the automatic lookup takes on per run, so a long list is spread over a few runs. */
+    static final int AUTO_FIND_BATCH = 40;
+    /** Not looked up at all until someone accepts them on AI Found. */
+    static final Set<CompanyStatus> NOT_REVIEWED = EnumSet.of(CompanyStatus.AI_FOUND);
+    /** Not looked up automatically: not reviewed yet, or not a fit. Find job boards still covers the last two. */
+    static final Set<CompanyStatus> SKIP_AUTO_FIND =
+            EnumSet.of(CompanyStatus.AI_FOUND, CompanyStatus.NOT_QUALIFIED, CompanyStatus.NOT_INTERESTED);
 
     private static final String READABLE = "('GREENHOUSE', 'LEVER', 'ASHBY')";
 
@@ -146,7 +159,7 @@ public class SignalService {
         Map<String, Object> counts = jdbc.queryForMap("""
                 SELECT
                   count(*) FILTER (WHERE job_board_provider IN %1$s) AS with_board,
-                  count(*) FILTER (WHERE job_board_provider IS NULL) AS without_board,
+                  count(*) FILTER (WHERE job_board_provider IS NULL AND status <> 'AI_FOUND') AS without_board,
                   count(*) FILTER (WHERE job_board_provider = 'NONE') AS no_board,
                   count(*) FILTER (WHERE job_board_provider IN %1$s AND NOT job_board_confirmed) AS to_confirm
                 FROM company
@@ -178,7 +191,7 @@ public class SignalService {
         for (Company company : all) {
             Check check = checks.getOrDefault(company.getId(), Check.NONE);
             JobBoard board = boardOf(company);
-            if (company.getJobBoardProvider() == null) {
+            if (company.getJobBoardProvider() == null && !NOT_REVIEWED.contains(company.getStatus())) {
                 withoutBoard.add(new CompanyRef(company.getId(), company.getName(), company.getStatus(), null, null,
                         check.searchedAt(), null));
             } else if (board != null && check.error() != null) {
@@ -442,7 +455,10 @@ public class SignalService {
 
     // Jobs: reading boards and finding them -------------------------------------------
 
-    /** Every 15 minutes: reads any board this computer hasn't read in the last six hours. */
+    /**
+     * Every 15 minutes: reads any board this computer hasn't read in the last six hours, or else looks
+     * up boards for a batch of companies that have none on file.
+     */
     @Scheduled(initialDelayString = "${app.signals.initial-delay-ms:120000}",
             fixedDelayString = "${app.signals.interval-ms:900000}")
     public void scheduledCheck() {
@@ -456,9 +472,14 @@ public class SignalService {
                     """.formatted(READABLE), Integer.class, Timestamp.from(clock.instant().minus(CHECK_EVERY)));
             if (due != null && due > 0) {
                 startCheck(false);
+                return;
+            }
+            List<Target> toFind = findTargets(true);
+            if (!toFind.isEmpty()) {
+                start("FIND", toFind, this::find);
             }
         } catch (RuntimeException problem) {
-            log.warn("Could not start reading job boards", problem);
+            log.warn("Could not start reading or finding job boards", problem);
         }
     }
 
@@ -479,16 +500,35 @@ public class SignalService {
 
     /** Looks in the background for the boards of companies that don't have one on file. */
     public JobStarted startFind() {
+        return start("FIND", findTargets(false), this::find);
+    }
+
+    /**
+     * Companies with no board on file that this computer hasn't looked up in the last 30 days.
+     * Automatic runs skip companies that aren't a fit, and take a batch: never looked up first, then
+     * the longest ago.
+     */
+    List<Target> findTargets(boolean automatic) {
         Instant cutoff = clock.instant().minus(SEARCH_AGAIN_AFTER);
         Map<Long, Check> checks = checks();
-        List<Target> targets = new ArrayList<>();
+        Set<CompanyStatus> skip = automatic ? SKIP_AUTO_FIND : NOT_REVIEWED;
+        List<Company> due = new ArrayList<>();
         for (Company company : companies.findAll()) {
             Instant searchedAt = checks.getOrDefault(company.getId(), Check.NONE).searchedAt();
-            if (company.getJobBoardProvider() == null && (searchedAt == null || searchedAt.isBefore(cutoff))) {
-                targets.add(new Target(company.getId(), company.getName(), company.getWebsite(), null));
+            if (company.getJobBoardProvider() == null && !skip.contains(company.getStatus())
+                    && (searchedAt == null || searchedAt.isBefore(cutoff))) {
+                due.add(company);
             }
         }
-        return start("FIND", targets, this::find);
+        if (automatic) {
+            due.sort(Comparator.comparing(
+                    (Company company) -> checks.getOrDefault(company.getId(), Check.NONE).searchedAt(),
+                    Comparator.nullsFirst(Comparator.naturalOrder())));
+        }
+        return due.stream()
+                .limit(automatic ? AUTO_FIND_BATCH : Long.MAX_VALUE)
+                .map(company -> new Target(company.getId(), company.getName(), company.getWebsite(), null))
+                .toList();
     }
 
     private JobStarted start(String kind, List<Target> targets, Consumer<Target> work) {
