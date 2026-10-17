@@ -1,5 +1,6 @@
 package com.janemichael.jmrecruitingcrm.prospects;
 
+import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.DismissRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.DraftRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.DraftResponse;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.FoundCompany;
@@ -92,7 +93,7 @@ public class ProspectController {
     }
 
     @PostMapping("/companies/{id}/dismiss")
-    public Reviewed dismiss(@PathVariable Long id) {
-        return finder.dismiss(id);
+    public Reviewed dismiss(@PathVariable Long id, @Valid @RequestBody(required = false) DismissRequest request) {
+        return finder.dismiss(id, request);
     }
 }

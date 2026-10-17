@@ -208,7 +208,8 @@ export const api = {
     draft: (body) => post('/api/prospects/draft', body),
     runHere: () => post('/api/prospects/run-here'),
     accept: (id) => post(`/api/prospects/companies/${id}/accept`),
-    dismiss: (id) => post(`/api/prospects/companies/${id}/dismiss`),
+    /** Why it isn't a fit ({ reason, note }) teaches the finder's next searches. */
+    dismiss: (id, body) => post(`/api/prospects/companies/${id}/dismiss`, body),
   },
   templates: crud('/api/templates'),
   signals: {

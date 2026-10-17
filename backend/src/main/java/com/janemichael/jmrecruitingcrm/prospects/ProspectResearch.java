@@ -58,10 +58,15 @@ class ProspectResearch {
      * @param budgetCents the most this search may cost: what's left of today's limit, or of this
      *                    month's if that's less
      * @param limitName   which limit that is, for "The search reached ...", like "today's $2 limit"
+     * @param feedback    the team's recent accepts and dismissals, newest first
      */
     record Request(String apiKey, int count, String focus, List<String> exclude, LocalDate today, int budgetCents,
-                   String limitName) {
+                   String limitName, List<ProspectSettings.Feedback> feedback) {
     }
+
+    /** Accepted and dismissed companies the instructions mention, at most. */
+    static final int FEEDBACK_ACCEPTED_SHOWN = 15;
+    static final int FEEDBACK_DISMISSED_SHOWN = 30;
 
     /** What a run used, added up over its requests. */
     record Usage(long inputTokens, long outputTokens, long cacheWriteTokens, long cacheReadTokens, int searches) {
@@ -408,8 +413,41 @@ class ProspectResearch {
 
     static String userMessage(Request request) {
         String excluded = request.exclude().isEmpty() ? "(none yet)" : String.join("; ", request.exclude());
-        return "Find up to " + request.count() + " new prospects.\n\nExclusion list (companies already in the CRM): "
-                + excluded;
+        String learned = feedbackText(request.feedback());
+        return "Find up to " + request.count() + " new prospects.\n\n"
+                + (learned.isEmpty() ? "" : learned + "\n\n")
+                + "Exclusion list (companies already in the CRM): " + excluded;
+    }
+
+    /**
+     * What the team made of earlier suggestions: companies they accepted, to find more like them, and
+     * ones they dismissed with the reason, to avoid more of the same. Empty when there's nothing yet.
+     */
+    static String feedbackText(List<ProspectSettings.Feedback> feedback) {
+        if (feedback == null || feedback.isEmpty()) {
+            return "";
+        }
+        List<String> accepted = feedback.stream()
+                .filter(ProspectSettings.Feedback::accepted)
+                .limit(FEEDBACK_ACCEPTED_SHOWN)
+                .map(entry -> "- " + entry.company() + (entry.focus() == null ? "" : ": " + entry.focus()))
+                .toList();
+        List<String> dismissed = feedback.stream()
+                .filter(entry -> !entry.accepted())
+                .limit(FEEDBACK_DISMISSED_SHOWN)
+                .map(entry -> "- " + entry.company() + ": "
+                        + (entry.reason() == null ? DismissReason.OTHER.meaning : entry.reason().meaning)
+                        + (entry.note() == null ? "" : " (\"" + entry.note() + "\")"))
+                .toList();
+        StringBuilder text = new StringBuilder("What the team made of earlier suggestions. Look for more companies "
+                + "like the accepted ones, and avoid companies dismissed for the same reasons.");
+        if (!accepted.isEmpty()) {
+            text.append("\n\nAccepted:\n").append(String.join("\n", accepted));
+        }
+        if (!dismissed.isEmpty()) {
+            text.append("\n\nDismissed, and why:\n").append(String.join("\n", dismissed));
+        }
+        return text.toString();
     }
 
     private ObjectNode recordTool() {

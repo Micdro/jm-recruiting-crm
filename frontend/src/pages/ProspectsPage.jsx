@@ -2,10 +2,11 @@ import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, Empty, ErrorNote, ExternalLink, Loading, PageHeader } from '../components/Bits.jsx';
+import Modal from '../components/Modal.jsx';
 import { CheckboxField, TextArea, TextField } from '../components/Fields.jsx';
 import { formatTimestamp, href, plural } from '../format.js';
 import { useInterval, useLoader, useTitle, useToast } from '../hooks.js';
-import { HIRING_NEED, INDUSTRY, SEGMENT } from '../labels.js';
+import { DISMISS_REASON, HIRING_NEED, INDUSTRY, SEGMENT } from '../labels.js';
 
 const KEY_HELP = 'https://platform.claude.com/docs/en/get-api-key';
 
@@ -78,11 +79,14 @@ export default function ProspectsPage() {
     }
   }
 
-  async function review(company, action) {
+  const [dismissing, setDismissing] = useState(null);
+
+  async function review(company, action, why) {
     setBusy(company.id);
     setError('');
+    setDismissing(null);
     try {
-      const result = action === 'accept' ? await api.prospects.accept(company.id) : await api.prospects.dismiss(company.id);
+      const result = action === 'accept' ? await api.prospects.accept(company.id) : await api.prospects.dismiss(company.id, why);
       found.setData((list) => (list ?? []).filter((item) => item.id !== company.id));
       reloadStatus();
       if (action === 'accept') {
@@ -136,13 +140,23 @@ export default function ProspectsPage() {
               company={company}
               busy={busy === company.id}
               onAccept={() => review(company, 'accept')}
-              onDismiss={() => review(company, 'dismiss')}
+              onDismiss={() => setDismissing(company)}
             />
           ))}
         </div>
       )}
 
       {data && <FinderSettings data={data} onSaved={status.setData} />}
+
+      {dismissing && (
+        <Modal title={`Why isn’t ${dismissing.name} a fit?`} onClose={() => setDismissing(null)}>
+          <DismissForm
+            company={dismissing}
+            onCancel={() => setDismissing(null)}
+            onDismiss={(why) => review(dismissing, 'dismiss', why)}
+          />
+        </Modal>
+      )}
     </>
   );
 }
@@ -212,6 +226,52 @@ function LastRunLine({ last }) {
       )}
       {last.message && <span className="muted"> {last.message}</span>}
     </p>
+  );
+}
+
+/** The reason teaches the finder: its next searches avoid companies dismissed for the same reason. */
+function DismissForm({ company, onCancel, onDismiss }) {
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+
+  return (
+    <form
+      className="form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onDismiss({ reason: reason || 'OTHER', note: note.trim() || undefined });
+      }}
+    >
+      <p className="form-intro">
+        {company.name} moves to Not qualified and won’t be suggested again. The finder reads your reason and looks for
+        fewer companies like it.
+      </p>
+      <fieldset className="radio-group">
+        <legend>Reason</legend>
+        {Object.entries(DISMISS_REASON).map(([value, label]) => (
+          <label key={value} className="radio">
+            <input type="radio" name="dismiss-reason" checked={reason === value} onChange={() => setReason(value)} />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+      <TextArea
+        label="Note (optional)"
+        rows={2}
+        value={note}
+        onChange={setNote}
+        maxLength={300}
+        placeholder="For example: sells to hospitals, not banks."
+      />
+      <div className="form-actions">
+        <button type="button" className="btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={!reason}>
+          Dismiss
+        </button>
+      </div>
+    </form>
   );
 }
 

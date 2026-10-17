@@ -89,6 +89,17 @@ export const ROLE_TRACK = {
   AI_PLATFORM: 'AI platform',
 };
 
+/** Why a company the prospect finder suggested isn't a fit. */
+export const DISMISS_REASON = {
+  NOT_FINANCIAL_SERVICES: 'Doesn’t sell to financial services',
+  NOT_A_VENDOR: 'Not a vendor (a bank, insurer, consultancy or staffing firm)',
+  NOT_AI_OR_SECURITY: 'Not an AI or security product',
+  TOO_BIG: 'Too big to need outside recruiters',
+  TOO_SMALL: 'Too small or too early to hire',
+  NO_HIRING_NEED: 'No sign they’re hiring these engineers',
+  OTHER: 'Something else',
+};
+
 export const LEAD_SOURCE = {
   AI_RESEARCH: 'AI research',
   LINKEDIN: 'LinkedIn',

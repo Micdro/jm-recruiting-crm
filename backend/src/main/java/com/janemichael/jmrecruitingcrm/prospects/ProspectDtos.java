@@ -161,4 +161,13 @@ public final class ProspectDtos {
 
     public record Reviewed(Long id, String name, CompanyStatus status, int contactsRemoved) {
     }
+
+    /** Why a found company isn't a fit. Both are optional; the reason teaches the finder. */
+    public record DismissRequest(
+            DismissReason reason,
+
+            @Size(max = 300, message = "Keep the note to 300 characters or fewer")
+            String note
+    ) {
+    }
 }

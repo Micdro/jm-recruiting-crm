@@ -10,7 +10,9 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,6 +38,9 @@ class ProspectSettings {
     private static final String DAILY_LIMIT = "daily_limit";
     private static final String DAY_SPEND = "day_spend";
     private static final String LAST_RUN = "last_run";
+    private static final String FEEDBACK = "feedback";
+    /** How many recent accepts and dismissals the finder remembers. */
+    static final int FEEDBACK_KEPT = 60;
 
     /** What the finder is set to do. {@code computer} is the computer that runs it on schedule. */
     record Values(String apiKey, boolean enabled, int perRun, String focus, Integer computer, int monthlyLimitDollars,
@@ -135,6 +140,40 @@ class ProspectSettings {
             return json.readValue(value, Run.class);
         } catch (JsonProcessingException unreadable) {
             return null;
+        }
+    }
+
+    /**
+     * What the team thought of one suggestion.
+     *
+     * @param focus  what the company does, for accepted ones
+     * @param reason why it was dismissed (null when accepted)
+     * @param at     epoch milliseconds
+     */
+    record Feedback(String company, boolean accepted, String focus, DismissReason reason, String note, long at) {
+    }
+
+    /** Recent accepts and dismissals, newest first. */
+    List<Feedback> feedback() {
+        String value = read().get(FEEDBACK);
+        if (value == null) {
+            return List.of();
+        }
+        try {
+            return List.of(json.readValue(value, Feedback[].class));
+        } catch (JsonProcessingException unreadable) {
+            return List.of();
+        }
+    }
+
+    void addFeedback(Feedback entry) {
+        List<Feedback> kept = new ArrayList<>();
+        kept.add(entry);
+        feedback().stream().limit(FEEDBACK_KEPT - 1L).forEach(kept::add);
+        try {
+            write(FEEDBACK, json.writeValueAsString(kept));
+        } catch (JsonProcessingException impossible) {
+            throw new IllegalStateException("Could not save the feedback", impossible);
         }
     }
 

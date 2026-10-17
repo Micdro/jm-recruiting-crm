@@ -37,6 +37,9 @@ test.describe('AI Found', () => {
     await page.goto('/prospects');
     const card = page.getByRole('article').filter({ hasText: company.name });
     await card.getByRole('button', { name: 'Dismiss' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('radio', { name: 'Not a vendor (a bank, insurer, consultancy or staffing firm)' }).check();
+    await dialog.getByRole('button', { name: 'Dismiss' }).click();
     await expect(page.getByRole('status')).toContainText(`${company.name} dismissed`);
     await expect(page.getByRole('status')).toContainText('1 person moved to the Trash');
     await expect(card).toHaveCount(0);

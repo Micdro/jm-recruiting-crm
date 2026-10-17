@@ -53,7 +53,7 @@ class ProspectResearchTest {
 
     private static ProspectResearch.Request request(int count, int budgetCents, String limitName) {
         return new ProspectResearch.Request(KEY, count, "Prefer US companies.", List.of("Ledgerlight AI", "Acme"),
-                LocalDate.of(2026, 10, 16), budgetCents, limitName);
+                LocalDate.of(2026, 10, 16), budgetCents, limitName, List.of());
     }
 
     /** A paused step whose usage costs about {@code cents}: input tokens at $2 per million. */
@@ -285,5 +285,26 @@ class ProspectResearchTest {
         assertThatThrownBy(() -> research(api).run(request(10)))
                 .hasMessage("The search ran longer than one step allows before it found anything.");
         assertThat(api.sent).hasSize(1);
+    }
+
+    @Test
+    void tellsTheFinderWhatTheTeamAcceptedAndDismissed() {
+        List<ProspectSettings.Feedback> feedback = List.of(
+                new ProspectSettings.Feedback("Acme Bank", false, null, DismissReason.NOT_A_VENDOR, null, 3),
+                new ProspectSettings.Feedback("Northwind Risk", true, "Fraud models for credit unions.", null, null, 2),
+                new ProspectSettings.Feedback("Giant Corp", false, null, DismissReason.TOO_BIG, "50,000 staff", 1));
+
+        String text = ProspectResearch.feedbackText(feedback);
+        assertThat(text).contains("Accepted:\n- Northwind Risk: Fraud models for credit unions.")
+                .contains("- Acme Bank: not a software vendor (a bank, insurer, consultancy or staffing firm)")
+                .contains("- Giant Corp: too big to need outside recruiters (\"50,000 staff\")");
+        assertThat(text.indexOf("Acme Bank")).isLessThan(text.indexOf("Giant Corp"));
+        assertThat(ProspectResearch.feedbackText(List.of())).isEmpty();
+
+        ProspectResearch.Request request = new ProspectResearch.Request(KEY, 10, null, List.of("Acme"),
+                LocalDate.of(2026, 10, 16), 200, "today's $2 limit", feedback);
+        assertThat(ProspectResearch.userMessage(request)).contains("What the team made of earlier suggestions")
+                .contains("Exclusion list (companies already in the CRM): Acme");
+        assertThat(ProspectResearch.userMessage(request(10))).doesNotContain("What the team made");
     }
 }

@@ -18,6 +18,7 @@ import com.janemichael.jmrecruitingcrm.company.CompanyStatus;
 import com.janemichael.jmrecruitingcrm.contact.Contact;
 import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import com.janemichael.jmrecruitingcrm.contact.OutreachStatus;
+import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.DismissRequest;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.FoundCompany;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.FoundContact;
 import com.janemichael.jmrecruitingcrm.prospects.ProspectDtos.KeyRequest;
@@ -424,7 +425,8 @@ public class ProspectFinder {
         try {
             List<String> exclude = transaction.execute(status -> excludedNames());
             ProspectResearch.Request request = new ProspectResearch.Request(values.apiKey(), values.perRun(),
-                    values.focus(), exclude == null ? List.of() : exclude, today(), budget.cents(), budget.limitName());
+                    values.focus(), exclude == null ? List.of() : exclude, today(), budget.cents(), budget.limitName(),
+                    settings.feedback());
             Outcome outcome = research.run(request);
             usage = outcome.usage();
             Found.Result found = outcome.found();
@@ -580,16 +582,21 @@ public class ProspectFinder {
             company.setOwner(me);
         }
         activity.forCompany(company, ActivityType.STATUS_CHANGE, "Accepted from AI found: status changed to Lead", me);
+        settings.addFeedback(new ProspectSettings.Feedback(company.getName(), true, company.getFocus(), null, null,
+                clock.millis()));
         return new Reviewed(company.getId(), company.getName(), company.getStatus(), 0);
     }
 
     /**
      * Not a fit: the company moves to Not qualified, so the finder never suggests it again, and the
-     * people found with it go to the Trash (untouched ones only), where they can be restored.
+     * people found with it go to the Trash (untouched ones only), where they can be restored. The
+     * reason goes into the finder's next searches, so it suggests fewer companies like this one.
      */
     @Transactional
-    public Reviewed dismiss(Long id) {
+    public Reviewed dismiss(Long id, DismissRequest request) {
         AppUser me = currentUser.get();
+        DismissReason reason = request == null || request.reason() == null ? DismissReason.OTHER : request.reason();
+        String note = request == null ? null : Text.clean(request.note());
         Company company = waitingCompany(id);
         company.setStatus(CompanyStatus.NOT_QUALIFIED);
         List<Long> untouched = jdbc.queryForList(
@@ -599,7 +606,10 @@ public class ProspectFinder {
             contacts.deleteContactById(contactId);
         }
         activity.forCompany(company, ActivityType.STATUS_CHANGE,
-                "Dismissed from AI found: status changed to Not qualified", me);
+                "Dismissed from AI found (" + reason.meaning + (note == null ? "" : ": " + note)
+                        + "): status changed to Not qualified", me);
+        settings.addFeedback(new ProspectSettings.Feedback(company.getName(), false, null, reason, note,
+                clock.millis()));
         return new Reviewed(company.getId(), company.getName(), company.getStatus(), untouched.size());
     }
 

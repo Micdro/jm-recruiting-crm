@@ -281,7 +281,7 @@ class ProspectApiIntegrationTest {
                 """, null));
 
         ProspectResearch.Outcome outcome = research.run(new ProspectResearch.Request(KEY, 10, null,
-                List.of("Ledgerlight AI"), LocalDate.now(), 200, "today's $2 limit"));
+                List.of("Ledgerlight AI"), LocalDate.now(), 200, "today's $2 limit", List.of()));
         assertThat(outcome.found().withheld()).isEqualTo(1);
         ProspectFinder.Saved saved = finder.save(outcome.found().companies(), admin.getId());
         assertThat(saved.added()).isEqualTo(1);
@@ -358,6 +358,50 @@ class ProspectApiIntegrationTest {
 
         // Dismissed companies are never suggested again.
         assertThat(finder.save(List.of(prospect), null).skipped()).isEqualTo(1);
+    }
+
+    @Test
+    void acceptsAndDismissalsTeachTheFinder() throws Exception {
+        Found.Company good = new Found.Company("Fabrikam Feedback Test", "https://fabrikam-feedback.example", null,
+                "Model risk tooling for insurers.", null, List.of(), null, "Hiring an FDE", List.of(), List.of());
+        Found.Company bad = new Found.Company("Contoso Bank Feedback Test", "https://contoso-bank.example", null,
+                null, null, List.of(), null, "New CTO", List.of(), List.of());
+        assertThat(finder.save(List.of(good, bad), null).added()).isEqualTo(2);
+        entityManager.flush();
+        long goodId = idOf("Fabrikam Feedback Test");
+        long badId = idOf("Contoso Bank Feedback Test");
+
+        mockMvc.perform(send(ADMIN, "ADMIN", post("/api/prospects/companies/" + goodId + "/accept"), null))
+                .andExpect(status().isOk());
+        mockMvc.perform(send(ADMIN, "ADMIN", post("/api/prospects/companies/" + badId + "/dismiss"),
+                        Map.of("reason", "NOT_A_VENDOR", "note", "  They're a bank  ")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("NOT_QUALIFIED"));
+
+        List<ProspectSettings.Feedback> feedback = settings.feedback();
+        assertThat(feedback).hasSize(2);
+        assertThat(feedback.get(0).company()).isEqualTo("Contoso Bank Feedback Test");
+        assertThat(feedback.get(0).accepted()).isFalse();
+        assertThat(feedback.get(0).reason()).isEqualTo(DismissReason.NOT_A_VENDOR);
+        assertThat(feedback.get(0).note()).isEqualTo("They're a bank");
+        assertThat(feedback.get(1).accepted()).isTrue();
+        assertThat(feedback.get(1).focus()).isEqualTo("Model risk tooling for insurers.");
+        // Stored encrypted, like the rest of the CRM.
+        assertThat(jdbc.queryForObject("SELECT value FROM firm_setting WHERE name = 'prospects.feedback'", String.class))
+                .doesNotContain("Contoso");
+
+        String history = jdbc.queryForObject(
+                "SELECT count(*) FROM activity WHERE company_id = ? AND type = 'STATUS_CHANGE'", String.class, badId);
+        assertThat(history).isEqualTo("1");
+
+        mockMvc.perform(send(ADMIN, "ADMIN", post("/api/prospects/companies/" + badId + "/dismiss"),
+                        Map.of("reason", "NOT_A_REASON")))
+                .andExpect(status().isBadRequest());
+    }
+
+    private long idOf(String name) {
+        return companies.findAll().stream().filter(company -> name.equals(company.getName()))
+                .findFirst().orElseThrow().getId();
     }
 
     @Test
