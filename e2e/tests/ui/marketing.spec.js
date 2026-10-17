@@ -76,15 +76,15 @@ test.describe('Marketing plan, pictures and posting', () => {
     await style.fill(marker);
     await page.getByRole('button', { name: 'Add a posting day' }).click();
     const days = page.getByRole('region', { name: 'Posting days' });
-    const last = days.getByLabel('Day').last();
+    const last = days.getByLabel('Day', { exact: true }).last();
     await last.selectOption({ label: 'Wednesday' });
-    await days.getByLabel('About').last().selectOption({ label: 'FDE hiring' });
+    await days.getByLabel('About', { exact: true }).last().selectOption({ label: 'FDE hiring' });
     await page.getByRole('button', { name: 'Save plan' }).click();
     await expect(page.getByRole('status')).toContainText('Plan saved');
 
     await page.reload();
     await expect(page.getByLabel('How the posts should sound')).toHaveValue(marker);
-    await expect(days.getByLabel('Day').last()).toHaveValue('WEDNESDAY');
+    await expect(days.getByLabel('Day', { exact: true }).last()).toHaveValue('WEDNESDAY');
 
     // Put the plan back as it was for other runs.
     await page.getByLabel('How the posts should sound').fill(before);

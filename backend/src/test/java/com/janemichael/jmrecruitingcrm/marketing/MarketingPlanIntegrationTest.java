@@ -11,6 +11,7 @@ import com.janemichael.jmrecruitingcrm.auth.AppUserRepository;
 import com.janemichael.jmrecruitingcrm.auth.UserRole;
 import com.janemichael.jmrecruitingcrm.linkedin.LinkedInApi;
 import com.janemichael.jmrecruitingcrm.prospects.ClaudeApi;
+import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,6 +93,9 @@ class MarketingPlanIntegrationTest {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @MockitoBean
     private ClaudeApi claude;
@@ -229,7 +233,8 @@ class MarketingPlanIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "image/png"))
                 .andExpect(content().bytes(PNG));
-        // Stored encrypted.
+        // Stored encrypted. (The test's own transaction hasn't written the post's change yet.)
+        entityManager.flush();
         byte[] stored = jdbc.queryForObject("SELECT b.content FROM file_blob b JOIN content_post p "
                 + "ON p.image_key = b.blob_key WHERE p.id = ?", byte[].class, id);
         assertThat(Arrays.equals(stored, PNG)).isFalse();
