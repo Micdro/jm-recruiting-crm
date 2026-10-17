@@ -211,6 +211,12 @@ export const api = {
     /** Why it isn't a fit ({ reason, note }) teaches the finder's next searches. */
     dismiss: (id, body) => post(`/api/prospects/companies/${id}/dismiss`, body),
   },
+  backups: {
+    status: () => get('/api/backups'),
+    backUp: () => post('/api/backups'),
+    restore: (name) => post(`/api/backups/${encodeURIComponent(name)}/restore`),
+    fileUrl: (name) => `/api/backups/${encodeURIComponent(name)}`,
+  },
   templates: crud('/api/templates'),
   signals: {
     list: () => get('/api/signals'),

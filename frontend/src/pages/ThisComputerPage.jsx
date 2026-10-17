@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, Empty, ErrorNote, Loading, PageHeader } from '../components/Bits.jsx';
+import BackupsPanel from '../components/BackupsPanel.jsx';
 import FolderField from '../components/FolderField.jsx';
 import { updateMessage, useAppUpdate } from '../appUpdate.js';
 import { timeAgo } from '../format.js';
@@ -247,6 +248,8 @@ export default function ThisComputerPage() {
           />
         </div>
       </section>
+
+      <BackupsPanel />
 
       <section className="panel" aria-labelledby="add-heading">
         <div className="panel-head">

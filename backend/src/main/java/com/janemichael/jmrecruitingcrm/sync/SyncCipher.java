@@ -51,6 +51,11 @@ final class SyncCipher {
         return new SyncCipher(derive(syncToken, "jmcrm sync folder v1"), derive(syncToken, "jmcrm sync folder sign v1"));
     }
 
+    /** For backups, kept on each computer. */
+    static SyncCipher forBackups(String syncToken) {
+        return new SyncCipher(derive(syncToken, "jmcrm backup v1"), derive(syncToken, "jmcrm backup sign v1"));
+    }
+
     /** For direct connections between computers. */
     static SyncCipher forDirect(String syncToken) {
         return new SyncCipher(derive(syncToken, "jmcrm direct sync v1"), derive(syncToken, "jmcrm direct sign v1"));
