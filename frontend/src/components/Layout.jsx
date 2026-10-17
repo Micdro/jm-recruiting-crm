@@ -16,6 +16,7 @@ const NAV = [
   { to: '/searches', label: 'Searches' },
   { to: '/candidates', label: 'Candidates' },
   { to: '/placements', label: 'Placements' },
+  { to: '/marketing', label: 'Marketing' },
   { to: '/numbers', label: 'Numbers' },
 ];
 

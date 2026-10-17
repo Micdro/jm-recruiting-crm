@@ -40,6 +40,7 @@ public class EncryptionBackfill implements ApplicationRunner {
                 "bill_to_email", "bill_to_address", "invoice_description"));
         ENCRYPTED_COLUMNS.put("activity", List.of("summary"));
         ENCRYPTED_COLUMNS.put("message_template", List.of("name", "subject", "body"));
+        ENCRYPTED_COLUMNS.put("content_post", List.of("title", "body", "notes", "post_url"));
         ENCRYPTED_COLUMNS.put("candidate_file", List.of("file_name"));
         ENCRYPTED_COLUMNS.put("trash_item", List.of("label", "detail", "contents"));
         ENCRYPTED_COLUMNS.put("firm_setting", List.of("value"));

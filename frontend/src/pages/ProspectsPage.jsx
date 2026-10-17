@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { api, errorMessage } from '../api.js';
 import { ConfirmButton, Empty, ErrorNote, ExternalLink, Loading, PageHeader } from '../components/Bits.jsx';
+import AiSettingsPanel from '../components/AiSettingsPanel.jsx';
 import Modal from '../components/Modal.jsx';
 import { CheckboxField, TextArea, TextField } from '../components/Fields.jsx';
 import { formatTimestamp, href, plural } from '../format.js';
@@ -363,6 +364,8 @@ function FinderSettings({ data, onSaved }) {
   return (
     <>
       <SpendingSettings data={data} onSaved={onSaved} />
+      {/* Opened again when the Claude key comes or goes, so it shows whether drafting can work. */}
+      <AiSettingsPanel key={data.configured ? 'claude-key' : 'no-claude-key'} />
       <SearchSettings data={data} onSaved={onSaved} />
     </>
   );
@@ -411,7 +414,7 @@ function SpendingSettings({ data, onSaved }) {
         </div>
         <p className="panel-meta">
           {data.configured ? `Claude API key ending in ${data.keyHint ?? '••••'}. ` : 'No Claude API key yet. '}
-          Each day’s searches stop at ${data.dailyLimitDollars}, and each month’s at ${data.monthlyLimitDollars}. Only{' '}
+          AI use, searches and drafts together, stops at ${data.dailyLimitDollars} a day and ${data.monthlyLimitDollars} a month. Only{' '}
           {data.ownerName ?? 'the owner'} can change the key and these limits.
         </p>
       </section>
@@ -503,7 +506,7 @@ function SpendingSettings({ data, onSaved }) {
             max="100"
             value={limits.dailyLimitDollars}
             onChange={setLimit('dailyLimitDollars')}
-            hint="A search stops before it would pass this, and saves what it found so far. No more searches that day."
+            hint="Covers all AI use: searches, message drafts and post drafts. A search stops before it would pass this and saves what it found so far."
             required
           />
           <TextField
@@ -513,7 +516,7 @@ function SpendingSettings({ data, onSaved }) {
             max="1000"
             value={limits.monthlyLimitDollars}
             onChange={setLimit('monthlyLimitDollars')}
-            hint="Searches stop for the month once this is spent."
+            hint="AI use stops for the month once this is spent."
             required
           />
         </div>

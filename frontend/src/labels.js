@@ -256,12 +256,37 @@ export const ROLE = {
   MEMBER: 'Member',
 };
 
+export const POST_STATUS = {
+  IDEA: 'Idea',
+  DRAFT: 'Draft',
+  READY: 'Ready',
+  POSTED: 'Posted',
+};
+
+export const POST_THEME = {
+  FDE_HIRING: 'FDE hiring',
+  AI_PLATFORM_HIRING: 'AI platform hiring',
+  BFSI_AI_SECURITY: 'AI and security in BFSI',
+  FIRM_NEWS: 'Firm news',
+  OTHER: 'Other',
+};
+
+export const POST_ACCOUNT = {
+  PERSONAL: 'My profile',
+  COMPANY_PAGE: 'Company page',
+};
+
 export function options(map) {
   return Object.entries(map).map(([value, label]) => ({ value, label }));
 }
 
 // Pill tones: progress (moving), good (won), warn (needs attention), muted (parked), bad (stop).
 const TONES = {
+  IDEA: 'plain',
+  DRAFT: 'progress',
+  READY: 'warn',
+  POSTED: 'good',
+
   NEW: 'plain',
   IN_SEQUENCE: 'progress',
   REPLIED: 'warn',

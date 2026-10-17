@@ -18,6 +18,8 @@ import SearchDetailPage from './pages/SearchDetailPage.jsx';
 import CandidatesPage from './pages/CandidatesPage.jsx';
 import CandidateDetailPage from './pages/CandidateDetailPage.jsx';
 import PlacementsPage from './pages/PlacementsPage.jsx';
+// Marketing loads when the page opens, which keeps the main bundle small.
+const MarketingPage = lazy(() => import('./pages/MarketingPage.jsx'));
 import NumbersPage from './pages/NumbersPage.jsx';
 // The CSV reader is only needed on the import page, so it loads when that page opens.
 const ImportPage = lazy(() => import('./pages/ImportPage.jsx'));
@@ -89,6 +91,14 @@ export default function App() {
         <Route path="candidates" element={<CandidatesPage />} />
         <Route path="candidates/:id" element={<CandidateDetailPage />} />
         <Route path="placements" element={<PlacementsPage />} />
+        <Route
+          path="marketing"
+          element={
+            <Suspense fallback={<Loading label="Opening marketing" />}>
+              <MarketingPage />
+            </Suspense>
+          }
+        />
         <Route path="numbers" element={<NumbersPage />} />
         <Route
           path="import"
