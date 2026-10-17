@@ -3,6 +3,8 @@ package com.janemichael.jmrecruitingcrm.prospects;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.janemichael.jmrecruitingcrm.ai.AiProviderId;
+import com.janemichael.jmrecruitingcrm.ai.AiSettings;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -17,26 +19,22 @@ import java.util.Map;
 
 /**
  * The prospect finder's settings and its last run, shared by the team: one firm_setting row each,
- * encrypted like the rest, so every computer sees the same key, schedule and results.
+ * encrypted like the rest, so every computer sees the same key, schedule and results. The Claude
+ * key and the spending limits are shared with every AI feature, so they live in {@link AiSettings}.
  */
 @Component
 class ProspectSettings {
 
     static final int DEFAULT_PER_RUN = 10;
     static final int MAX_PER_RUN = 25;
-    static final int DEFAULT_MONTHLY_LIMIT_DOLLARS = 30;
-    static final int DEFAULT_DAILY_LIMIT_DOLLARS = 2;
+    static final int DEFAULT_MONTHLY_LIMIT_DOLLARS = AiSettings.DEFAULT_MONTHLY_LIMIT_DOLLARS;
+    static final int DEFAULT_DAILY_LIMIT_DOLLARS = AiSettings.DEFAULT_DAILY_LIMIT_DOLLARS;
 
     private static final String PREFIX = "prospects.";
-    private static final String API_KEY = "api_key";
     private static final String ENABLED = "enabled";
     private static final String PER_RUN = "per_run";
     private static final String FOCUS = "focus";
     private static final String COMPUTER = "computer";
-    private static final String MONTHLY_LIMIT = "monthly_limit";
-    private static final String MONTH_SPEND = "month_spend";
-    private static final String DAILY_LIMIT = "daily_limit";
-    private static final String DAY_SPEND = "day_spend";
     private static final String LAST_RUN = "last_run";
     private static final String FEEDBACK = "feedback";
     /** How many recent accepts and dismissals the finder remembers. */
@@ -91,29 +89,32 @@ class ProspectSettings {
 
     private final JdbcTemplate jdbc;
     private final FieldEncryptor encryptor;
+    private final AiSettings ai;
     // A computer running an older version still reads runs saved by a newer one.
     private final ObjectMapper json = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ProspectSettings(JdbcTemplate jdbc, FieldEncryptor encryptor) {
+    ProspectSettings(JdbcTemplate jdbc, FieldEncryptor encryptor, AiSettings ai) {
         this.jdbc = jdbc;
         this.encryptor = encryptor;
+        this.ai = ai;
     }
 
     Values values() {
         Map<String, String> all = read();
+        AiSettings.Values shared = ai.values();
         return new Values(
-                all.get(API_KEY),
+                shared.claudeKey(),
                 // On by default: adding a key is what turns the finder on.
                 !"false".equals(all.get(ENABLED)),
                 number(all.get(PER_RUN), DEFAULT_PER_RUN, 1, MAX_PER_RUN),
                 all.get(FOCUS),
                 all.get(COMPUTER) == null ? null : number(all.get(COMPUTER), 0, 0, Integer.MAX_VALUE),
-                number(all.get(MONTHLY_LIMIT), DEFAULT_MONTHLY_LIMIT_DOLLARS, 0, 10_000),
-                number(all.get(DAILY_LIMIT), DEFAULT_DAILY_LIMIT_DOLLARS, 0, 1_000));
+                shared.monthlyLimitDollars(),
+                shared.dailyLimitDollars());
     }
 
     void saveKey(String apiKey) {
-        write(API_KEY, apiKey);
+        ai.saveKey(AiProviderId.CLAUDE, apiKey);
     }
 
     void saveSchedule(boolean enabled, int perRun, String focus) {
@@ -123,8 +124,7 @@ class ProspectSettings {
     }
 
     void saveLimits(int dailyLimitDollars, int monthlyLimitDollars) {
-        write(DAILY_LIMIT, String.valueOf(dailyLimitDollars));
-        write(MONTHLY_LIMIT, String.valueOf(monthlyLimitDollars));
+        ai.saveLimits(dailyLimitDollars, monthlyLimitDollars);
     }
 
     void saveComputer(int computer) {
@@ -185,31 +185,19 @@ class ProspectSettings {
         }
     }
 
-    /** What the finder has cost in {@code month}, in cents. */
+    /** What AI has cost in {@code month}, in cents: the finder, drafts and everything else that uses it. */
     int spentCents(YearMonth month) {
-        return spent(read().get(MONTH_SPEND), month.toString());
+        return ai.spentCents(month);
     }
 
-    /** What the finder has cost on {@code day}, in cents. */
+    /** What AI has cost on {@code day}, in cents. */
     int spentCents(LocalDate day) {
-        return spent(read().get(DAY_SPEND), day.toString());
+        return ai.spentCents(day);
     }
 
     /** Adds a run's cost to the day it started and that day's month. */
     void addSpend(LocalDate day, int cents) {
-        if (cents > 0) {
-            YearMonth month = YearMonth.from(day);
-            write(MONTH_SPEND, month + ":" + (spentCents(month) + cents));
-            write(DAY_SPEND, day + ":" + (spentCents(day) + cents));
-        }
-    }
-
-    /** Spend is stored as "period:cents"; a different period means nothing spent in this one yet. */
-    private static int spent(String value, String period) {
-        if (value == null || !value.startsWith(period + ":")) {
-            return 0;
-        }
-        return number(value.substring(value.indexOf(':') + 1), 0, 0, Integer.MAX_VALUE);
+        ai.addSpend(day, cents);
     }
 
     private Map<String, String> read() {

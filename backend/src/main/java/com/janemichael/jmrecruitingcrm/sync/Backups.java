@@ -67,8 +67,8 @@ public class Backups {
     static final int FORMAT = 1;
     /** Shared tables left out: the computers, and the team's accounts and passwords. */
     static final Set<String> SKIPPED = Set.of("sync_node", "app_user");
-    /** Settings left out, so a restore doesn't bring back an old API key or reset what the finder has spent. */
-    static final String KEPT_SETTINGS = "prospects.%";
+    /** Settings left out, so a restore doesn't bring back an old API key or reset what AI has spent. */
+    static final List<String> KEPT_SETTINGS = List.of("prospects.", "ai.");
     /** Bound into every backup's encryption, so a backup can be renamed or moved and still be read. */
     private static final String SEALED_AS = "jmcrm backup";
     private static final Pattern NAME = Pattern.compile(
@@ -217,7 +217,10 @@ public class Backups {
     }
 
     private static String where(String table) {
-        return table.equals("firm_setting") ? " WHERE name NOT LIKE '" + KEPT_SETTINGS + "'" : "";
+        return table.equals("firm_setting")
+                ? KEPT_SETTINGS.stream().map(prefix -> "name NOT LIKE '" + prefix + "%'")
+                        .collect(Collectors.joining(" AND ", " WHERE ", ""))
+                : "";
     }
 
     /** Every row, every column as text, exactly as PostgreSQL prints it. */
@@ -372,7 +375,8 @@ public class Backups {
                     + columns.stream().map(column -> "?::" + types.get(column)).collect(Collectors.joining(", ")) + ")";
             List<Object[]> values = new ArrayList<>();
             for (Map<String, String> row : rows) {
-                if (table.equals("firm_setting") && row.getOrDefault("name", "").startsWith("prospects.")) {
+                String setting = row.getOrDefault("name", "");
+                if (table.equals("firm_setting") && KEPT_SETTINGS.stream().anyMatch(setting::startsWith)) {
                     continue;
                 }
                 values.add(columns.stream().map(row::get).toArray());
