@@ -211,6 +211,26 @@ export const api = {
     /** Why it isn't a fit ({ reason, note }) teaches the finder's next searches. */
     dismiss: (id, body) => post(`/api/prospects/companies/${id}/dismiss`, body),
   },
+  /** Which AI writes drafts, the OpenAI key and the shared spending limits: the account owner's to change. */
+  ai: {
+    status: () => get('/api/ai'),
+    /** { provider: 'CLAUDE' | 'OPENAI', model }. */
+    choose: (body) => put('/api/ai/provider', body),
+    saveOpenAiKey: (apiKey) => put('/api/ai/openai-key', { apiKey }),
+    removeOpenAiKey: () => del('/api/ai/openai-key'),
+  },
+  marketing: {
+    /** The week holding `date` (YYYY-MM-DD, this week if left out) and the ideas without a date. */
+    week: (date) => get('/api/marketing/week', { date }),
+    posts: crud('/api/marketing/posts'),
+    /** { postedOn, postUrl }; the day defaults to today. */
+    posted: (id, body) => post(`/api/marketing/posts/${id}/posted`, body),
+    results: (id, body) => put(`/api/marketing/posts/${id}/results`, body),
+    /** Drafts the saved post with AI: { body, provider, costCents }. Not saved. */
+    draft: (id, body) => post(`/api/marketing/posts/${id}/draft`, body),
+    /** { count, focus } gives { ideas, provider, costCents }. Not saved. */
+    suggest: (body) => post('/api/marketing/ideas/suggest', body),
+  },
   backups: {
     status: () => get('/api/backups'),
     backUp: () => post('/api/backups'),

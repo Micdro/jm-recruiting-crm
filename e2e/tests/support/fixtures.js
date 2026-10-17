@@ -123,6 +123,7 @@ export const test = base.extend({
     });
 
     const created = {
+      posts: new Set(),
       templates: new Set(),
       placements: new Set(),
       searches: new Set(),
@@ -185,8 +186,9 @@ export const test = base.extend({
       if (company) created.companies.add(company.id);
     }
 
-    // Delete in dependency order: templates and placements, then searches (their pipeline goes with them),
+    // Delete in dependency order: posts, templates and placements, then searches (their pipeline goes with them),
     // then candidates and contacts, then companies.
+    for (const id of created.posts) await api.delete(`/api/marketing/posts/${id}`);
     for (const id of created.templates) await api.delete(`/api/templates/${id}`);
     for (const id of created.placements) await api.delete(`/api/placements/${id}`);
     for (const id of created.searches) await api.delete(`/api/searches/${id}`);
