@@ -205,7 +205,10 @@ public class CandidateFileService {
         }
     }
 
-    /** Without sync, clears out contents whose records are gone (a deleted candidate takes its files). */
+    /**
+     * Without sync, clears out contents whose records are gone (a deleted candidate takes its files,
+     * a deleted or changed post its picture).
+     */
     @Scheduled(initialDelayString = "${app.files.cleanup-initial-delay-ms:600000}",
             fixedDelayString = "${app.files.cleanup-interval-ms:3600000}")
     public void cleanUp() {
@@ -218,6 +221,7 @@ public class CandidateFileService {
         jdbc.update("""
                 DELETE FROM file_blob b
                 WHERE NOT EXISTS (SELECT 1 FROM candidate_file f WHERE f.blob_key = b.blob_key)
+                  AND NOT EXISTS (SELECT 1 FROM content_post p WHERE p.image_key = b.blob_key)
                   AND NOT EXISTS (SELECT 1 FROM trash_item t WHERE position(b.blob_key IN coalesce(t.blob_keys, '')) > 0)
                 """ + (onlyOld ? " AND b.created_at < now() - interval '5 minutes'" : ""));
     }

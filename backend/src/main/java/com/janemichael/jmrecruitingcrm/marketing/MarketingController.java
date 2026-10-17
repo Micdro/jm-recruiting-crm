@@ -1,17 +1,28 @@
 package com.janemichael.jmrecruitingcrm.marketing;
 
+import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.DraftRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.DraftResponse;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PictureRequest;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PictureResponse;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PlanRequest;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PlanResponse;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostResponse;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostedRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.ResultsRequest;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.SetupRequest;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.SetupResponse;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.SuggestRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.SuggestResponse;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.WeekResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,7 +34,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /** The Marketing page: the week's posts, the ideas waiting, and AI drafts. */
@@ -33,10 +47,17 @@ public class MarketingController {
 
     private final MarketingService marketing;
     private final PostDrafter drafter;
+    private final WeekPlanner planner;
+    private final PostPictures pictures;
+    private final PostPublisher publisher;
 
-    public MarketingController(MarketingService marketing, PostDrafter drafter) {
+    public MarketingController(MarketingService marketing, PostDrafter drafter, WeekPlanner planner,
+                               PostPictures pictures, PostPublisher publisher) {
         this.marketing = marketing;
         this.drafter = drafter;
+        this.planner = planner;
+        this.pictures = pictures;
+        this.publisher = publisher;
     }
 
     /** The week holding {@code date} (this week if left out), and the ideas without a date. */
@@ -44,6 +65,35 @@ public class MarketingController {
     public WeekResponse week(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                              LocalDate date) {
         return marketing.week(date);
+    }
+
+    /** Fills the week's open posting days with AI drafts, from the plan. */
+    @PostMapping("/week/setup")
+    public SetupResponse setUpWeek(@Valid @RequestBody(required = false) SetupRequest request) {
+        return planner.setUp(request);
+    }
+
+    /** Posts from today on that aren't posted yet, and missed ones from the past week. */
+    @GetMapping("/upcoming")
+    public List<PostResponse> upcoming() {
+        return marketing.upcoming();
+    }
+
+    /** The team's style and posting days, and the focus of {@code month} (YYYY-MM, this month if left out). */
+    @GetMapping("/plan")
+    public PlanResponse plan(@RequestParam(required = false) String month) {
+        YearMonth chosen;
+        try {
+            chosen = month == null || month.isBlank() ? null : YearMonth.parse(month);
+        } catch (DateTimeParseException unreadable) {
+            throw new BadRequestException("Pick a month");
+        }
+        return marketing.plan(chosen);
+    }
+
+    @PutMapping("/plan")
+    public PlanResponse savePlan(@Valid @RequestBody PlanRequest request) {
+        return marketing.savePlan(request);
     }
 
     @GetMapping("/posts")
@@ -81,6 +131,41 @@ public class MarketingController {
     @PutMapping("/posts/{id}/results")
     public PostResponse saveResults(@PathVariable Long id, @Valid @RequestBody ResultsRequest request) {
         return marketing.saveResults(id, request);
+    }
+
+    /** Adds or replaces the post's picture: the file itself as the body. */
+    @PostMapping("/posts/{id}/image")
+    public PostResponse uploadPicture(@PathVariable Long id, HttpServletRequest request) throws IOException {
+        return pictures.upload(id, request.getInputStream());
+    }
+
+    /** Has AI make the post's picture, replacing any it had. */
+    @PostMapping("/posts/{id}/image/generate")
+    public PictureResponse generatePicture(@PathVariable Long id,
+                                           @Valid @RequestBody(required = false) PictureRequest request) {
+        return pictures.generate(id, request);
+    }
+
+    /** The picture. Its address changes with the picture, so browsers can keep it. */
+    @GetMapping("/posts/{id}/image")
+    public ResponseEntity<byte[]> picture(@PathVariable Long id) {
+        PostPictures.Picture picture = pictures.read(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=31536000, immutable")
+                .contentType(MediaType.parseMediaType(picture.contentType()))
+                .contentLength(picture.content().length)
+                .body(picture.content());
+    }
+
+    @DeleteMapping("/posts/{id}/image")
+    public PostResponse removePicture(@PathVariable Long id) {
+        return pictures.remove(id);
+    }
+
+    /** Posts it to its owner's LinkedIn profile, with its picture, and marks it posted. */
+    @PostMapping("/posts/{id}/publish")
+    public PostResponse publish(@PathVariable Long id) {
+        return publisher.publish(id);
     }
 
     /** Drafts the post with the AI the account owner chose. The draft isn't saved. */

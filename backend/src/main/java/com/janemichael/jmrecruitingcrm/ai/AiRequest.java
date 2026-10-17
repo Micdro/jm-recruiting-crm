@@ -15,17 +15,26 @@ import java.util.List;
  */
 public record AiRequest(String system, String prompt, List<Field> fields, int maxTokens) {
 
-    public enum Type { TEXT, LIST }
+    public enum Type { TEXT, LIST, OBJECTS }
 
-    /** One field of the answer. Every field is required; a list may come back empty. */
-    public record Field(String name, Type type, String description) {
+    /**
+     * One field of the answer. Every field is required; a list may come back empty.
+     *
+     * @param items for {@link Type#OBJECTS}, the text fields each object has
+     */
+    public record Field(String name, Type type, String description, List<Field> items) {
 
         public static Field text(String name, String description) {
-            return new Field(name, Type.TEXT, description);
+            return new Field(name, Type.TEXT, description, List.of());
         }
 
         public static Field list(String name, String description) {
-            return new Field(name, Type.LIST, description);
+            return new Field(name, Type.LIST, description, List.of());
+        }
+
+        /** A list of objects, each with the given text fields. */
+        public static Field objects(String name, String description, List<Field> items) {
+            return new Field(name, Type.OBJECTS, description, List.copyOf(items));
         }
     }
 
@@ -41,17 +50,26 @@ public record AiRequest(String system, String prompt, List<Field> fields, int ma
      * output, which needs every property required and no others allowed.
      */
     public ObjectNode schema(ObjectMapper json) {
+        return object(json, fields);
+    }
+
+    private static ObjectNode object(ObjectMapper json, List<Field> fields) {
         ObjectNode schema = json.createObjectNode();
         schema.put("type", "object");
         ObjectNode properties = schema.putObject("properties");
         ArrayNode required = schema.putArray("required");
         for (Field field : fields) {
             ObjectNode property = properties.putObject(field.name());
-            if (field.type() == Type.LIST) {
-                property.put("type", "array");
-                property.putObject("items").put("type", "string");
-            } else {
-                property.put("type", "string");
+            switch (field.type()) {
+                case LIST -> {
+                    property.put("type", "array");
+                    property.putObject("items").put("type", "string");
+                }
+                case OBJECTS -> {
+                    property.put("type", "array");
+                    property.set("items", object(json, field.items()));
+                }
+                case TEXT -> property.put("type", "string");
             }
             property.put("description", field.description());
             required.add(field.name());

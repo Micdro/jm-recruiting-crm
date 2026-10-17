@@ -22,4 +22,9 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, Long> 
 
     @Query("select p from ContentPost p left join fetch p.owner order by p.createdAt desc")
     List<ContentPost> findAllWithOwner();
+
+    /** Posts planned from {@code from} on that aren't posted yet, by day. */
+    @Query("select p from ContentPost p left join fetch p.owner "
+            + "where p.plannedFor >= :from and p.status <> :posted order by p.plannedFor, p.createdAt")
+    List<ContentPost> findUpcoming(@Param("from") LocalDate from, @Param("posted") PostStatus posted);
 }

@@ -89,6 +89,58 @@ class OpenAiProvider implements AiProvider {
         throw new AiFailure("OpenAI didn't write anything. Try again.", usage);
     }
 
+    /** Picture size: landscape, which LinkedIn's feed shows best. */
+    static final String PICTURE_SIZE = "1536x1024";
+    static final String PICTURE_QUALITY = "medium";
+    /** Charged when OpenAI's answer doesn't say what a picture used: about what a high-quality one costs. */
+    static final long PICTURE_FALLBACK_OUTPUT_TOKENS = 3_400;
+
+    /** Makes one picture with OpenAI's image model. Only OpenAI makes pictures; Claude doesn't. */
+    AiPicture picture(String apiKey, String prompt) {
+        String model = AiModels.PICTURES.id();
+        ObjectNode body = json.createObjectNode();
+        body.put("model", model);
+        body.put("prompt", prompt);
+        body.put("n", 1);
+        body.put("size", PICTURE_SIZE);
+        body.put("quality", PICTURE_QUALITY);
+        body.put("output_format", "jpeg");
+        body.put("output_compression", 90);
+
+        OpenAiApi.Reply reply;
+        try {
+            reply = api.images(apiKey, json.writeValueAsString(body));
+        } catch (IOException unreachable) {
+            throw new AiFailure("Couldn't reach the OpenAI API. Check the internet connection and try again.",
+                    AiUsage.none(model));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AiFailure("The request to OpenAI was interrupted. Try again.", AiUsage.none(model));
+        }
+        if (!reply.ok()) {
+            String message = apiMessage(reply.body());
+            throw new AiFailure(reply.status() == 403
+                    ? "OpenAI makes pictures only for verified organizations. Verify yours in the OpenAI platform's "
+                    + "organization settings, then try again."
+                    : problem(reply.status(), message), AiUsage.none(model));
+        }
+
+        JsonNode response = read(reply.body(), model);
+        JsonNode used = response.path("usage");
+        AiUsage usage = used.isObject()
+                ? new AiUsage(model, used.path("input_tokens").asLong(), used.path("output_tokens").asLong(), 0, 0)
+                : new AiUsage(model, 0, PICTURE_FALLBACK_OUTPUT_TOKENS, 0, 0);
+        String encoded = response.path("data").path(0).path("b64_json").asText("");
+        if (encoded.isEmpty()) {
+            throw new AiFailure("OpenAI didn't make a picture. Try again.", usage);
+        }
+        try {
+            return new AiPicture(java.util.Base64.getDecoder().decode(encoded), "image/jpeg", usage);
+        } catch (IllegalArgumentException unreadable) {
+            throw new AiFailure("OpenAI sent a picture the CRM couldn't read. Try again.", usage);
+        }
+    }
+
     @Override
     public void checkKey(String apiKey) {
         OpenAiApi.Reply reply;

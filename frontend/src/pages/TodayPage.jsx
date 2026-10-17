@@ -9,6 +9,7 @@ import LaterMenu from '../components/LaterMenu.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
 import MessageComposer from '../components/MessageComposer.jsx';
 import Modal from '../components/Modal.jsx';
+import PostToLinkedIn from '../components/PostToLinkedIn.jsx';
 import TallyMeter from '../components/TallyMeter.jsx';
 import Timeline from '../components/Timeline.jsx';
 import {
@@ -20,13 +21,15 @@ import {
   HIRING_NEED,
   MAX_TOUCHES,
   OUTREACH_STATUS,
+  POST_STATUS,
   PRIORITY,
   SEARCH_STATUS,
   SHORTLIST_STAGES,
 } from '../labels.js';
 import { formatDate, formatLongDay, formatWeekday, money, plural } from '../format.js';
-import { useLoader, useTitle, useToast } from '../hooks.js';
+import { useAuth, useLoader, useTitle, useToast } from '../hooks.js';
 import { interviewWhen } from '../interviews.js';
+import { postedAs } from '../marketing.js';
 import { useUndoableChange } from '../undo.js';
 
 const QUICK_TYPES = ['LINKEDIN', 'CALL'];
@@ -83,6 +86,7 @@ export default function TodayPage() {
             <div className="today-main">
               <Interviews data={data} scope={scope} onDebrief={(entry, side) => setDebriefing({ entry, side })} />
               <CheckIns data={data} scope={scope} onCheckIn={setCheckingIn} />
+              <PostsToday scope={scope} today={data.today} />
               <ContactQueue
                 data={data}
                 scope={scope}
@@ -625,6 +629,57 @@ function CompanyFollowUps({ data, onChanged }) {
 }
 
 /** Companies that posted forward deployed or AI platform roles since the team last looked. */
+/** Today's LinkedIn posts, and ones from the past week that didn't go up, with a button to post each. */
+function PostsToday({ scope, today }) {
+  const { user } = useAuth();
+  const upcoming = useLoader(() => api.marketing.upcoming(), [], 'marketing:upcoming');
+  const due = (upcoming.data ?? []).filter(
+    (post) => post.plannedFor <= today && (scope === 'team' || !post.ownerId || post.ownerId === user?.id),
+  );
+  if (due.length === 0) return null;
+
+  return (
+    <section className="panel" aria-labelledby="queue-posts">
+      <div className="panel-head">
+        <h2 id="queue-posts">
+          LinkedIn posts <span className="count">{due.length}</span>
+        </h2>
+        <Link to="/marketing?view=upcoming" className="panel-link">
+          All upcoming
+        </Link>
+      </div>
+      <ul className="queue">
+        {due.map((post) => (
+          <li key={post.id} className="queue-row today-post">
+            <div className="queue-who">
+              <Link to={`/marketing?post=${post.id}`} className="queue-name">
+                {post.title}
+              </Link>
+              <span className="queue-org">
+                {postedAs(post)}
+                {post.plannedFor < today ? `, missed ${formatWeekday(post.plannedFor)}` : ''}
+              </span>
+            </div>
+            <div className="queue-state">
+              <Pill value={post.status} labels={POST_STATUS} />
+              {post.picture?.ready && <img className="today-post-picture" src={post.picture.url} alt="" loading="lazy" />}
+            </div>
+            <div className="queue-actions">
+              {post.body ? (
+                <PostToLinkedIn post={post} onPosted={upcoming.reload} size="sm" />
+              ) : (
+                <Link to={`/marketing?post=${post.id}`} className="btn btn-sm">
+                  Write it
+                </Link>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function HiringSignals() {
   const summary = useLoader(() => api.signals.summary(), [], 'signals:summary');
   const data = summary.data;

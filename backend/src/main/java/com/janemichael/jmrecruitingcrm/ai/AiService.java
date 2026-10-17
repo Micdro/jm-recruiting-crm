@@ -22,15 +22,20 @@ public class AiService {
 
     /** A call needs at least this much left of today's and this month's limits. */
     static final int MIN_CENTS = 5;
+    /** A picture costs more than a draft, so it needs more room. */
+    static final int MIN_PICTURE_CENTS = 15;
 
     private final AiSettings settings;
     private final Map<AiProviderId, AiProvider> providers = new EnumMap<>(AiProviderId.class);
+    private final OpenAiProvider pictures;
     private final CurrentUserService currentUser;
     private final Clock clock;
 
-    public AiService(AiSettings settings, List<AiProvider> providers, CurrentUserService currentUser, Clock clock) {
+    AiService(AiSettings settings, List<AiProvider> providers, OpenAiProvider pictures, CurrentUserService currentUser,
+              Clock clock) {
         this.settings = settings;
         providers.forEach(provider -> this.providers.put(provider.id(), provider));
+        this.pictures = pictures;
         this.currentUser = currentUser;
         this.clock = clock;
     }
@@ -52,14 +57,7 @@ public class AiService {
                     + (which == AiProviderId.CLAUDE ? "on AI Found." : "in the AI settings."));
         }
         LocalDate today = LocalDate.now(clock);
-        int leftToday = values.dailyLimitDollars() * 100 - settings.spentCents(today);
-        int leftThisMonth = values.monthlyLimitDollars() * 100 - settings.spentCents(YearMonth.from(today));
-        if (Math.min(leftToday, leftThisMonth) < MIN_CENTS) {
-            throw new ConflictException(leftToday <= leftThisMonth
-                    ? "Today's AI limit of $" + values.dailyLimitDollars() + " is used up. " + feature
-                    + " works again tomorrow."
-                    : "This month's AI limit of $" + values.monthlyLimitDollars() + " is used up.");
-        }
+        requireRoom(values, today, MIN_CENTS, feature);
 
         String model = values.model(which);
         AiUsage charged = AiUsage.none(model);
@@ -74,6 +72,49 @@ public class AiService {
             throw new BadRequestException(failure.getMessage());
         } finally {
             settings.addSpend(today, charged.costCents());
+        }
+    }
+
+    /**
+     * Makes a picture with OpenAI, whichever provider writes: Claude doesn't make pictures.
+     *
+     * @throws BadRequestException when there's no OpenAI key, or the call didn't work
+     * @throws ConflictException   when today's or this month's limit is used up
+     */
+    public AiPicture picture(String feature, String prompt) {
+        AiSettings.Values values = settings.values();
+        if (!values.hasKey(AiProviderId.OPENAI)) {
+            String owner = currentUser.accountOwnerName();
+            throw new BadRequestException(feature + " needs an OpenAI API key, since Claude doesn't make pictures. "
+                    + (owner == null ? "An admin" : owner) + " can add one in the AI settings on AI Found.");
+        }
+        LocalDate today = LocalDate.now(clock);
+        requireRoom(values, today, MIN_PICTURE_CENTS, feature);
+
+        AiUsage charged = AiUsage.none(AiModels.PICTURES.id());
+        try {
+            AiPicture picture = pictures.picture(values.key(AiProviderId.OPENAI), prompt);
+            charged = picture.usage();
+            return picture;
+        } catch (AiFailure failure) {
+            if (failure.usage() != null) {
+                charged = failure.usage();
+            }
+            throw new BadRequestException(failure.getMessage());
+        } finally {
+            settings.addSpend(today, charged.costCents());
+        }
+    }
+
+    /** Stops before a call that could run past today's or this month's limit. */
+    private void requireRoom(AiSettings.Values values, LocalDate today, int needed, String feature) {
+        int leftToday = values.dailyLimitDollars() * 100 - settings.spentCents(today);
+        int leftThisMonth = values.monthlyLimitDollars() * 100 - settings.spentCents(YearMonth.from(today));
+        if (Math.min(leftToday, leftThisMonth) < needed) {
+            String state = Math.min(leftToday, leftThisMonth) < MIN_CENTS ? " is used up." : " is nearly used up.";
+            throw new ConflictException(leftToday <= leftThisMonth
+                    ? "Today's AI limit of $" + values.dailyLimitDollars() + state + " " + feature + " works again tomorrow."
+                    : "This month's AI limit of $" + values.monthlyLimitDollars() + state);
         }
     }
 
