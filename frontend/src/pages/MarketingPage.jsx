@@ -1,76 +1,84 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { api, errorMessage } from '../api.js';
-import { ConfirmButton, Empty, ErrorNote, ExternalLink, Loading, PageHeader, Pill } from '../components/Bits.jsx';
-import { CheckboxGroup, OwnerField, SelectField, TextArea, TextField } from '../components/Fields.jsx';
+import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
+import MarketingPlan from '../components/MarketingPlan.jsx';
 import Modal from '../components/Modal.jsx';
-import { formatDate, formatWeekday, href, parseDate, plural, toIsoDate, todayIso } from '../format.js';
-import { useAuth, useLoader, useTitle, useToast, useUsers } from '../hooks.js';
-import { POST_ACCOUNT, POST_STATUS, POST_THEME, options } from '../labels.js';
+import PostEditor from '../components/PostEditor.jsx';
+import PostToLinkedIn from '../components/PostToLinkedIn.jsx';
+import SetUpWeek from '../components/SetUpWeek.jsx';
+import SuggestIdeas from '../components/SuggestIdeas.jsx';
+import { formatDate, formatWeekday, plural, todayIso } from '../format.js';
+import { useLoader, useTitle, useToast } from '../hooks.js';
+import { POST_ACCOUNT, POST_STATUS, POST_THEME } from '../labels.js';
+import { addDays, dayLabel, fold, mondayOf, monthOf, postedAs } from '../marketing.js';
 
-/** LinkedIn's limit for a post. */
-const POST_LIMIT = 3000;
-const TITLE_LIMIT = 200;
+const VIEWS = [
+  ['week', 'Week'],
+  ['upcoming', 'Upcoming'],
+  ['plan', 'Plan'],
+];
 
-/** The Monday of the week holding a YYYY-MM-DD day. */
-function mondayOf(iso) {
-  const date = parseDate(iso);
-  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-  return toIsoDate(date);
-}
-
-function addDays(iso, days) {
-  const date = parseDate(iso);
-  date.setDate(date.getDate() + days);
-  return toIsoDate(date);
-}
-
-/** "$0.02" from cents. */
-function dollars(cents) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-/** "Claude (Claude Sonnet 5.5)", or what's missing before drafting can work. */
+/** "Drafts are written by Claude Sonnet 5.5.", or what's missing before drafting can work. */
 function aiLine(ai) {
   if (!ai) return null;
   const current = ai.providers.find((provider) => provider.id === ai.provider);
   if (!current) return null;
   const model = current.models.find((option) => option.id === current.model)?.label ?? current.model;
-  return current.hasKey
-    ? `Drafts are written by ${model}.`
-    : `Drafting needs a ${current.label} API key first.`;
+  return current.hasKey ? `Drafts are written by ${model}.` : `Drafting needs a ${current.label} API key first.`;
 }
 
-/** The week's LinkedIn posts, the ideas waiting for a day, and AI drafts. Posting itself happens on LinkedIn. */
+/**
+ * The team's LinkedIn posts: the week's calendar, everything coming up with its picture, and the
+ * plan (style, posting days, monthly focus, LinkedIn connection) that AI drafts follow.
+ */
 export default function MarketingPage() {
   useTitle('Marketing');
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const today = todayIso();
   const thisWeek = mondayOf(today);
+  const view = VIEWS.some(([value]) => value === params.get('view')) ? params.get('view') : 'week';
   const start = mondayOf(params.get('week') || today);
   const week = useLoader(() => api.marketing.week(start), [start], `marketing:week:${start}`);
+  const upcoming = useLoader(() => api.marketing.upcoming(), [], 'marketing:upcoming');
   const ai = useLoader(() => api.ai.status(), [], 'ai:status');
+  // A link like /marketing?post=12 (from Today) opens that post.
+  const linkedId = params.get('post');
+  const linked = useLoader(() => (linkedId ? api.marketing.posts.get(linkedId) : Promise.resolve(null)), [linkedId]);
   const [editing, setEditing] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [settingUp, setSettingUp] = useState(false);
+  const plan = useLoader(
+    () => (settingUp ? api.marketing.plan(monthOf(addDays(start, 3))) : Promise.resolve(null)),
+    [settingUp, start],
+  );
 
-  function goTo(monday) {
+  function setParam(changes) {
     const next = new URLSearchParams(params);
-    if (monday === thisWeek) next.delete('week');
-    else next.set('week', monday);
+    Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)));
     setParams(next, { replace: true });
   }
 
-  const data = week.data;
-  const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
-  const planned = data?.planned ?? [];
-  const ideas = data?.ideas ?? [];
+  function reload() {
+    week.reload();
+    upcoming.reload();
+  }
+
+  const open = editing ?? (linkedId && linked.data?.id === Number(linkedId) ? linked.data : null);
+  function closeEditor() {
+    setEditing(null);
+    if (linkedId) setParam({ post: null });
+  }
+
+  const outcome = params.get('linkedin');
+  const canMakePictures = Boolean(ai.data?.providers.find((provider) => provider.id === 'OPENAI')?.hasKey);
 
   return (
     <>
       <PageHeader
         title="Marketing"
-        sub="Plan the week’s LinkedIn posts, draft them with AI, and see which ones start conversations. You post them on LinkedIn yourself."
+        sub="Plan the week’s LinkedIn posts, write them with AI in your style, and post them with their pictures."
       >
         <button type="button" className="btn" onClick={() => setSuggesting(true)}>
           Suggest ideas
@@ -80,101 +88,45 @@ export default function MarketingPage() {
         </button>
       </PageHeader>
 
-      <ErrorNote>{week.error && errorMessage(week.error)}</ErrorNote>
-      {!data && !week.error && <Loading label="Loading the week" />}
+      <fieldset className="segmented marketing-views">
+        <legend className="visually-hidden">View</legend>
+        {VIEWS.map(([value, label]) => (
+          <label key={value} className={view === value ? 'segment segment-on' : 'segment'}>
+            <input type="radio" name="marketing-view" checked={view === value} onChange={() => setParam({ view: value === 'week' ? null : value })} />
+            {label}
+          </label>
+        ))}
+      </fieldset>
 
-      {data && (
-        <section className="panel" aria-labelledby="marketing-week">
-          <div className="panel-head">
-            <h2 id="marketing-week">
-              Week of {formatDate(start)}{' '}
-              <span className="panel-meta">
-                {planned.length === 0
-                  ? 'Nothing planned yet'
-                  : `${data.posted} of ${plural(planned.length, 'post')} posted${data.ready > 0 ? `, ${data.ready} ready` : ''}`}
-              </span>
-            </h2>
-            <span className="week-nav">
-              <button type="button" className="btn btn-sm" onClick={() => goTo(addDays(start, -7))}>
-                Previous week
-              </button>
-              {start !== thisWeek && (
-                <button type="button" className="btn btn-sm" onClick={() => goTo(thisWeek)}>
-                  This week
-                </button>
-              )}
-              <button type="button" className="btn btn-sm" onClick={() => goTo(addDays(start, 7))}>
-                Next week
-              </button>
-            </span>
-          </div>
-
-          <ol className="post-days">
-            {days.map((day) => {
-              const onDay = planned.filter((post) => post.plannedFor === day);
-              return (
-                <li key={day} className={day === today ? 'post-day post-day-today' : 'post-day'}>
-                  <div className="post-day-head">
-                    <span className="post-day-name">
-                      {formatWeekday(day)}
-                      {day === today && <span className="muted"> Today</span>}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-quiet"
-                      onClick={() => setEditing({ plannedFor: day })}
-                      aria-label={`Plan a post for ${formatWeekday(day)}`}
-                    >
-                      Add
-                    </button>
-                  </div>
-                  {onDay.length > 0 ? (
-                    <ul className="post-cards">
-                      {onDay.map((post) => (
-                        <PostCard key={post.id} post={post} onOpen={() => setEditing(post)} />
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="post-day-empty muted">Nothing planned</p>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+      {outcome && (
+        <div className={outcome === 'connected' ? 'notice notice-good' : 'notice notice-bad'} role="status">
+          <p>{outcome === 'connected' ? 'Your LinkedIn is connected. Post to LinkedIn now posts straight to your profile.' : params.get('reason') || 'LinkedIn didn’t connect. Try again.'}</p>
+          <button type="button" className="btn btn-sm btn-quiet" onClick={() => setParam({ linkedin: null, reason: null })}>
+            Dismiss
+          </button>
+        </div>
       )}
 
-      {data && (
-        <section className="panel" aria-labelledby="marketing-ideas">
-          <div className="panel-head">
-            <h2 id="marketing-ideas">
-              Ideas <span className="panel-meta">Not on the calendar yet. Open one to give it a day.</span>
-            </h2>
-          </div>
-          {ideas.length === 0 ? (
-            <Empty title="No ideas waiting">Add one, or let AI suggest a few for the week.</Empty>
-          ) : (
-            <ul className="post-cards">
-              {ideas.map((post) => (
-                <PostCard key={post.id} post={post} onOpen={() => setEditing(post)} />
-              ))}
-            </ul>
-          )}
-          {ai.data && (
-            <p className="panel-foot">
-              {aiLine(ai.data)} <Link to="/prospects">AI settings</Link>
-            </p>
-          )}
-        </section>
+      {view === 'week' && (
+        <WeekView
+          week={week}
+          start={start}
+          today={today}
+          thisWeek={thisWeek}
+          onWeek={(monday) => setParam({ week: monday === thisWeek ? null : monday })}
+          onOpen={setEditing}
+          onSetUp={() => setSettingUp(true)}
+          ai={ai.data}
+        />
       )}
 
-      {editing && (
-        <Modal title={editing.id ? editing.title : 'Add a post'} onClose={() => setEditing(null)} wide>
-          <PostEditor
-            post={editing}
-            onClose={() => setEditing(null)}
-            onChanged={week.reload}
-          />
+      {view === 'upcoming' && <UpcomingView upcoming={upcoming} today={today} onOpen={setEditing} onChanged={reload} />}
+
+      {view === 'plan' && <MarketingPlan today={today} />}
+
+      {open && (
+        <Modal title={open.id ? open.title : 'Add a post'} onClose={closeEditor} wide>
+          <PostEditor post={open} onClose={closeEditor} onChanged={reload} />
         </Modal>
       )}
 
@@ -184,12 +136,128 @@ export default function MarketingPage() {
             onCancel={() => setSuggesting(false)}
             onAdded={(count) => {
               setSuggesting(false);
-              week.reload();
+              reload();
               toast(`Added ${plural(count, 'idea')}`);
             }}
           />
         </Modal>
       )}
+
+      {settingUp && (
+        <Modal title={`Set up the week of ${formatDate(start)}`} onClose={() => setSettingUp(false)}>
+          <SetUpWeek
+            start={start}
+            today={today}
+            plan={plan.data}
+            planned={week.data?.planned ?? []}
+            canMakePictures={canMakePictures}
+            onChanged={reload}
+            onNextWeek={() => setParam({ week: addDays(start, 7) })}
+            onClose={() => setSettingUp(false)}
+          />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function WeekView({ week, start, today, thisWeek, onWeek, onOpen, onSetUp, ai }) {
+  const data = week.data;
+  const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
+  const planned = data?.planned ?? [];
+  const ideas = data?.ideas ?? [];
+
+  if (!data) {
+    return week.error ? <ErrorNote>{errorMessage(week.error)}</ErrorNote> : <Loading label="Loading the week" />;
+  }
+
+  return (
+    <>
+      <section className="panel" aria-labelledby="marketing-week">
+        <div className="panel-head">
+          <h2 id="marketing-week">
+            Week of {formatDate(start)}{' '}
+            <span className="panel-meta">
+              {planned.length === 0
+                ? 'Nothing planned yet'
+                : `${data.posted} of ${plural(planned.length, 'post')} posted${data.ready > 0 ? `, ${data.ready} ready` : ''}`}
+            </span>
+          </h2>
+          <span className="week-nav">
+            {start >= thisWeek && (
+              <button type="button" className="btn btn-sm btn-primary" onClick={onSetUp}>
+                Set up the week
+              </button>
+            )}
+            <button type="button" className="btn btn-sm" onClick={() => onWeek(addDays(start, -7))}>
+              Previous week
+            </button>
+            {start !== thisWeek && (
+              <button type="button" className="btn btn-sm" onClick={() => onWeek(thisWeek)}>
+                This week
+              </button>
+            )}
+            <button type="button" className="btn btn-sm" onClick={() => onWeek(addDays(start, 7))}>
+              Next week
+            </button>
+          </span>
+        </div>
+
+        <ol className="post-days">
+          {days.map((day) => {
+            const onDay = planned.filter((post) => post.plannedFor === day);
+            return (
+              <li key={day} className={day === today ? 'post-day post-day-today' : 'post-day'}>
+                <div className="post-day-head">
+                  <span className="post-day-name">
+                    {formatWeekday(day)}
+                    {day === today && <span className="muted"> Today</span>}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-quiet"
+                    onClick={() => onOpen({ plannedFor: day })}
+                    aria-label={`Plan a post for ${formatWeekday(day)}`}
+                  >
+                    Add
+                  </button>
+                </div>
+                {onDay.length > 0 ? (
+                  <ul className="post-cards">
+                    {onDay.map((post) => (
+                      <PostCard key={post.id} post={post} onOpen={() => onOpen(post)} />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="post-day-empty muted">Nothing planned</p>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <section className="panel" aria-labelledby="marketing-ideas">
+        <div className="panel-head">
+          <h2 id="marketing-ideas">
+            Ideas <span className="panel-meta">Not on the calendar yet. Open one to give it a day.</span>
+          </h2>
+        </div>
+        {ideas.length === 0 ? (
+          <Empty title="No ideas waiting">Add one, or let AI suggest a few for the week.</Empty>
+        ) : (
+          <ul className="post-cards">
+            {ideas.map((post) => (
+              <PostCard key={post.id} post={post} onOpen={() => onOpen(post)} />
+            ))}
+          </ul>
+        )}
+        {ai && (
+          <p className="panel-foot">
+            {aiLine(ai)} <Link to="/prospects">AI settings</Link>
+          </p>
+        )}
+      </section>
     </>
   );
 }
@@ -199,385 +267,79 @@ function PostCard({ post, onOpen }) {
   return (
     <li className="post-card">
       <button type="button" className="post-card-open" onClick={onOpen}>
-        <span className="post-card-title">{post.title}</span>
-        <span className="post-card-meta">
-          <Pill value={post.status} labels={POST_STATUS} />
-          {post.theme !== 'OTHER' && <span>{POST_THEME[post.theme]}</span>}
-          <span>{who}</span>
-          {post.status === 'POSTED' && post.conversations > 0 && <span>{plural(post.conversations, 'conversation')}</span>}
+        {post.picture?.ready && <img className="post-card-picture" src={post.picture.url} alt="" loading="lazy" />}
+        <span className="post-card-text">
+          <span className="post-card-title">{post.title}</span>
+          <span className="post-card-meta">
+            <Pill value={post.status} labels={POST_STATUS} />
+            {post.theme !== 'OTHER' && <span>{POST_THEME[post.theme]}</span>}
+            <span>{who}</span>
+            {post.status === 'POSTED' && post.conversations > 0 && <span>{plural(post.conversations, 'conversation')}</span>}
+          </span>
         </span>
       </button>
     </li>
   );
 }
 
-const asText = (value) => (value === null || value === undefined ? '' : String(value));
-const asNumber = (value) => (value === '' ? null : Number(value));
-
-/** Adds or changes a post, drafts it with AI, and records it as posted with its results. */
-function PostEditor({ post, onClose, onChanged }) {
-  const toast = useToast();
-  const { user } = useAuth();
-  const users = useUsers();
-  const [saved, setSaved] = useState(post.id ? post : null);
-  const [form, setForm] = useState(() => ({
-    title: post.title ?? '',
-    body: post.body ?? '',
-    notes: post.notes ?? '',
-    theme: post.theme ?? 'OTHER',
-    account: post.account ?? 'PERSONAL',
-    status: post.status ?? 'IDEA',
-    plannedFor: post.plannedFor ?? '',
-    // A new post is yours unless you pick someone else.
-    ownerId: asText(post.id ? post.ownerId : user?.id),
-  }));
-  const [direction, setDirection] = useState('');
-  const [drafted, setDrafted] = useState(null);
-  const [postUrl, setPostUrl] = useState(post.postUrl ?? '');
-  const [results, setResults] = useState(() => ({
-    impressions: asText(post.impressions),
-    reactions: asText(post.reactions),
-    comments: asText(post.comments),
-    conversations: asText(post.conversations),
-  }));
-  const [busy, setBusy] = useState(null);
-  const [error, setError] = useState('');
-  const set = (field) => (value) => setForm((current) => ({ ...current, [field]: value }));
-  const setResult = (field) => (value) => setResults((current) => ({ ...current, [field]: value }));
-  const isPosted = saved?.status === 'POSTED';
-
-  function payload() {
-    return {
-      title: form.title,
-      body: form.body.trim() ? form.body : null,
-      notes: form.notes.trim() ? form.notes : null,
-      theme: form.theme,
-      account: form.account,
-      // Writing the post moves an idea on to a draft.
-      status: form.status === 'IDEA' && form.body.trim() ? 'DRAFT' : form.status,
-      plannedFor: form.plannedFor || null,
-      ownerId: form.ownerId ? Number(form.ownerId) : null,
-    };
+/** Everything coming up, as it will look on LinkedIn, with a button to post each. */
+function UpcomingView({ upcoming, today, onOpen, onChanged }) {
+  const posts = upcoming.data;
+  if (!posts) {
+    return upcoming.error ? <ErrorNote>{errorMessage(upcoming.error)}</ErrorNote> : <Loading label="Loading upcoming posts" />;
   }
-
-  /** Saves what's in the form and hands back the saved post. */
-  async function persist() {
-    const record = saved ? await api.marketing.posts.update(saved.id, payload()) : await api.marketing.posts.create(payload());
-    setSaved(record);
-    setForm((current) => ({ ...current, status: record.status, ownerId: asText(record.ownerId) }));
-    onChanged();
-    return record;
+  if (posts.length === 0) {
+    return (
+      <section className="panel">
+        <Empty title="Nothing coming up">Set up the week, or give an idea a day, and it shows here.</Empty>
+      </section>
+    );
   }
-
-  async function run(name, work) {
-    setBusy(name);
-    setError('');
-    try {
-      await work();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  function submit(event) {
-    event.preventDefault();
-    run('save', async () => {
-      const record = await persist();
-      toast(post.id ? 'Saved' : `Added ${record.title}`);
-      onClose();
-    });
-  }
-
-  function draftWithAi() {
-    if (!form.title.trim()) {
-      setError('Give the post a title first. The draft is written from it and the notes.');
-      return;
-    }
-    run('draft', async () => {
-      const record = await persist();
-      const draft = await api.marketing.draft(record.id, { direction: direction.trim() || undefined });
-      setForm((current) => ({ ...current, body: draft.body }));
-      setDrafted(draft);
-    });
-  }
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(form.body);
-      toast('Copied. Paste it into LinkedIn.');
-    } catch {
-      setError('Couldn’t copy. Select the post and copy it yourself.');
-    }
-  }
-
-  function markPosted() {
-    run('posted', async () => {
-      const record = await persist();
-      const updated = await api.marketing.posted(record.id, { postUrl: postUrl.trim() || null });
-      setSaved(updated);
-      setForm((current) => ({ ...current, status: updated.status }));
-      onChanged();
-      toast('Marked as posted. Add its results in a few days.');
-    });
-  }
-
-  function saveResults() {
-    run('results', async () => {
-      const updated = await api.marketing.results(saved.id, {
-        impressions: asNumber(results.impressions),
-        reactions: asNumber(results.reactions),
-        comments: asNumber(results.comments),
-        conversations: asNumber(results.conversations),
-      });
-      setSaved(updated);
-      onChanged();
-      toast('Results saved');
-    });
-  }
-
-  const statuses = isPosted ? POST_STATUS : { IDEA: POST_STATUS.IDEA, DRAFT: POST_STATUS.DRAFT, READY: POST_STATUS.READY };
-  const tooLong = form.body.length > POST_LIMIT;
-
   return (
-    <form className="form post-form" onSubmit={submit}>
-      <TextField label="Title" value={form.title} onChange={set('title')} required maxLength={TITLE_LIMIT} autoFocus={!post.id} />
-
-      <div className="form-row">
-        <TextField
-          label="Day to post"
-          type="date"
-          value={form.plannedFor}
-          onChange={set('plannedFor')}
-          hint="Leave it empty to keep this as an idea."
-        />
-        <SelectField label="Status" value={form.status} onChange={set('status')} options={options(statuses)} required />
-      </div>
-
-      <div className="form-row">
-        <SelectField label="Theme" value={form.theme} onChange={set('theme')} options={options(POST_THEME)} required />
-        <OwnerField users={users} value={form.ownerId} onChange={set('ownerId')} label="Who posts it" />
-      </div>
-
-      <fieldset className="field post-account">
-        <legend>Goes on</legend>
-        <span className="segmented segmented-small">
-          {Object.entries(POST_ACCOUNT).map(([value, label]) => (
-            <label key={value} className={form.account === value ? 'segment segment-on' : 'segment'}>
-              <input type="radio" name="post-account" checked={form.account === value} onChange={() => set('account')(value)} />
-              {label}
-            </label>
-          ))}
-        </span>
-      </fieldset>
-
-      <TextArea
-        label="Notes"
-        rows={3}
-        value={form.notes}
-        onChange={set('notes')}
-        maxLength={2000}
-        hint="Facts and points to make. AI drafts use only these and the title, and never name a client or candidate."
-      />
-
-      <div className="composer-draft">
-        <TextField
-          label="Direction for the draft (optional)"
-          value={direction}
-          onChange={setDirection}
-          maxLength={1000}
-          placeholder="For example: shorter, or open with the question"
-          className="post-direction"
-        />
-        <button type="button" className="btn btn-sm" disabled={busy === 'draft'} onClick={draftWithAi}>
-          {busy === 'draft' ? 'Drafting…' : drafted || form.body.trim() ? 'Redraft with AI' : 'Draft with AI'}
-        </button>
-      </div>
-      {drafted && (
-        <p className="field-hint">
-          Drafted by {drafted.provider} for {dollars(drafted.costCents)}. Read it over, then save. Drafting saves the title and
-          notes first.
-        </p>
-      )}
-
-      <div className="field">
-        <label htmlFor="post-body">Post</label>
-        <textarea id="post-body" rows={10} value={form.body} onChange={(event) => set('body')(event.target.value)} />
-        <p className={`field-hint ${tooLong ? 'composer-warn' : ''}`}>
-          {form.body.length.toLocaleString()} of {POST_LIMIT.toLocaleString()} characters
-          {form.body.trim() && (
-            <>
-              {' · '}
-              <button type="button" className="link-button" onClick={copy}>
-                Copy post
-              </button>
-            </>
-          )}
-        </p>
-      </div>
-
-      {saved && !isPosted && (
-        <div className="post-step">
-          <TextField
-            label="LinkedIn link, once it’s up (optional)"
-            type="url"
-            value={postUrl}
-            onChange={setPostUrl}
-            maxLength={500}
-            placeholder="https://www.linkedin.com/posts/…"
-          />
-          <button type="button" className="btn" disabled={busy === 'posted'} onClick={markPosted}>
-            {busy === 'posted' ? 'Saving…' : 'Mark as posted'}
-          </button>
-        </div>
-      )}
-
-      {isPosted && (
-        <fieldset className="post-results">
-          <legend>
-            Results{' '}
-            <span className="muted">
-              Posted {formatDate(saved.postedOn)}
-              {saved.postUrl && (
-                <>
-                  {' · '}
-                  <ExternalLink href={href(saved.postUrl)}>Open on LinkedIn</ExternalLink>
-                </>
-              )}
-            </span>
-          </legend>
-          <div className="post-results-grid">
-            <TextField label="Impressions" type="number" min="0" value={results.impressions} onChange={setResult('impressions')} />
-            <TextField label="Reactions" type="number" min="0" value={results.reactions} onChange={setResult('reactions')} />
-            <TextField label="Comments" type="number" min="0" value={results.comments} onChange={setResult('comments')} />
-            <TextField
-              label="Conversations"
-              type="number"
-              min="0"
-              value={results.conversations}
-              onChange={setResult('conversations')}
-              hint="DMs or calls it led to"
-            />
-          </div>
-          <div className="form-actions form-actions-start">
-            <button type="button" className="btn" disabled={busy === 'results'} onClick={saveResults}>
-              {busy === 'results' ? 'Saving…' : 'Save results'}
-            </button>
-          </div>
-        </fieldset>
-      )}
-
-      <ErrorNote>{error}</ErrorNote>
-      <div className="form-actions">
-        {saved && (
-          <span className="form-actions-left">
-            <ConfirmButton
-              className="btn btn-quiet"
-              onConfirm={() =>
-                run('delete', async () => {
-                  await api.marketing.posts.remove(saved.id);
-                  onChanged();
-                  toast(`Deleted ${saved.title}`);
-                  onClose();
-                })
-              }
-            />
-          </span>
-        )}
-        <button type="button" className="btn" onClick={onClose}>
-          {saved && !post.id ? 'Close' : 'Cancel'}
-        </button>
-        <button type="submit" className="btn btn-primary" disabled={busy === 'save' || tooLong}>
-          {busy === 'save' ? 'Saving…' : saved ? 'Save' : 'Add post'}
-        </button>
-      </div>
-    </form>
+    <div className="post-feed">
+      {posts.map((post) => (
+        <PostPreview key={post.id} post={post} today={today} onOpen={() => onOpen(post)} onChanged={onChanged} />
+      ))}
+    </div>
   );
 }
 
-/** Asks AI for post ideas; the person adds the ones they like. */
-function SuggestIdeas({ onCancel, onAdded }) {
-  const [count, setCount] = useState('5');
-  const [focus, setFocus] = useState('');
-  const [result, setResult] = useState(null);
-  const [picked, setPicked] = useState([]);
-  const [busy, setBusy] = useState(null);
-  const [error, setError] = useState('');
-
-  async function suggest(event) {
-    event.preventDefault();
-    setBusy('suggest');
-    setError('');
-    try {
-      const suggested = await api.marketing.suggest({ count: Number(count), focus: focus.trim() || null });
-      setResult(suggested);
-      setPicked(suggested.ideas);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function add() {
-    setBusy('add');
-    setError('');
-    let added = 0;
-    try {
-      for (const idea of picked) {
-        await api.marketing.posts.create({ title: idea.slice(0, TITLE_LIMIT), status: 'IDEA' });
-        added += 1;
-      }
-      onAdded(added);
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(null);
-    }
-  }
-
+function PostPreview({ post, today, onOpen, onChanged }) {
+  const missed = post.plannedFor < today;
+  const [expanded, setExpanded] = useState(false);
+  const opening = fold(post.body?.trim());
   return (
-    <form className="form" onSubmit={suggest}>
-      <div className="form-row">
-        <SelectField
-          label="How many"
-          value={count}
-          onChange={setCount}
-          options={['3', '5', '8'].map((value) => ({ value, label: value }))}
-          required
-        />
-        <TextField label="Focus (optional)" value={focus} onChange={setFocus} maxLength={500} placeholder="For example: FDE hiring at insurers" />
-      </div>
-      <p className="field-hint">Ideas mix FDE hiring, AI platform hiring, and AI and security at banks and insurers, and skip your recent posts.</p>
-
-      {result && (
-        <>
-          <CheckboxGroup
-            label="Pick the ones to add"
-            options={result.ideas.map((idea) => ({ value: idea, label: idea }))}
-            value={picked}
-            onChange={setPicked}
-          />
-          <p className="field-hint">
-            Suggested by {result.provider} for {dollars(result.costCents)}.
-          </p>
-        </>
+    <article className={missed ? 'post-preview post-preview-missed' : 'post-preview'} aria-label={post.title}>
+      <header className="post-preview-head">
+        <span className="post-preview-day">{missed ? `Missed, ${formatWeekday(post.plannedFor)}` : dayLabel(post.plannedFor, today)}</span>
+        <Pill value={post.status} labels={POST_STATUS} />
+      </header>
+      <h3 className="post-preview-title">{post.title}</h3>
+      <p className="post-preview-who">{postedAs(post)}</p>
+      {post.body ? (
+        <p className="post-preview-text">
+          {expanded || !opening.cut ? post.body.trim() : opening.shown}
+          {opening.cut && (
+            <button type="button" className="post-fold-more link-button" onClick={() => setExpanded((open) => !open)}>
+              {expanded ? ' show less' : '…see more'}
+            </button>
+          )}
+        </p>
+      ) : (
+        <p className="post-preview-text muted">Not written yet.</p>
       )}
-
-      <ErrorNote>{error}</ErrorNote>
-      <div className="form-actions">
-        <button type="button" className="btn" onClick={onCancel}>
-          Cancel
+      {post.picture &&
+        (post.picture.ready ? (
+          <img className="post-preview-picture" src={post.picture.url} alt="" loading="lazy" />
+        ) : (
+          <div className="post-preview-picture post-preview-wait">The picture is on its way from another computer.</div>
+        ))}
+      <footer className="post-preview-actions">
+        <PostToLinkedIn post={post} onPosted={onChanged} size="sm" />
+        <button type="button" className="btn btn-sm btn-quiet" onClick={onOpen}>
+          {post.body ? 'Open' : 'Write it'}
         </button>
-        <button type="submit" className={result ? 'btn' : 'btn btn-primary'} disabled={busy !== null}>
-          {busy === 'suggest' ? 'Suggesting…' : result ? 'Suggest again' : 'Suggest'}
-        </button>
-        {result && (
-          <button type="button" className="btn btn-primary" disabled={busy !== null || picked.length === 0} onClick={add}>
-            {busy === 'add' ? 'Adding…' : `Add ${plural(picked.length, 'idea')}`}
-          </button>
-        )}
-      </div>
-    </form>
+      </footer>
+    </article>
   );
 }

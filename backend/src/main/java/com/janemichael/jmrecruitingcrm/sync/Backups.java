@@ -67,8 +67,8 @@ public class Backups {
     static final int FORMAT = 1;
     /** Shared tables left out: the computers, and the team's accounts and passwords. */
     static final Set<String> SKIPPED = Set.of("sync_node", "app_user");
-    /** Settings left out, so a restore doesn't bring back an old API key or reset what AI has spent. */
-    static final List<String> KEPT_SETTINGS = List.of("prospects.", "ai.");
+    /** Settings left out, so a restore doesn't bring back an old API key or secret, or reset what AI has spent. */
+    static final List<String> KEPT_SETTINGS = List.of("prospects.", "ai.", "linkedin.");
     /** Bound into every backup's encryption, so a backup can be renamed or moved and still be read. */
     private static final String SEALED_AS = "jmcrm backup";
     private static final Pattern NAME = Pattern.compile(
@@ -243,6 +243,7 @@ public class Backups {
     /** Resume files the records use, the Trash's included. */
     private Set<String> neededFiles() {
         Set<String> needed = new HashSet<>(jdbc.queryForList("SELECT DISTINCT blob_key FROM candidate_file", String.class));
+        needed.addAll(jdbc.queryForList("SELECT image_key FROM content_post WHERE image_key IS NOT NULL", String.class));
         for (String keys : jdbc.queryForList("SELECT blob_keys FROM trash_item WHERE blob_keys IS NOT NULL", String.class)) {
             needed.addAll(List.of(keys.trim().split("\\s+")));
         }

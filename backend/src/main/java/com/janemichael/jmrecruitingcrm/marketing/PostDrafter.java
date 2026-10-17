@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 
 /**
@@ -35,31 +38,39 @@ public class PostDrafter {
 
     /** What a draft is built from, read before calling the AI. */
     record Facts(String title, String notes, PostTheme theme, PostAccount account, String author, String current,
-                 String direction) {
+                 String direction, String focus, String style) {
     }
 
     private final MarketingService marketing;
     private final ContentPostRepository posts;
+    private final ContentPlan plan;
     private final AiService ai;
     private final TransactionTemplate transaction;
+    private final Clock clock;
 
-    public PostDrafter(MarketingService marketing, ContentPostRepository posts, AiService ai,
-                       PlatformTransactionManager transactionManager) {
+    public PostDrafter(MarketingService marketing, ContentPostRepository posts, ContentPlan plan, AiService ai,
+                       PlatformTransactionManager transactionManager, Clock clock) {
         this.marketing = marketing;
         this.posts = posts;
+        this.plan = plan;
         this.ai = ai;
         this.transaction = new TransactionTemplate(transactionManager);
         this.transaction.setReadOnly(true);
+        this.clock = clock;
     }
 
     public DraftResponse draft(Long postId, DraftRequest request) {
         Facts facts = transaction.execute(status -> {
             ContentPost post = marketing.find(postId);
+            // The plan of the month the post goes up in.
+            ContentPlan.Values rules = plan.values(
+                    YearMonth.from(post.getPlannedFor() == null ? LocalDate.now(clock) : post.getPlannedFor()));
             return new Facts(post.getTitle(), post.getNotes(), post.getTheme(), post.getAccount(),
                     post.getOwner() == null ? null : firstName(post.getOwner().getDisplayName()),
-                    post.getBody(), request == null ? null : Text.clean(request.direction()));
+                    post.getBody(), request == null ? null : Text.clean(request.direction()), rules.focus(),
+                    rules.style());
         });
-        AiResult result = ai.write("Drafting", new AiRequest(systemPrompt(), draftMessage(facts),
+        AiResult result = ai.write("Drafting", new AiRequest(systemPrompt(facts.style()), draftMessage(facts),
                 List.of(Field.text(BODY, "The post, ready to paste into LinkedIn.")), DRAFT_MAX_TOKENS));
         String body = clean(result.text(BODY));
         if (body.isBlank()) {
@@ -73,8 +84,9 @@ public class PostDrafter {
                 .limit(RECENT_SHOWN)
                 .map(ContentPost::getTitle)
                 .toList());
-        AiResult result = ai.write("Suggesting ideas", new AiRequest(systemPrompt(),
-                ideasMessage(request.count(), Text.clean(request.focus()), recent),
+        ContentPlan.Values rules = plan.values(YearMonth.now(clock));
+        AiResult result = ai.write("Suggesting ideas", new AiRequest(systemPrompt(rules.style()),
+                ideasMessage(request.count(), Text.clean(request.focus()), rules.focus(), recent),
                 List.of(Field.list(IDEAS, "One-line post ideas, each specific enough to write a post from.")),
                 IDEAS_MAX_TOKENS));
         List<String> ideas = result.list(IDEAS).stream()
@@ -89,6 +101,18 @@ public class PostDrafter {
     }
 
     // What the AI is told -------------------------------------------------------------------
+
+    /** The firm's rules, then the team's own style guide when there is one. */
+    static String systemPrompt(String style) {
+        if (style == null || style.isBlank()) {
+            return systemPrompt();
+        }
+        return systemPrompt() + """
+
+                The team's style guide. Follow it. Where it differs from the rules above, the style guide wins, \
+                except the rules about using only the facts given and never naming a client or a candidate.
+                """ + style.trim() + "\n";
+    }
 
     static String systemPrompt() {
         return """
@@ -122,6 +146,7 @@ public class PostDrafter {
         line(text, "Topic", facts.title());
         line(text, "Theme", theme(facts.theme()));
         line(text, "Notes and facts to use", facts.notes());
+        line(text, "The team's focus this month", facts.focus());
         line(text, "Direction for this draft", facts.direction());
         if (facts.current() != null && !facts.current().isBlank()) {
             text.append("\nThe current draft. Improve it rather than starting over, and keep what works:\n")
@@ -130,11 +155,12 @@ public class PostDrafter {
         return text.toString();
     }
 
-    static String ideasMessage(int count, String focus, List<String> recent) {
+    static String ideasMessage(int count, String focus, String monthFocus, List<String> recent) {
         StringBuilder text = new StringBuilder();
         text.append("Suggest ").append(count).append(count == 1 ? " idea" : " ideas")
                 .append(" for this week's LinkedIn posts. Mix the topics: hiring forward deployed engineers, ")
                 .append("hiring AI platform engineers, and AI and security at banks and insurers.\n");
+        line(text, "The team's focus this month", monthFocus);
         line(text, "Focus this week", focus);
         if (!recent.isEmpty()) {
             text.append("\nRecent and planned posts. Don't repeat these:\n");
@@ -170,7 +196,7 @@ public class PostDrafter {
                 .trim();
     }
 
-    private static String firstName(String name) {
+    static String firstName(String name) {
         if (name == null || name.isBlank()) {
             return null;
         }

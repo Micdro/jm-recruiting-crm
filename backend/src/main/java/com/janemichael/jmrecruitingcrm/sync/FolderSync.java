@@ -358,10 +358,10 @@ public class FolderSync {
         return change.version() + "/" + change.origin() + "/" + change.deleted();
     }
 
-    // Files (resumes) -----------------------------------------------------------------
+    // Files (resumes and post pictures) ---------------------------------------------------
 
     /**
-     * Candidates' files travel as files of their own rather than inside the batches, so a large
+     * Candidates' files and posts' pictures travel as files of their own rather than inside the batches, so a large
      * resume isn't copied into every snapshot. This computer fetches the files its records need,
      * shares the ones the folder lacks, and removes files no record uses any more (and that aren't
      * kept for something in the Trash), here and in the folder. The contents stay encrypted with the
@@ -369,6 +369,7 @@ public class FolderSync {
      */
     private void syncFiles(SyncFolder folder) throws IOException {
         Set<String> needed = new HashSet<>(jdbc.queryForList("SELECT DISTINCT blob_key FROM candidate_file", String.class));
+        needed.addAll(jdbc.queryForList("SELECT image_key FROM content_post WHERE image_key IS NOT NULL", String.class));
         // Files of trashed records too, so a restore on any computer finds them.
         for (String keys : jdbc.queryForList("SELECT blob_keys FROM trash_item WHERE blob_keys IS NOT NULL", String.class)) {
             needed.addAll(List.of(keys.trim().split("\\s+")));
@@ -389,7 +390,7 @@ public class FolderSync {
             }
         }
         if (fetched > 0) {
-            log.info("Fetched {} candidate files from the sync folder", fetched);
+            log.info("Fetched {} files from the sync folder", fetched);
         }
 
         for (String key : here) {
@@ -405,6 +406,7 @@ public class FolderSync {
         List<String> unused = jdbc.queryForList("""
                 SELECT blob_key FROM file_blob b
                 WHERE NOT EXISTS (SELECT 1 FROM candidate_file f WHERE f.blob_key = b.blob_key)
+                  AND NOT EXISTS (SELECT 1 FROM content_post p WHERE p.image_key = b.blob_key)
                   AND NOT EXISTS (SELECT 1 FROM trash_item t WHERE position(b.blob_key IN coalesce(t.blob_keys, '')) > 0)
                   AND b.created_at < now() - interval '1 minute'
                 """, String.class);

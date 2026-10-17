@@ -222,6 +222,8 @@ export const api = {
   marketing: {
     /** The week holding `date` (YYYY-MM-DD, this week if left out) and the ideas without a date. */
     week: (date) => get('/api/marketing/week', { date }),
+    /** Posts from today on that aren't posted yet, and missed ones from the past week. */
+    upcoming: () => get('/api/marketing/upcoming'),
     posts: crud('/api/marketing/posts'),
     /** { postedOn, postUrl }; the day defaults to today. */
     posted: (id, body) => post(`/api/marketing/posts/${id}/posted`, body),
@@ -230,6 +232,30 @@ export const api = {
     draft: (id, body) => post(`/api/marketing/posts/${id}/draft`, body),
     /** { count, focus } gives { ideas, provider, costCents }. Not saved. */
     suggest: (body) => post('/api/marketing/ideas/suggest', body),
+    /** The style, posting days and the focus of `month` (YYYY-MM). */
+    plan: (month) => get('/api/marketing/plan', { month }),
+    savePlan: (body) => put('/api/marketing/plan', body),
+    /** { date, focus }: fills the week's open posting days with AI drafts. */
+    setUpWeek: (body) => post('/api/marketing/week/setup', body),
+    /** Sends the picture file as is; the server encrypts it before storing it. */
+    uploadPicture: (id, file) =>
+      client
+        .post(`/api/marketing/posts/${id}/image`, file, { headers: { 'Content-Type': 'application/octet-stream' } })
+        .then((r) => r.data),
+    /** { direction } gives { post, costCents }. */
+    generatePicture: (id, body) => post(`/api/marketing/posts/${id}/image/generate`, body),
+    removePicture: (id) => del(`/api/marketing/posts/${id}/image`),
+    /** Posts it to its owner's LinkedIn profile and marks it posted. */
+    publish: (id) => post(`/api/marketing/posts/${id}/publish`),
+  },
+  linkedin: {
+    status: () => get('/api/linkedin'),
+    /** { clientId, clientSecret } of the firm's LinkedIn app. */
+    saveApp: (body) => put('/api/linkedin/app', body),
+    removeApp: () => del('/api/linkedin/app'),
+    /** { url }: LinkedIn's sign-in page for the firm's app. */
+    connect: () => get('/api/linkedin/connect'),
+    disconnect: () => del('/api/linkedin/connection'),
   },
   backups: {
     status: () => get('/api/backups'),

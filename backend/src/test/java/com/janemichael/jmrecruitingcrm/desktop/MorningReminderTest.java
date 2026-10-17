@@ -36,7 +36,7 @@ class MorningReminderTest {
 
     @Test
     void listsTheDayAndSaysHowToReachTheTarget() {
-        Message message = MorningReminder.compose(new Counts(18, 2, 4, 3, 1, 40, 0, 0, 0, 0), 30);
+        Message message = MorningReminder.compose(new Counts(18, 2, 4, 3, 1, 40, 0, 0, 0, 0, 0), 30);
 
         assertThat(message.title()).isEqualTo("Good morning. 24 contacts are due today.");
         assertThat(message.body()).isEqualTo("18 sequence touches, 2 replies to answer and 4 follow-ups. "
@@ -47,7 +47,7 @@ class MorningReminderTest {
 
     @Test
     void countsSequencesToRestartWithTheContacts() {
-        Message message = MorningReminder.compose(new Counts(2, 0, 1, 0, 0, 0, 0, 0, 0, 3), 6);
+        Message message = MorningReminder.compose(new Counts(2, 0, 1, 0, 0, 0, 0, 0, 0, 3, 0), 6);
         assertThat(message.title()).isEqualTo("Good morning. 6 contacts are due today.");
         assertThat(message.body()).isEqualTo("2 sequence touches, 1 follow-up and 3 sequences to restart. "
                 + "Click to open JM CRM.");
@@ -55,33 +55,43 @@ class MorningReminderTest {
 
     @Test
     void namesInterviewsTodayAndDebriefsToDo() {
-        Message busy = MorningReminder.compose(new Counts(3, 0, 0, 0, 0, 0, 1, 2, 0, 0), 3);
+        Message busy = MorningReminder.compose(new Counts(3, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0), 3);
         assertThat(busy.body()).isEqualTo("3 sequence touches. 1 interview today and 2 interview debriefs to do. "
                 + "Click to open JM CRM.");
 
-        Message checkIn = MorningReminder.compose(new Counts(0, 0, 0, 0, 0, 0, 0, 1, 2, 0), 30);
+        Message checkIn = MorningReminder.compose(new Counts(0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0), 30);
         assertThat(checkIn.body()).isEqualTo("1 interview debrief to do and 2 guarantee check-ins due. Click to open JM CRM.");
 
-        Message onlyInterviews = MorningReminder.compose(new Counts(0, 0, 0, 0, 0, 0, 2, 0, 0, 0), 30);
+        Message onlyInterviews = MorningReminder.compose(new Counts(0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0), 30);
         assertThat(onlyInterviews.title()).isEqualTo("Good morning. No contacts are due today.");
         assertThat(onlyInterviews.body()).isEqualTo("2 interviews today. Click to open JM CRM.");
     }
 
     @Test
+    void namesTodaysLinkedInPosts() {
+        Message posts = MorningReminder.compose(new Counts(2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1), 2);
+        assertThat(posts.body()).isEqualTo("2 sequence touches. 1 LinkedIn post to put up. Click to open JM CRM.");
+
+        Message onlyPosts = MorningReminder.compose(new Counts(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2), 30);
+        assertThat(onlyPosts.title()).isEqualTo("Good morning. No contacts are due today.");
+        assertThat(onlyPosts.body()).isEqualTo("1 interview today and 2 LinkedIn posts to put up. Click to open JM CRM.");
+    }
+
+    @Test
     void leavesOutWhatIsntDue() {
-        Message one = MorningReminder.compose(new Counts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0), 30);
+        Message one = MorningReminder.compose(new Counts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 30);
         assertThat(one.title()).isEqualTo("Good morning. 1 contact is due today.");
         assertThat(one.body()).isEqualTo("1 sequence touch. Click to open JM CRM.");
 
-        Message noContacts = MorningReminder.compose(new Counts(0, 0, 0, 2, 0, 0, 0, 0, 0, 0), 30);
+        Message noContacts = MorningReminder.compose(new Counts(0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0), 30);
         assertThat(noContacts.title()).isEqualTo("Good morning. No contacts are due today.");
         assertThat(noContacts.body()).isEqualTo("Follow up with 2 candidates. Click to open JM CRM.");
 
-        Message nothing = MorningReminder.compose(new Counts(0, 0, 0, 0, 0, 3, 0, 0, 0, 0), 30);
+        Message nothing = MorningReminder.compose(new Counts(0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0), 30);
         assertThat(nothing.title()).isEqualTo("Good morning. Nothing is due today.");
         assertThat(nothing.body()).isEqualTo("Add 3 new contacts on Today to reach 30. Click to open JM CRM.");
 
-        Message full = MorningReminder.compose(new Counts(35, 0, 0, 0, 0, 50, 0, 0, 0, 0), 30);
+        Message full = MorningReminder.compose(new Counts(35, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0), 30);
         assertThat(full.body()).doesNotContain("Add");
     }
 

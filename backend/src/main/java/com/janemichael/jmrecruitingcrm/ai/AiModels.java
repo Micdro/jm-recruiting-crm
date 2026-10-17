@@ -31,6 +31,13 @@ public final class AiModels {
             new Model(AiProviderId.OPENAI, "gpt-6.1-sol", "GPT-6.1 Sol", 2.00, 10.00, 0, 0),
             new Model(AiProviderId.OPENAI, "gpt-6-luna", "GPT-6 Luna (lowest cost)", 0.10, 0.50, 0, 0));
 
+    /**
+     * The model OpenAI makes pictures with: OpenAI's API pricing page, October 2026. It's priced by
+     * tokens (text in, picture out) and isn't offered for writing, so it isn't in {@link #ALL}.
+     */
+    public static final Model PICTURES = new Model(AiProviderId.OPENAI, "gpt-image-2.5-flare", "GPT Image 2.5 Flare",
+            5.00, 30.00, 0, 0);
+
     /** Used for a model that's no longer listed (one picked before an update removed it): the priciest one. */
     private static final Model PRICIEST = ALL.stream()
             .max(Comparator.comparingDouble(Model::outputPerMillion))
@@ -53,6 +60,9 @@ public final class AiModels {
 
     /** A model's prices. An unlisted model is priced like the priciest listed one, so the limits still hold. */
     static Model pricing(String id) {
+        if (PICTURES.id().equals(id)) {
+            return PICTURES;
+        }
         return ALL.stream().filter(model -> model.id().equals(id)).findFirst().orElse(PRICIEST);
     }
 }

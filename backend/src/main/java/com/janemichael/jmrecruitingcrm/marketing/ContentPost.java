@@ -77,6 +77,18 @@ public class ContentPost extends Auditable {
     @JoinColumn(name = "owner_id")
     private AppUser owner;
 
+    /** The picture's file in file_blob, encrypted like candidates' files; null when there's none. */
+    @Column(name = "image_key")
+    private String imageKey;
+
+    /** image/jpeg, image/png, image/gif or image/webp. */
+    @Column(name = "image_type")
+    private String imageType;
+
+    /** UPLOAD or AI. */
+    @Column(name = "image_source")
+    private String imageSource;
+
     public Long getId() {
         return id;
     }
@@ -191,5 +203,24 @@ public class ContentPost extends Auditable {
 
     public void setOwner(AppUser owner) {
         this.owner = owner;
+    }
+
+    public String getImageKey() {
+        return imageKey;
+    }
+
+    public String getImageType() {
+        return imageType;
+    }
+
+    public String getImageSource() {
+        return imageSource;
+    }
+
+    /** Sets or, with nulls, removes the picture. */
+    public void setImage(String key, String type, String source) {
+        this.imageKey = key;
+        this.imageType = type;
+        this.imageSource = source;
     }
 }

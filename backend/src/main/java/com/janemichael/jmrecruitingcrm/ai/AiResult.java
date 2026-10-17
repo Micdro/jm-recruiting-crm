@@ -25,6 +25,17 @@ public record AiResult(AiProviderId provider, String model, JsonNode output, AiU
         return values;
     }
 
+    /** A list-of-objects field's entries. */
+    public List<JsonNode> objects(String field) {
+        List<JsonNode> values = new ArrayList<>();
+        for (JsonNode value : output.path(field)) {
+            if (value.isObject()) {
+                values.add(value);
+            }
+        }
+        return values;
+    }
+
     public int costCents() {
         return usage.costCents();
     }

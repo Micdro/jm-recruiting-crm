@@ -38,8 +38,9 @@ public class MorningReminder {
     static final Duration LATE_BY_AT_MOST = Duration.ofHours(4);
 
     /** What's due for one person today. {@code waiting}: new contacts not yet in anyone's queue. */
+    /** @param posts LinkedIn posts planned for today that aren't up yet */
     public record Counts(int touches, int replies, int followUps, int candidates, int companies, int waiting,
-                         int interviews, int debriefs, int checkIns, int restarts) {
+                         int interviews, int debriefs, int checkIns, int restarts, int posts) {
     }
 
     public record Message(String title, String body) {
@@ -186,12 +187,14 @@ public class MorningReminder {
                      AND EXISTS (SELECT 1 FROM (VALUES (30), (60)) AS mark(days)
                         WHERE pl.start_date + mark.days <= :today
                         AND (pl.guarantee_end_date IS NULL OR pl.start_date + mark.days <= pl.guarantee_end_date)
-                        AND (pl.checked_in_on IS NULL OR pl.checked_in_on < pl.start_date + mark.days))) AS check_ins
+                        AND (pl.checked_in_on IS NULL OR pl.checked_in_on < pl.start_date + mark.days))) AS check_ins,
+                  (SELECT count(*) FROM content_post WHERE owner_id = :user AND planned_for = :today
+                     AND status <> 'POSTED') AS posts
                 """, params, (row, number) -> new Counts(
                 row.getInt("touches"), row.getInt("replies"), row.getInt("follow_ups"),
                 row.getInt("candidates"), row.getInt("companies"), row.getInt("waiting"),
                 row.getInt("interviews"), row.getInt("debriefs"), row.getInt("check_ins"),
-                row.getInt("restarts")));
+                row.getInt("restarts"), row.getInt("posts")));
         return compose(counts, dailyTouchTarget);
     }
 
@@ -213,6 +216,9 @@ public class MorningReminder {
         }
         if (counts.checkIns() > 0) {
             interviews.add(count(counts.checkIns(), "guarantee check-in", "guarantee check-ins") + " due");
+        }
+        if (counts.posts() > 0) {
+            interviews.add(count(counts.posts(), "LinkedIn post", "LinkedIn posts") + " to put up");
         }
 
         String title;

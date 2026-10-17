@@ -60,3 +60,73 @@ test.describe('Marketing', () => {
     await expect(ideas.getByRole('button', { name: title })).toBeVisible();
   });
 });
+
+test.describe('Marketing plan, pictures and posting', () => {
+  // A 1x1 PNG.
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    'base64',
+  );
+
+  test('saves the style and a posting day', async ({ page }) => {
+    await page.goto('/marketing?view=plan');
+    const style = page.getByLabel('How the posts should sound');
+    const before = await style.inputValue();
+    const marker = `Short sentences. E2E ${Date.now()}`;
+    await style.fill(marker);
+    await page.getByRole('button', { name: 'Add a posting day' }).click();
+    const days = page.getByRole('region', { name: 'Posting days' });
+    const last = days.getByLabel('Day', { exact: true }).last();
+    await last.selectOption({ label: 'Wednesday' });
+    await days.getByLabel('About', { exact: true }).last().selectOption({ label: 'FDE hiring' });
+    await page.getByRole('button', { name: 'Save plan' }).click();
+    await expect(page.getByRole('status')).toContainText('Plan saved');
+
+    await page.reload();
+    await expect(page.getByLabel('How the posts should sound')).toHaveValue(marker);
+    await expect(days.getByLabel('Day', { exact: true }).last()).toHaveValue('WEDNESDAY');
+
+    // Put the plan back as it was for other runs.
+    await page.getByLabel('How the posts should sound').fill(before);
+    await days.getByRole('button', { name: 'Remove Wednesday' }).last().click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
+    await expect(page.getByRole('status')).toContainText('Plan saved');
+  });
+
+  test('shows the redirect URL to add to the firm’s LinkedIn app', async ({ page }) => {
+    await page.goto('/marketing?view=plan');
+    const panel = page.getByRole('region', { name: 'Posting to LinkedIn' });
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('code')).toContainText('/api/linkedin/callback');
+  });
+
+  test('uploads a picture and shows the post in Upcoming and on Today', async ({ page, crm }) => {
+    const title = uniqueName('Platform engineers inside a bank');
+    const created = await crm.api
+      .post('/api/marketing/posts', { data: { title, body: 'Model risk review is part of the product.', plannedFor: isoDate(0) } })
+      .then((response) => response.json());
+    crm.track('posts', created.id);
+
+    await page.goto(`/marketing?post=${created.id}`);
+    const editor = page.getByRole('dialog', { name: title });
+    await editor.getByLabel('Upload picture').setInputFiles({ name: 'picture.png', mimeType: 'image/png', buffer: PNG });
+    await expect(editor.getByRole('img', { name: 'The post’s picture' })).toBeVisible();
+    const saved = await crm.getJson(`/api/marketing/posts/${created.id}`);
+    expect(saved.picture).toMatchObject({ source: 'UPLOAD', ready: true });
+    // How it opens in the feed: this one is short enough to show whole.
+    await expect(editor.getByLabel('How it opens on LinkedIn')).toContainText('The whole post shows in the feed.');
+    // Not connected to LinkedIn here, so it says how to post.
+    await expect(editor.getByRole('link', { name: /connect your LinkedIn/ })).toBeVisible();
+    await editor.getByRole('button', { name: 'Close' }).first().click();
+
+    await page.getByText('Upcoming', { exact: true }).click();
+    const card = page.getByRole('article', { name: title });
+    await expect(card).toContainText('Today');
+    await expect(card.locator('img')).toBeVisible();
+
+    await page.goto('/');
+    const today = page.getByRole('region', { name: /LinkedIn posts/ });
+    await expect(today).toContainText(title);
+    await expect(today.getByRole('link', { name: 'Connect LinkedIn to post' }).first()).toBeVisible();
+  });
+});
