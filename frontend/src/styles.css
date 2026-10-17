@@ -150,6 +150,9 @@ textarea {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  /* On a short window the menu scrolls, so every page stays reachable. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px 14px 18px;
   background: var(--navy);
   color: #dce5ef;
@@ -3491,6 +3494,7 @@ a.cell-title:hover {
     position: sticky;
     z-index: 20;
     height: auto;
+    max-height: 100vh;
     padding: 10px 16px;
   }
 
