@@ -26,3 +26,37 @@ Thumbs.db
 # Postman
 .postman/
 postman/
+
+# Customer, client and candidate data never goes in this repository. These are the files it
+# travels in: spreadsheets and CSVs (ClickUp and CRM exports, imports), CRM backups and sync
+# files, resumes, invoices, contact cards, emails and database dumps. CI fails if one is added.
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.xlsm
+*.ods
+*.numbers
+*.jmbak
+*.jmcrm
+.jmcrm/
+*.pdf
+*.doc
+*.docx
+*.rtf
+*.odt
+*.pages
+*.vcf
+*.eml
+*.msg
+*.mbox
+*.dump
+*.pgdump
+*.backup
+*.bak
+*.sql
+!backend/src/main/resources/db/migration/*.sql
+*.db
+*.sqlite
+*.sqlite3
+*.mv.db

@@ -193,6 +193,11 @@ Build with `docker build -t jm-recruiting-crm .` and set:
 - **Browser protections.** A strict Content-Security-Policy (only the app's own scripts, styles
   and fonts), HSTS, no framing, no referrer leaks and no camera, microphone or location access.
 - **In transit.** HTTPS to the browser; TLS to the database whenever it's offered.
+- **No customer data on GitHub.** This repository holds code only. Records live in each
+  computer's database and the shared sync folder. `.gitignore` keeps out the files data travels
+  in (CSVs and spreadsheets, exports, `.jmbak` backups, `.jmcrm` sync files, resumes, invoices,
+  contact cards, emails, database dumps), and CI fails, without publishing a release, if one is
+  committed anyway. Tests use made-up people and companies.
 - CSRF protection on every change, and every `/api` endpoint except the health check requires
   sign-in. Admin-only actions are checked on the server.
 
@@ -242,10 +247,12 @@ creates; test records have `E2E` in their names.
 GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main` and `feature/**` and on
 pull requests:
 
-1. Backend unit and integration tests against PostgreSQL
-2. Frontend lint and production build
-3. Playwright API and UI tests against the full stack
-4. The production Docker image build
+1. No customer data in the repository: fails if a CSV, spreadsheet, backup, resume, invoice or
+   database dump (anything `.gitignore` keeps out) is committed
+2. Backend unit and integration tests against PostgreSQL
+3. Frontend lint and production build
+4. Playwright API and UI tests against the full stack
+5. The production Docker image build
 
 Failures are posted as annotations on the commit, including the backend log when the
 end-to-end job fails.

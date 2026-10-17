@@ -13,6 +13,25 @@ env:
   SPRING_DATASOURCE_PASSWORD: postgres
 
 jobs:
+  # Customer, client and candidate data never goes on GitHub. .gitignore lists the files it
+  # travels in (spreadsheets, exports, backups, resumes, invoices, dumps); this fails if one of
+  # them, or anything else .gitignore keeps out, has been committed anyway.
+  no-data:
+    name: No customer data in the repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check for files .gitignore keeps out
+        run: |
+          # Case-insensitive, as on Windows and Macs, so Resume.PDF counts as well as resume.pdf.
+          files=$(git -c core.ignorecase=true ls-files --cached --ignored --exclude-standard)
+          if [ -n "$files" ]; then
+            echo "::error title=Files that must not be in the repository::These are committed but .gitignore keeps them out. If any holds customer, client or candidate data, remove it from the history too, not just the latest commit.%0A$(echo "$files" | head -50 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            exit 1
+          fi
+          echo "No spreadsheets, exports, backups, resumes, invoices or dumps are committed."
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -289,6 +308,8 @@ jobs:
 
   windows:
     name: Windows app builds, starts and sets up
+    # Never publish a release from a commit that holds a data file.
+    needs: no-data
     runs-on: windows-latest
     timeout-minutes: 30
     permissions:
