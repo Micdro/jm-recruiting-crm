@@ -4,7 +4,7 @@ import { api, errorMessage } from '../api.js';
 import { formatDate, href } from '../format.js';
 import { useAuth, useToast, useUsers } from '../hooks.js';
 import { POST_ACCOUNT, POST_STATUS, POST_THEME, options } from '../labels.js';
-import { POST_LIMIT, TITLE_LIMIT, dollars, postingState, useLinkedIn } from '../marketing.js';
+import { POST_LIMIT, TITLE_LIMIT, dollars, fold, postingState, useLinkedIn } from '../marketing.js';
 import { ConfirmButton, ErrorNote, ExternalLink } from './Bits.jsx';
 import { OwnerField, SelectField, TextArea, TextField } from './Fields.jsx';
 
@@ -212,6 +212,7 @@ export default function PostEditor({ post, onClose, onChanged }) {
   const ownerFirstName = users.find((person) => String(person.id) === form.ownerId)?.displayName.split(' ')[0] ?? 'Its owner';
   const statuses = isPosted ? POST_STATUS : { IDEA: POST_STATUS.IDEA, DRAFT: POST_STATUS.DRAFT, READY: POST_STATUS.READY };
   const tooLong = form.body.length > POST_LIMIT;
+  const opening = fold(form.body.trim());
 
   return (
     <form className="form post-form" onSubmit={submit}>
@@ -288,6 +289,20 @@ export default function PostEditor({ post, onClose, onChanged }) {
             </>
           )}
         </p>
+        {opening.shown && (
+          <div className="post-fold" aria-label="How it opens on LinkedIn">
+            <p className="post-fold-label">How it opens in the feed</p>
+            <p className="post-fold-text">
+              {opening.shown}
+              {opening.cut && <span className="post-fold-more">…see more</span>}
+            </p>
+            <p className="field-hint">
+              {opening.cut
+                ? 'LinkedIn shows about this much before “see more”. These lines decide whether people read on.'
+                : 'The whole post shows in the feed.'}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="post-picture-field">

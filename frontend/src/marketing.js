@@ -79,3 +79,25 @@ export function postingState(post, user, linkedin) {
   if (!linkedin.me || linkedin.me.expired) return 'connect';
   return 'ready';
 }
+
+/**
+ * Where LinkedIn's feed cuts a post off with "…see more". LinkedIn doesn't publish the rule; on a
+ * computer it's about 210 characters, or the third line if that comes first (blank lines count).
+ */
+export const FOLD_CHARS = 210;
+export const FOLD_LINES = 3;
+
+export function fold(text) {
+  if (!text) return { shown: '', cut: false };
+  const lines = text.split('\n');
+  let shown = lines.slice(0, FOLD_LINES).join('\n');
+  let cut = lines.length > FOLD_LINES && lines.slice(FOLD_LINES).some((line) => line.trim());
+  if (shown.length > FOLD_CHARS) {
+    // Cut at a space, as LinkedIn does, unless that would lose too much.
+    let at = shown.lastIndexOf(' ', FOLD_CHARS);
+    if (at < FOLD_CHARS * 0.6) at = FOLD_CHARS;
+    shown = shown.slice(0, at);
+    cut = true;
+  }
+  return { shown: shown.trimEnd(), cut };
+}

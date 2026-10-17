@@ -113,6 +113,8 @@ test.describe('Marketing plan, pictures and posting', () => {
     await expect(editor.getByRole('img', { name: 'The post’s picture' })).toBeVisible();
     const saved = await crm.getJson(`/api/marketing/posts/${created.id}`);
     expect(saved.picture).toMatchObject({ source: 'UPLOAD', ready: true });
+    // How it opens in the feed: this one is short enough to show whole.
+    await expect(editor.getByLabel('How it opens on LinkedIn')).toContainText('The whole post shows in the feed.');
     // Not connected to LinkedIn here, so it says how to post.
     await expect(editor.getByRole('link', { name: /connect your LinkedIn/ })).toBeVisible();
     await editor.getByRole('button', { name: 'Close' }).first().click();

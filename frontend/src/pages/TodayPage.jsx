@@ -26,10 +26,10 @@ import {
   SEARCH_STATUS,
   SHORTLIST_STAGES,
 } from '../labels.js';
-import { formatDate, formatLongDay, formatWeekday, money, plural } from '../format.js';
+import { formatDate, formatDay, formatLongDay, formatWeekday, money, plural } from '../format.js';
 import { useAuth, useLoader, useTitle, useToast } from '../hooks.js';
 import { interviewWhen } from '../interviews.js';
-import { postedAs } from '../marketing.js';
+import { postedAs, useLinkedIn } from '../marketing.js';
 import { useUndoableChange } from '../undo.js';
 
 const QUICK_TYPES = ['LINKEDIN', 'CALL'];
@@ -84,6 +84,7 @@ export default function TodayPage() {
 
           <div className="today-grid">
             <div className="today-main">
+              <LinkedInReminder />
               <Interviews data={data} scope={scope} onDebrief={(entry, side) => setDebriefing({ entry, side })} />
               <CheckIns data={data} scope={scope} onCheckIn={setCheckingIn} />
               <PostsToday scope={scope} today={data.today} />
@@ -629,6 +630,25 @@ function CompanyFollowUps({ data, onChanged }) {
 }
 
 /** Companies that posted forward deployed or AI platform roles since the team last looked. */
+/** A nudge to connect LinkedIn again in the week before the connection runs out, so posting doesn't stop. */
+function LinkedInReminder() {
+  const linkedin = useLinkedIn();
+  const me = linkedin.data?.me;
+  if (!linkedin.data?.appAdded || !me || !(me.expiring || me.expired)) return null;
+  return (
+    <div className="notice notice-warn" role="status">
+      <p>
+        {me.expired
+          ? 'Your LinkedIn connection has run out, so Post to LinkedIn won’t work until you connect again.'
+          : `Your LinkedIn connection runs out on ${formatDay(me.expiresAt)}. Connect again to keep posting from the CRM.`}
+      </p>
+      <Link to="/marketing?view=plan" className="btn btn-sm">
+        Connect again
+      </Link>
+    </div>
+  );
+}
+
 /** Today's LinkedIn posts, and ones from the past week that didn't go up, with a button to post each. */
 function PostsToday({ scope, today }) {
   const { user } = useAuth();

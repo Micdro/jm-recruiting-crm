@@ -11,7 +11,7 @@ import SuggestIdeas from '../components/SuggestIdeas.jsx';
 import { formatDate, formatWeekday, plural, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 import { POST_ACCOUNT, POST_STATUS, POST_THEME } from '../labels.js';
-import { addDays, dayLabel, mondayOf, monthOf, postedAs } from '../marketing.js';
+import { addDays, dayLabel, fold, mondayOf, monthOf, postedAs } from '../marketing.js';
 
 const VIEWS = [
   ['week', 'Week'],
@@ -306,6 +306,8 @@ function UpcomingView({ upcoming, today, onOpen, onChanged }) {
 
 function PostPreview({ post, today, onOpen, onChanged }) {
   const missed = post.plannedFor < today;
+  const [expanded, setExpanded] = useState(false);
+  const opening = fold(post.body?.trim());
   return (
     <article className={missed ? 'post-preview post-preview-missed' : 'post-preview'} aria-label={post.title}>
       <header className="post-preview-head">
@@ -315,7 +317,14 @@ function PostPreview({ post, today, onOpen, onChanged }) {
       <h3 className="post-preview-title">{post.title}</h3>
       <p className="post-preview-who">{postedAs(post)}</p>
       {post.body ? (
-        <p className="post-preview-text">{post.body}</p>
+        <p className="post-preview-text">
+          {expanded || !opening.cut ? post.body.trim() : opening.shown}
+          {opening.cut && (
+            <button type="button" className="post-fold-more link-button" onClick={() => setExpanded((open) => !open)}>
+              {expanded ? ' show less' : '…see more'}
+            </button>
+          )}
+        </p>
       ) : (
         <p className="post-preview-text muted">Not written yet.</p>
       )}
