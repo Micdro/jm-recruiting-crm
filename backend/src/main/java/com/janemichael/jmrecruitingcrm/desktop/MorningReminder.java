@@ -195,10 +195,15 @@ public class MorningReminder {
                 row.getInt("candidates"), row.getInt("companies"), row.getInt("waiting"),
                 row.getInt("interviews"), row.getInt("debriefs"), row.getInt("check_ins"),
                 row.getInt("restarts"), row.getInt("posts")));
-        return compose(counts, dailyTouchTarget);
+        return compose(counts, dailyTouchTarget, LocalDate.now(clock).getDayOfWeek() == DayOfWeek.MONDAY);
     }
 
     static Message compose(Counts counts, int target) {
+        return compose(counts, target, false);
+    }
+
+    /** @param monday adds a pointer to the week's brief on Today */
+    static Message compose(Counts counts, int target, boolean monday) {
         int contacts = counts.touches() + counts.replies() + counts.followUps() + counts.restarts();
         List<String> others = new ArrayList<>();
         if (counts.candidates() > 0) {
@@ -258,6 +263,9 @@ public class MorningReminder {
         int more = Math.min(target - contacts, counts.waiting());
         if (more > 0) {
             sentences.add("Add " + count(more, "new contact", "new contacts") + " on Today to reach " + target + ".");
+        }
+        if (monday) {
+            sentences.add("This week's brief is on Today.");
         }
         sentences.add("Click to open JM CRM.");
         return new Message(title, String.join(" ", sentences));
