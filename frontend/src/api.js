@@ -239,6 +239,8 @@ export const api = {
     /** Posts from today on that aren't posted yet, and missed ones from the past week. */
     upcoming: () => get('/api/marketing/upcoming'),
     posts: crud('/api/marketing/posts'),
+    /** Saved post templates, by name: { name, title, body, notes, theme, account }. */
+    templates: crud('/api/marketing/templates'),
     /** { postedOn, postUrl }; the day defaults to today. */
     posted: (id, body) => post(`/api/marketing/posts/${id}/posted`, body),
     results: (id, body) => put(`/api/marketing/posts/${id}/results`, body),

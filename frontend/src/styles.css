@@ -3957,6 +3957,41 @@ a.cell-title:hover {
   align-items: flex-end;
 }
 
+/* The template picker at the top of a post, and saving a post as a template. */
+.post-template-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.post-template-pick {
+  flex: 0 1 320px;
+}
+
+.post-template-note {
+  flex: 1 1 240px;
+  margin: 0 0 10px;
+}
+
+.post-template-save {
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.post-template-save .post-step {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.post-template-save .field-hint {
+  margin: 8px 0 0;
+}
+
 .post-step {
   display: flex;
   flex-wrap: wrap;

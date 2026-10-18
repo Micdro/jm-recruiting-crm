@@ -12,6 +12,7 @@ public final class SyncTables {
             "app_user",
             "message_template",
             "content_post",
+            "post_template",
             "firm_setting",
             "company",
             "contact",

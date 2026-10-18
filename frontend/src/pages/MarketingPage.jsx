@@ -5,6 +5,7 @@ import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.
 import MarketingPlan from '../components/MarketingPlan.jsx';
 import Modal from '../components/Modal.jsx';
 import PostEditor from '../components/PostEditor.jsx';
+import PostTemplates from '../components/PostTemplates.jsx';
 import PostToLinkedIn from '../components/PostToLinkedIn.jsx';
 import SetUpWeek from '../components/SetUpWeek.jsx';
 import SuggestIdeas from '../components/SuggestIdeas.jsx';
@@ -17,6 +18,7 @@ const VIEWS = [
   ['week', 'Week'],
   ['upcoming', 'Upcoming'],
   ['plan', 'Plan'],
+  ['templates', 'Templates'],
 ];
 
 /** "Drafts are written by Claude Sonnet 5.5.", or what's missing before drafting can work. */
@@ -29,8 +31,9 @@ function aiLine(ai) {
 }
 
 /**
- * The team's LinkedIn posts: the week's calendar, everything coming up with its picture, and the
- * plan (style, posting days, monthly focus, LinkedIn connection) that AI drafts follow.
+ * The team's LinkedIn posts: the week's calendar, everything coming up with its picture, the plan
+ * (style, posting days, monthly focus, LinkedIn connection) that AI drafts follow, and the
+ * templates a post can start from.
  */
 export default function MarketingPage() {
   useTitle('Marketing');
@@ -47,6 +50,8 @@ export default function MarketingPage() {
   const linkedId = params.get('post');
   const linked = useLoader(() => (linkedId ? api.marketing.posts.get(linkedId) : Promise.resolve(null)), [linkedId]);
   const [editing, setEditing] = useState(null);
+  // The template a new post starts from, when it's opened with Use on Templates.
+  const [startFrom, setStartFrom] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
   const plan = useLoader(
@@ -68,6 +73,7 @@ export default function MarketingPage() {
   const open = editing ?? (linkedId && linked.data?.id === Number(linkedId) ? linked.data : null);
   function closeEditor() {
     setEditing(null);
+    setStartFrom(null);
     if (linkedId) setParam({ post: null });
   }
 
@@ -124,9 +130,18 @@ export default function MarketingPage() {
 
       {view === 'plan' && <MarketingPlan today={today} />}
 
+      {view === 'templates' && (
+        <PostTemplates
+          onUse={(template) => {
+            setStartFrom(template);
+            setEditing({});
+          }}
+        />
+      )}
+
       {open && (
         <Modal title={open.id ? open.title : 'Add a post'} onClose={closeEditor} wide>
-          <PostEditor post={open} onClose={closeEditor} onChanged={reload} />
+          <PostEditor post={open} template={startFrom} onClose={closeEditor} onChanged={reload} />
         </Modal>
       )}
 

@@ -9,6 +9,8 @@ import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PlanRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PlanResponse;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostResponse;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostTemplateRequest;
+import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostTemplateResponse;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostedRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.ResultsRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.SetupRequest;
@@ -40,7 +42,7 @@ import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 
-/** The Marketing page: the week's posts, the ideas waiting, and AI drafts. */
+/** The Marketing page: the week's posts, the ideas waiting, AI drafts and the post templates. */
 @RestController
 @RequestMapping("/api/marketing")
 public class MarketingController {
@@ -50,14 +52,16 @@ public class MarketingController {
     private final WeekPlanner planner;
     private final PostPictures pictures;
     private final PostPublisher publisher;
+    private final PostTemplateService templates;
 
     public MarketingController(MarketingService marketing, PostDrafter drafter, WeekPlanner planner,
-                               PostPictures pictures, PostPublisher publisher) {
+                               PostPictures pictures, PostPublisher publisher, PostTemplateService templates) {
         this.marketing = marketing;
         this.drafter = drafter;
         this.planner = planner;
         this.pictures = pictures;
         this.publisher = publisher;
+        this.templates = templates;
     }
 
     /** The week holding {@code date} (this week if left out), and the ideas without a date. */
@@ -178,5 +182,29 @@ public class MarketingController {
     @PostMapping("/ideas/suggest")
     public SuggestResponse suggest(@Valid @RequestBody SuggestRequest request) {
         return drafter.suggest(request);
+    }
+
+    /** The team's post templates, by name. */
+    @GetMapping("/templates")
+    public List<PostTemplateResponse> templates() {
+        return templates.list();
+    }
+
+    @PostMapping("/templates")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PostTemplateResponse createTemplate(@Valid @RequestBody PostTemplateRequest request) {
+        return templates.create(request);
+    }
+
+    @PutMapping("/templates/{id}")
+    public PostTemplateResponse updateTemplate(@PathVariable Long id, @Valid @RequestBody PostTemplateRequest request) {
+        return templates.update(id, request);
+    }
+
+    /** Deletes the template. Posts made from it keep their text. */
+    @DeleteMapping("/templates/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTemplate(@PathVariable Long id) {
+        templates.delete(id);
     }
 }
