@@ -79,7 +79,7 @@ test.describe('AI for candidates', () => {
     await expect(dialog.getByLabel('Current title')).toHaveValue('Staff ML Engineer');
     await expect(dialog.getByLabel('Experience', { exact: true })).toHaveValue('YEARS_8_9');
     await expect(dialog.getByLabel('Production evidence')).toHaveValue('- Owned fraud scoring, 40M decisions a day');
-    await dialog.getByLabel('Source', { exact: true }).selectOption({ label: 'Inbound' });
+    await dialog.getByLabel('Source', { exact: true }).selectOption('INBOUND');
     await dialog.getByRole('button', { name: 'Save candidate' }).click();
 
     await expect(page.getByRole('status')).toContainText(`Added ${name} with their resume`);
