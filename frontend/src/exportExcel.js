@@ -137,6 +137,7 @@ const SHEETS = {
       ['Accountability', 40, 'accountability', long],
       ['Regulatory constraints', 40, 'regulatoryConstraints', long],
       ['Notes', 50, 'notes', long],
+      ['Job description', 60, 'jobDescription', long],
     ],
   },
   candidates: {

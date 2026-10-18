@@ -4611,4 +4611,24 @@ a.cell-title:hover {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+
+/* AI for searches --------------------------------------------------------------- */
+
+.draft-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.draft-row .field-hint {
+  margin: 0;
+}
+
+.job-description {
+  margin-top: 16px;
+}
+
+.job-description .notes {
+  max-width: 80ch;
 }

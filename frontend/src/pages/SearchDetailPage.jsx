@@ -29,6 +29,8 @@ import { useLoader, useTitle, useToast } from '../hooks.js';
 import { candidateOffLimits, offLimitsWarning } from '../offLimits.js';
 import { INTERVIEW_STAGES } from '../interviews.js';
 import ProgressReportForm from '../components/ProgressReportForm.jsx';
+import { chosenProvider } from '../candidateAi.js';
+import { dollars } from '../marketing.js';
 
 const TABS = [
   ['pipeline', 'Pipeline'],
@@ -221,7 +223,9 @@ export default function SearchDetailPage() {
             onEditBrief={() => setModal({ kind: 'edit' })}
           />
         )}
-        {tab === 'brief' && <BriefTab search={record} onEdit={() => setModal({ kind: 'edit' })} />}
+        {tab === 'brief' && (
+          <BriefTab search={record} onEdit={() => setModal({ kind: 'edit' })} onSaved={(updated) => search.setData(updated)} />
+        )}
         {tab === 'shortlist' && <ShortlistTab search={record} entries={pipeline.data ?? []} />}
         {tab === 'history' && (
           <section className="panel">
@@ -569,7 +573,26 @@ function AddToSearch({ search, entries, onAdded, onNewCandidate }) {
 }
 
 function RationaleForm({ entry, stage, onSave, onCancel }) {
+  const ai = useLoader(() => api.ai.status(), [], 'ai:status');
   const [rationale, setRationale] = useState(entry.rationale ?? '');
+  const [drafted, setDrafted] = useState(null);
+  const [drafting, setDrafting] = useState(false);
+  const [error, setError] = useState('');
+  const canDraft = Boolean(chosenProvider(ai.data)?.hasKey);
+
+  async function draft() {
+    setDrafting(true);
+    setError('');
+    try {
+      const result = await api.pipeline.draftRationale(entry.id);
+      setRationale(result.rationale);
+      setDrafted(result);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   return (
     <form
@@ -584,7 +607,20 @@ function RationaleForm({ entry, stage, onSave, onCancel }) {
           ? `The client sees this on the shortlist. Say why ${entry.candidateName.split(' ')[0]} fits: what they owned in production and how it maps to the brief.`
           : 'Why this candidate fits the search.'}
       </p>
-      <TextArea label="Rationale" value={rationale} onChange={setRationale} rows={5} maxLength={2000} required autoFocus />
+      <TextArea label="Rationale" value={rationale} onChange={setRationale} rows={6} maxLength={2000} required autoFocus />
+      {canDraft && (
+        <div className="draft-row">
+          <button type="button" className="btn btn-sm" onClick={draft} disabled={drafting}>
+            {drafting ? 'Drafting…' : rationale.trim() ? 'Redraft with AI' : 'Draft with AI'}
+          </button>
+          <span className="field-hint">
+            {drafted
+              ? `Drafted by ${drafted.provider} for ${dollars(drafted.costCents)} from ${entry.candidateName.split(' ')[0]}’s record and the brief. Read it over, then save.`
+              : `From ${entry.candidateName.split(' ')[0]}’s record, recent call notes and the search brief. Pay stays out.`}
+          </span>
+        </div>
+      )}
+      <ErrorNote>{error}</ErrorNote>
       <div className="form-actions">
         <button type="button" className="btn" onClick={onCancel}>
           Cancel
@@ -597,7 +633,7 @@ function RationaleForm({ entry, stage, onSave, onCancel }) {
   );
 }
 
-function BriefTab({ search, onEdit }) {
+function BriefTab({ search, onEdit, onSaved }) {
   const sections = [
     ['Production outcome', search.productionOutcome],
     ['Technical scope', search.technicalScope],
@@ -607,26 +643,154 @@ function BriefTab({ search, onEdit }) {
   ];
   const filled = sections.filter(([, value]) => value);
 
-  if (filled.length === 0) {
-    return (
-      <Empty title="The brief is empty">
-        Capture the production outcome, scope, accountability and regulatory constraints from the intake call.{' '}
-        <button type="button" className="link-button" onClick={onEdit}>
-          Write the brief
-        </button>
-      </Empty>
-    );
+  return (
+    <>
+      {filled.length === 0 ? (
+        <Empty title="The brief is empty">
+          Capture the production outcome, scope, accountability and regulatory constraints from the intake call.{' '}
+          <button type="button" className="link-button" onClick={onEdit}>
+            Write the brief
+          </button>
+        </Empty>
+      ) : (
+        <section className="panel brief">
+          {sections.map(([label, value]) => (
+            <div key={label} className="brief-section">
+              <h3>{label}</h3>
+              {value ? <p className="notes">{value}</p> : <p className="muted">Not written yet.</p>}
+            </div>
+          ))}
+        </section>
+      )}
+      <JobDescription search={search} hasBrief={filled.length > 0} onSaved={onSaved} />
+    </>
+  );
+}
+
+/** The search's job description: copy it, edit it, or have AI write it from the brief. */
+function JobDescription({ search, hasBrief, onSaved }) {
+  const toast = useToast();
+  const ai = useLoader(() => api.ai.status(), [], 'ai:status');
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const canDraft = Boolean(chosenProvider(ai.data)?.hasKey) && hasBrief;
+  const text = search.jobDescription;
+
+  async function draft() {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await api.searches.draftJobDescription(search.id);
+      setEditing({ text: result.jobDescription, drafted: result });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Job description copied');
+    } catch {
+      setError('This browser didn’t allow copying. Select the text and copy it instead.');
+    }
   }
 
   return (
-    <section className="panel brief">
-      {sections.map(([label, value]) => (
-        <div key={label} className="brief-section">
-          <h3>{label}</h3>
-          {value ? <p className="notes">{value}</p> : <p className="muted">Not written yet.</p>}
+    <section className="panel job-description" aria-labelledby="job-description-heading">
+      <div className="panel-head">
+        <h2 id="job-description-heading">Job description</h2>
+        <div className="panel-actions">
+          {text && (
+            <>
+              <button type="button" className="btn btn-sm" onClick={copy}>
+                Copy
+              </button>
+              <button type="button" className="btn btn-sm" onClick={() => setEditing({ text })}>
+                Edit
+              </button>
+            </>
+          )}
+          {canDraft && (
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={draft}>
+              {busy ? 'Writing…' : text ? 'Rewrite with AI' : 'Write with AI'}
+            </button>
+          )}
         </div>
-      ))}
+      </div>
+      <ErrorNote>{error}</ErrorNote>
+      {text ? (
+        <p className="notes">{text}</p>
+      ) : (
+        <p className="muted">
+          No job description yet.{' '}
+          {canDraft ? 'Write one with AI from the brief, or ' : hasBrief ? '' : 'Fill in the brief first to have AI write one, or '}
+          <button type="button" className="link-button" onClick={() => setEditing({ text: '' })}>
+            {canDraft || !hasBrief ? 'write it yourself' : 'Write it'}
+          </button>
+          .
+        </p>
+      )}
+
+      {editing && (
+        <Modal title={`Job description: ${search.title}`} onClose={() => setEditing(null)} wide>
+          <JobDescriptionForm
+            initial={editing.text}
+            drafted={editing.drafted}
+            onCancel={() => setEditing(null)}
+            onSave={async (value) => {
+              const updated = await api.searches.saveJobDescription(search.id, value);
+              setEditing(null);
+              toast('Job description saved');
+              onSaved(updated);
+            }}
+          />
+        </Modal>
+      )}
     </section>
+  );
+}
+
+function JobDescriptionForm({ initial, drafted, onSave, onCancel }) {
+  const [value, setValue] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  return (
+    <form
+      className="form"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setBusy(true);
+        setError('');
+        try {
+          await onSave(value.trim());
+        } catch (err) {
+          setError(errorMessage(err));
+          setBusy(false);
+        }
+      }}
+    >
+      {drafted && (
+        <p className="ai-note">
+          Written by {drafted.provider} for {dollars(drafted.costCents)} from the brief. It leaves the client unnamed. Read it
+          over, then save.
+        </p>
+      )}
+      <TextArea label="Job description" value={value} onChange={setValue} rows={18} maxLength={10000} autoFocus />
+      <ErrorNote>{error}</ErrorNote>
+      <div className="form-actions">
+        <button type="button" className="btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={busy}>
+          {busy ? 'Saving…' : 'Save job description'}
+        </button>
+      </div>
+    </form>
   );
 }
 

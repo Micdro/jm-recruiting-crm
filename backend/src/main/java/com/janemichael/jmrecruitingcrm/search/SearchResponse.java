@@ -27,6 +27,7 @@ public record SearchResponse(
         String accountability,
         String regulatoryConstraints,
         String notes,
+        String jobDescription,
         Long ownerId,
         String ownerName,
         /** Candidates per pipeline stage, keyed by stage name. */
@@ -58,6 +59,7 @@ public record SearchResponse(
                 search.getAccountability(),
                 search.getRegulatoryConstraints(),
                 search.getNotes(),
+                search.getJobDescription(),
                 search.getOwner() == null ? null : search.getOwner().getId(),
                 search.getOwner() == null ? null : search.getOwner().getDisplayName(),
                 stageCounts == null ? Map.of() : stageCounts,

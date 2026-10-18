@@ -14,7 +14,7 @@ import java.util.Set;
  * has. Works like the off-limits matching on the page: "Ledgerlight AI, Inc." and "Ledgerlight" are
  * the same company, and so are "Open AI" and "OpenAI".
  */
-final class CompanyNames {
+public final class CompanyNames {
 
     private static final Set<String> LEGAL = Set.of("inc", "incorporated", "llc", "llp", "lp", "ltd", "limited",
             "corp", "corporation", "co", "company", "plc", "gmbh", "ag", "sa", "bv");
@@ -25,7 +25,7 @@ final class CompanyNames {
     }
 
     /** The ways a company's name can be written, for comparing. Empty for a blank name. */
-    static Set<String> keys(String name) {
+    public static Set<String> keys(String name) {
         if (name == null) {
             return Set.of();
         }

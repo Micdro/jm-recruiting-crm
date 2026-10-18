@@ -155,6 +155,11 @@ export const api = {
   searches: {
     ...crud('/api/searches'),
     pipeline: (id) => get(`/api/searches/${id}/pipeline`),
+    /** { notes, companyId } gives { search, companyHeard, companies, hiringManager, provider, costCents }. Not saved. */
+    readIntake: (body) => post('/api/searches/read-intake', body),
+    /** AI writes a job description from the search's brief: { jobDescription, provider, costCents }. Not saved. */
+    draftJobDescription: (id) => post(`/api/searches/${id}/job-description/draft`),
+    saveJobDescription: (id, jobDescription) => put(`/api/searches/${id}/job-description`, { jobDescription }),
   },
   candidates: {
     ...crud('/api/candidates'),
@@ -191,6 +196,8 @@ export const api = {
   pipeline: {
     add: (body) => post('/api/pipeline', body),
     update: (id, body) => put(`/api/pipeline/${id}`, body),
+    /** AI drafts why the candidate fits the search: { rationale, provider, costCents }. Not saved. */
+    draftRationale: (id) => post(`/api/pipeline/${id}/rationale/draft`),
     remove: (id) => del(`/api/pipeline/${id}`),
     /** { date: 'YYYY-MM-DD', time: 'HH:MM' or null, label }. A new date or time starts both debriefs over. */
     scheduleInterview: (id, body) => put(`/api/pipeline/${id}/interview`, body),

@@ -99,6 +99,10 @@ public class Search extends Auditable {
     @Convert(converter = EncryptedString.class)
     private String notes;
 
+    @Convert(converter = EncryptedString.class)
+    @Column(name = "job_description")
+    private String jobDescription;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id")
     private AppUser owner;
@@ -253,6 +257,14 @@ public class Search extends Auditable {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public String getJobDescription() {
+        return jobDescription;
+    }
+
+    public void setJobDescription(String jobDescription) {
+        this.jobDescription = jobDescription;
     }
 
     public AppUser getOwner() {

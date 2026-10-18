@@ -26,6 +26,7 @@ const FIELDS = {
   accountability: '',
   regulatoryConstraints: '',
   notes: '',
+  jobDescription: '',
   ownerId: '',
 };
 
@@ -72,6 +73,7 @@ export default function SearchForm({ search, onSaved, onCancel }) {
       accountability: blankToNull(form.accountability),
       regulatoryConstraints: blankToNull(form.regulatoryConstraints),
       notes: blankToNull(form.notes),
+      jobDescription: blankToNull(form.jobDescription),
       ownerId: toId(form.ownerId),
     };
 
@@ -179,6 +181,14 @@ export default function SearchForm({ search, onSaved, onCancel }) {
         maxLength={2000}
       />
       <TextArea label="Notes" value={form.notes} onChange={set('notes')} maxLength={2000} />
+      <TextArea
+        label="Job description"
+        value={form.jobDescription}
+        onChange={set('jobDescription')}
+        rows={form.jobDescription ? 10 : 3}
+        maxLength={10000}
+        hint="For the posting, or to send candidates. The Brief tab can write one with AI."
+      />
 
       <ErrorNote>{error}</ErrorNote>
       <div className="form-actions">

@@ -34,7 +34,8 @@ public class EncryptionBackfill implements ApplicationRunner {
         ENCRYPTED_COLUMNS.put("candidate", List.of("name", "email", "phone", "linkedin_url", "location",
                 "current_title", "current_company", "comp_expectation", "resume_url", "production_evidence", "notes"));
         ENCRYPTED_COLUMNS.put("job_search", List.of("title", "location", "base_min", "base_max",
-                "production_outcome", "technical_scope", "accountability", "regulatory_constraints", "notes"));
+                "production_outcome", "technical_scope", "accountability", "regulatory_constraints", "notes",
+                "job_description"));
         ENCRYPTED_COLUMNS.put("pipeline_entry", List.of("rationale", "interview_label"));
         ENCRYPTED_COLUMNS.put("placement", List.of("base_salary", "fee_amount", "notes", "bill_to_name",
                 "bill_to_email", "bill_to_address", "invoice_description"));
