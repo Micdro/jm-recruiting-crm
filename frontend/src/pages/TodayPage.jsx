@@ -9,6 +9,7 @@ import LaterMenu from '../components/LaterMenu.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
 import MessageComposer from '../components/MessageComposer.jsx';
 import Modal from '../components/Modal.jsx';
+import MondayBrief from '../components/MondayBrief.jsx';
 import PostToLinkedIn from '../components/PostToLinkedIn.jsx';
 import TallyMeter from '../components/TallyMeter.jsx';
 import Timeline from '../components/Timeline.jsx';
@@ -84,6 +85,7 @@ export default function TodayPage() {
 
           <div className="today-grid">
             <div className="today-main">
+              <MondayBrief />
               <LinkedInReminder />
               <Interviews data={data} scope={scope} onDebrief={(entry, side) => setDebriefing({ entry, side })} />
               <CheckIns data={data} scope={scope} onCheckIn={setCheckingIn} />
