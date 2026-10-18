@@ -145,6 +145,14 @@ public class SearchService {
         return SearchResponse.from(search, stageCounts().get(id));
     }
 
+    /** Saves the job description on its own, so writing one doesn't touch the rest of the search. */
+    @Transactional
+    public SearchResponse saveJobDescription(Long id, String jobDescription) {
+        Search search = find(id);
+        search.setJobDescription(Text.clean(jobDescription));
+        return SearchResponse.from(search, stageCounts().get(id));
+    }
+
     @Transactional
     public void delete(Long id) {
         if (placementRepository.existsBySearchId(id)) {
@@ -189,6 +197,7 @@ public class SearchService {
         search.setAccountability(Text.clean(request.accountability()));
         search.setRegulatoryConstraints(Text.clean(request.regulatoryConstraints()));
         search.setNotes(Text.clean(request.notes()));
+        search.setJobDescription(Text.clean(request.jobDescription()));
     }
 
     private Contact findHiringManager(Long contactId, Company company) {

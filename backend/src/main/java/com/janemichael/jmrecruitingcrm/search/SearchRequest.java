@@ -61,6 +61,11 @@ public record SearchRequest(
         @Size(max = 2000, message = "Notes must be 2000 characters or fewer")
         String notes,
 
+        @Size(max = SearchRequest.JOB_DESCRIPTION_MAX, message = "The job description must be 10,000 characters or fewer")
+        String jobDescription,
+
         Long ownerId
 ) {
+
+    public static final int JOB_DESCRIPTION_MAX = 10_000;
 }
