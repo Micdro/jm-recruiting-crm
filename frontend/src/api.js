@@ -305,6 +305,10 @@ export const api = {
     checkCompany: (id) => post(`/api/signals/companies/${id}/check`),
     reviewed: (id) => post(`/api/signals/companies/${id}/reviewed`),
   },
+  recentChanges: {
+    list: () => get('/api/recent-changes'),
+    undo: (id) => post(`/api/recent-changes/${id}/undo`),
+  },
   trash: {
     list: () => get('/api/trash'),
     restore: (id) => post(`/api/trash/${id}/restore`),

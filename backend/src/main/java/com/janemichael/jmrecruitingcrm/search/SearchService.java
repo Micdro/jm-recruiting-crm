@@ -19,6 +19,7 @@ import com.janemichael.jmrecruitingcrm.pipeline.PipelineStage;
 import com.janemichael.jmrecruitingcrm.placement.PlacementRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,7 @@ public class SearchService {
     private final ActivityLogger activityLogger;
     private final Clock clock;
     private final TrashService trash;
+    private final UndoLog undoLog;
 
     public SearchService(
             SearchRepository searchRepository,
@@ -52,8 +54,10 @@ public class SearchService {
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
             Clock clock,
-            TrashService trash
+            TrashService trash,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.trash = trash;
         this.searchRepository = searchRepository;
         this.companyRepository = companyRepository;
@@ -113,6 +117,7 @@ public class SearchService {
                     "Status changed from " + Labels.of(previous) + " to Placing (search opened)", user);
         }
 
+        undoLog.record("Opened " + named(saved), UndoLog.Kind.SEARCH, saved.getId());
         return SearchResponse.from(saved, Map.of());
     }
 
@@ -142,6 +147,7 @@ public class SearchService {
                     currentUserService.get());
         }
 
+        undoLog.record("Edited " + named(search), UndoLog.Kind.SEARCH, id);
         return SearchResponse.from(search, stageCounts().get(id));
     }
 
@@ -150,6 +156,7 @@ public class SearchService {
     public SearchResponse saveJobDescription(Long id, String jobDescription) {
         Search search = find(id);
         search.setJobDescription(Text.clean(jobDescription));
+        undoLog.record("Edited the job description for " + named(search), UndoLog.Kind.SEARCH, id);
         return SearchResponse.from(search, stageCounts().get(id));
     }
 
@@ -158,10 +165,18 @@ public class SearchService {
         if (placementRepository.existsBySearchId(id)) {
             throw new ConflictException("This search has a placement. Delete the placement first.");
         }
+        searchRepository.findWithDetailsById(id).ifPresent(search ->
+                undoLog.record("Deleted " + named(search), UndoLog.Kind.SEARCH, id));
         trash.capture(TrashKind.SEARCH, id);
         if (searchRepository.deleteSearchById(id) == 0) {
             throw new NotFoundException("Search not found");
         }
+    }
+
+    /** "Senior ML Engineer at Ledgerlight", for Recent changes. */
+    public static String named(Search search) {
+        return search.getCompany() == null ? search.getTitle()
+                : search.getTitle() + " at " + search.getCompany().getName();
     }
 
     private Map<Long, Map<String, Long>> stageCounts() {

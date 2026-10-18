@@ -19,6 +19,7 @@ import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,7 @@ public class CompanyService {
     private final TrashService trash;
     private final Clock clock;
     private final RecentChanges recentChanges;
+    private final UndoLog undoLog;
 
     public CompanyService(
             CompanyRepository companyRepository,
@@ -60,8 +62,10 @@ public class CompanyService {
             FieldEncryptor encryptor,
             TrashService trash,
             Clock clock,
-            RecentChanges recentChanges
+            RecentChanges recentChanges,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.trash = trash;
         this.clock = clock;
         this.recentChanges = recentChanges;
@@ -115,7 +119,9 @@ public class CompanyService {
         company.setStatus(request.status() == null ? CompanyStatus.LEAD : request.status());
         company.setOwner(request.ownerId() == null ? user : currentUserService.findOwner(request.ownerId()));
 
-        return response(companyRepository.save(company));
+        Company saved = companyRepository.save(company);
+        undoLog.record("Added " + saved.getName(), UndoLog.Kind.COMPANY, saved.getId());
+        return response(saved);
     }
 
     @Transactional
@@ -141,6 +147,7 @@ public class CompanyService {
                     currentUserService.get());
         }
 
+        undoLog.record("Edited " + company.getName(), UndoLog.Kind.COMPANY, id);
         return response(company);
     }
 
@@ -152,6 +159,8 @@ public class CompanyService {
         if (searchRepository.existsByCompanyId(id)) {
             throw new ConflictException(HAS_SEARCHES_MESSAGE);
         }
+        companyRepository.findById(id).ifPresent(company ->
+                undoLog.record("Deleted " + company.getName(), UndoLog.Kind.COMPANY, id));
         trash.capture(TrashKind.COMPANY, id);
         if (companyRepository.deleteCompanyById(id) == 0) {
             throw new NotFoundException("Company not found");
@@ -176,6 +185,8 @@ public class CompanyService {
         recentChanges.remember(RecentChanges.Kind.COMPANY, id, user.getId(), activity.getId(),
                 before, new FollowUp(date));
 
+        undoLog.record("Moved " + company.getName() + "'s follow-up to " + Later.day(date),
+                UndoLog.Kind.COMPANY, id);
         return response(company);
     }
 

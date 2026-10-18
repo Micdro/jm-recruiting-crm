@@ -8,6 +8,7 @@ import com.janemichael.jmrecruitingcrm.marketing.ContentEnums.PostAccount;
 import com.janemichael.jmrecruitingcrm.marketing.ContentEnums.PostTheme;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostTemplateRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostTemplateResponse;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,8 +28,10 @@ public class PostTemplateService {
 
     private final PostTemplateRepository repository;
     private final CurrentUserService currentUser;
+    private final UndoLog undoLog;
 
-    public PostTemplateService(PostTemplateRepository repository, CurrentUserService currentUser) {
+    public PostTemplateService(PostTemplateRepository repository, CurrentUserService currentUser, UndoLog undoLog) {
+        this.undoLog = undoLog;
         this.repository = repository;
         this.currentUser = currentUser;
     }
@@ -47,19 +50,24 @@ public class PostTemplateService {
         PostTemplate template = new PostTemplate();
         apply(request, template);
         template.setOwner(currentUser.get());
-        return PostTemplateResponse.from(repository.save(template));
+        PostTemplate saved = repository.save(template);
+        undoLog.record("Added the post template " + saved.getName(), UndoLog.Kind.POST, null);
+        return PostTemplateResponse.from(saved);
     }
 
     @Transactional
     public PostTemplateResponse update(Long id, PostTemplateRequest request) {
         PostTemplate template = find(id);
         apply(request, template);
+        undoLog.record("Edited the post template " + template.getName(), UndoLog.Kind.POST, null);
         return PostTemplateResponse.from(template);
     }
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(find(id));
+        PostTemplate template = find(id);
+        undoLog.record("Deleted the post template " + template.getName(), UndoLog.Kind.POST, null);
+        repository.delete(template);
     }
 
     private void apply(PostTemplateRequest request, PostTemplate template) {

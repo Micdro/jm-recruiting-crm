@@ -29,6 +29,7 @@ import ExportPage from './pages/ExportPage.jsx';
 import LinkedInPage from './pages/LinkedInPage.jsx';
 import LinkedInLogPage from './pages/LinkedInLogPage.jsx';
 import TrashPage from './pages/TrashPage.jsx';
+import RecentChangesPage from './pages/RecentChangesPage.jsx';
 import ThisComputerPage from './pages/ThisComputerPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import UnlockPage from './pages/UnlockPage.jsx';
@@ -113,6 +114,7 @@ export default function App() {
         <Route path="linkedin" element={<LinkedInPage />} />
         <Route path="linkedin/log" element={<LinkedInLogPage />} />
         <Route path="trash" element={<TrashPage />} />
+        <Route path="recent-changes" element={<RecentChangesPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="computer" element={<ThisComputerPage />} />
         <Route path="*" element={<NotFoundPage />} />

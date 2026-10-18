@@ -70,7 +70,13 @@ export function PageHeader({ title, sub, children }) {
 }
 
 /** A delete button that asks once before acting. */
-export function ConfirmButton({ label = 'Delete', confirmLabel = 'Confirm delete', onConfirm, className = 'btn btn-danger' }) {
+export function ConfirmButton({
+  label = 'Delete',
+  confirmLabel = 'Confirm delete',
+  busyLabel = 'Deleting…',
+  onConfirm,
+  className = 'btn btn-danger',
+}) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -98,7 +104,7 @@ export function ConfirmButton({ label = 'Delete', confirmLabel = 'Confirm delete
           }
         }}
       >
-        {busy ? 'Deleting…' : confirmLabel}
+        {busy ? busyLabel : confirmLabel}
       </button>
       <button type="button" className="btn btn-quiet" onClick={() => setArmed(false)}>
         Cancel

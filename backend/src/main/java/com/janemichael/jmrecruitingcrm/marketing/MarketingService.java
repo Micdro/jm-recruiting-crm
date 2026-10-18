@@ -16,6 +16,7 @@ import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.PostedRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.ResultsRequest;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.SlotResponse;
 import com.janemichael.jmrecruitingcrm.marketing.MarketingDtos.WeekResponse;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,9 +51,12 @@ public class MarketingService {
     private final ContentPlan plan;
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final UndoLog undoLog;
 
     public MarketingService(ContentPostRepository repository, CurrentUserService currentUser, AppUserRepository users,
-                            ContentPlan plan, JdbcTemplate jdbc, Clock clock) {
+                            ContentPlan plan, JdbcTemplate jdbc, Clock clock,
+                            UndoLog undoLog) {
+        this.undoLog = undoLog;
         this.repository = repository;
         this.currentUser = currentUser;
         this.users = users;
@@ -94,19 +98,24 @@ public class MarketingService {
         if (post.getOwner() == null) {
             post.setOwner(currentUser.get());
         }
-        return response(repository.save(post));
+        ContentPost saved = repository.save(post);
+        undoLog.record("Added " + named(saved), UndoLog.Kind.POST, saved.getId());
+        return response(saved);
     }
 
     @Transactional
     public PostResponse update(Long id, PostRequest request) {
         ContentPost post = find(id);
         apply(request, post);
+        undoLog.record("Edited " + named(post), UndoLog.Kind.POST, id);
         return response(post);
     }
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(find(id));
+        ContentPost post = find(id);
+        undoLog.record("Deleted " + named(post), UndoLog.Kind.POST, id);
+        repository.delete(post);
     }
 
     /** Records that the post went up on LinkedIn, on the day it did. */
@@ -123,6 +132,7 @@ public class MarketingService {
         if (url != null) {
             post.setPostUrl(url);
         }
+        undoLog.record("Marked " + named(post) + " posted", UndoLog.Kind.POST, id);
         return response(post);
     }
 
@@ -133,6 +143,7 @@ public class MarketingService {
         post.setReactions(request.reactions());
         post.setComments(request.comments());
         post.setConversations(request.conversations());
+        undoLog.record("Saved the results of " + named(post), UndoLog.Kind.POST, id);
         return response(post);
     }
 
@@ -166,7 +177,14 @@ public class MarketingService {
                 })
                 .toList();
         plan.save(request.style(), request.pictureStyle(), rhythm, month, request.focus());
+        undoLog.record("Changed the content plan", UndoLog.Kind.POST, null);
         return plan(month);
+    }
+
+    /** "the post "Why AI teams hire late"", for Recent changes. */
+    private static String named(ContentPost post) {
+        String title = Text.clean(post.getTitle());
+        return title == null ? "a post" : "the post \"" + title + "\"";
     }
 
     // Responses -----------------------------------------------------------------------------

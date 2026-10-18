@@ -36,6 +36,7 @@ import com.janemichael.jmrecruitingcrm.prospects.ProspectSettings.Values;
 import com.janemichael.jmrecruitingcrm.sync.SyncIdentity;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -118,6 +119,7 @@ public class ProspectFinder {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
     private final Clock clock;
+    private final UndoLog undoLog;
     private final AtomicBoolean running = new AtomicBoolean();
 
     public ProspectFinder(
@@ -134,8 +136,10 @@ public class ProspectFinder {
             SyncIdentity identity,
             JdbcTemplate jdbc,
             PlatformTransactionManager transactionManager,
-            Clock clock
+            Clock clock,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.settings = settings;
         this.research = research;
         this.api = api;
@@ -426,7 +430,7 @@ public class ProspectFinder {
             List<String> exclude = transaction.execute(status -> excludedNames());
             ProspectResearch.Request request = new ProspectResearch.Request(values.apiKey(), values.perRun(),
                     values.focus(), exclude == null ? List.of() : exclude, today(), budget.cents(), budget.limitName(),
-                    settings.feedback());
+                    transaction.execute(status -> standingFeedback()));
             Outcome outcome = research.run(request);
             usage = outcome.usage();
             Found.Result found = outcome.found();
@@ -474,6 +478,20 @@ public class ProspectFinder {
                 .filter(Objects::nonNull)
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .limit(MAX_EXCLUDED_NAMES)
+                .toList();
+    }
+
+    /**
+     * The team's reviews, leaving out companies that are waiting for review again because a review
+     * was undone: what the team made of those no longer stands.
+     */
+    private List<ProspectSettings.Feedback> standingFeedback() {
+        Set<String> waiting = new HashSet<>();
+        companies.findAll().stream()
+                .filter(company -> company.getStatus() == CompanyStatus.AI_FOUND)
+                .forEach(company -> waiting.addAll(CompanyNames.keys(company.getName())));
+        return settings.feedback().stream()
+                .filter(entry -> CompanyNames.keys(entry.company()).stream().noneMatch(waiting::contains))
                 .toList();
     }
 
@@ -584,6 +602,7 @@ public class ProspectFinder {
         activity.forCompany(company, ActivityType.STATUS_CHANGE, "Accepted from AI found: status changed to Lead", me);
         settings.addFeedback(new ProspectSettings.Feedback(company.getName(), true, company.getFocus(), null, null,
                 clock.millis()));
+        undoLog.record("Accepted " + company.getName() + " from AI found", UndoLog.Kind.COMPANY, id);
         return new Reviewed(company.getId(), company.getName(), company.getStatus(), 0);
     }
 
@@ -610,6 +629,7 @@ public class ProspectFinder {
                         + "): status changed to Not qualified", me);
         settings.addFeedback(new ProspectSettings.Feedback(company.getName(), false, null, reason, note,
                 clock.millis()));
+        undoLog.record("Dismissed " + company.getName() + " from AI found", UndoLog.Kind.COMPANY, id);
         return new Reviewed(company.getId(), company.getName(), company.getStatus(), untouched.size());
     }
 

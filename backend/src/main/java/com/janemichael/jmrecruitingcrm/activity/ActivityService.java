@@ -7,7 +7,9 @@ import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
 import com.janemichael.jmrecruitingcrm.search.Search;
+import com.janemichael.jmrecruitingcrm.search.SearchService;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +32,7 @@ public class ActivityService {
     private final SearchRepository searchRepository;
     private final CurrentUserService currentUserService;
     private final Clock clock;
+    private final UndoLog undoLog;
 
     public ActivityService(
             ActivityRepository activityRepository,
@@ -37,8 +40,10 @@ public class ActivityService {
             CompanyRepository companyRepository,
             SearchRepository searchRepository,
             CurrentUserService currentUserService,
-            Clock clock
+            Clock clock,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.activityRepository = activityRepository;
         this.activityLogger = activityLogger;
         this.companyRepository = companyRepository;
@@ -81,6 +86,7 @@ public class ActivityService {
         if (request.searchId() != null) {
             Search search = searchRepository.findWithDetailsById(request.searchId())
                     .orElseThrow(() -> new NotFoundException("Search not found"));
+            undoLog.record(type.logged(SearchService.named(search)), UndoLog.Kind.SEARCH, search.getId());
             return ActivityResponse.from(activityLogger.forSearch(search, type, request.summary(), user));
         }
 
@@ -88,6 +94,7 @@ public class ActivityService {
             Company company = companyRepository.findById(request.companyId())
                     .orElseThrow(() -> new NotFoundException("Company not found"));
             updateCompanyFollowUp(company, type, request);
+            undoLog.record(type.logged(company.getName()), UndoLog.Kind.COMPANY, company.getId());
             return ActivityResponse.from(activityLogger.forCompany(company, type, request.summary(), user));
         }
 

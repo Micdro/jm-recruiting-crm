@@ -25,6 +25,7 @@ import com.janemichael.jmrecruitingcrm.importer.ImportDtos.ContactRow;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.DuplicateMode;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.ImportResult;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.RowError;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,14 +55,17 @@ public class ImportService {
     private final CandidateRepository candidateRepository;
     private final AppUserRepository userRepository;
     private final CurrentUserService currentUserService;
+    private final UndoLog undoLog;
 
     public ImportService(
             CompanyRepository companyRepository,
             ContactRepository contactRepository,
             CandidateRepository candidateRepository,
             AppUserRepository userRepository,
-            CurrentUserService currentUserService
+            CurrentUserService currentUserService,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.companyRepository = companyRepository;
         this.contactRepository = contactRepository;
         this.candidateRepository = candidateRepository;
@@ -120,7 +124,7 @@ public class ImportService {
             counts.created++;
         }
 
-        return counts.result();
+        return recorded(counts, "company", "companies");
     }
 
     @Transactional
@@ -192,7 +196,7 @@ public class ImportService {
             counts.created++;
         }
 
-        return counts.result();
+        return recorded(counts, "contact", "contacts");
     }
 
     @Transactional
@@ -245,7 +249,7 @@ public class ImportService {
             counts.created++;
         }
 
-        return counts.result();
+        return recorded(counts, "candidate", "candidates");
     }
 
     // Companies -------------------------------------------------------------
@@ -549,6 +553,18 @@ public class ImportService {
         private static String normalize(String value) {
             return value == null ? "" : value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
         }
+    }
+
+    /** Names the import in Recent changes, so a wrong file can be taken back in one go. */
+    private ImportResult recorded(Counts counts, String one, String many) {
+        if (counts.created > 0) {
+            undoLog.record("Imported " + UndoLog.count(counts.created, one, many)
+                    + (counts.updated > 0 ? " and updated " + counts.updated : ""), UndoLog.Kind.OTHER, null);
+        } else if (counts.updated > 0) {
+            undoLog.record("Updated " + UndoLog.count(counts.updated, one, many) + " from an import",
+                    UndoLog.Kind.OTHER, null);
+        }
+        return counts.result();
     }
 
     private static final class Counts {

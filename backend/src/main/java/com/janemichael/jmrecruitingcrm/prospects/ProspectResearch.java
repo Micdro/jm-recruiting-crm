@@ -12,8 +12,10 @@ import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * One search for new prospects: Claude searches the web, then calls record_prospects with what it
@@ -427,12 +429,22 @@ class ProspectResearch {
         if (feedback == null || feedback.isEmpty()) {
             return "";
         }
-        List<String> accepted = feedback.stream()
+        // Only the latest review of each company counts: one accepted after an undone dismissal is accepted.
+        Set<String> seen = new HashSet<>();
+        List<ProspectSettings.Feedback> latest = feedback.stream()
+                .filter(entry -> {
+                    Set<String> keys = CompanyNames.keys(entry.company());
+                    boolean first = keys.stream().noneMatch(seen::contains);
+                    seen.addAll(keys);
+                    return first;
+                })
+                .toList();
+        List<String> accepted = latest.stream()
                 .filter(ProspectSettings.Feedback::accepted)
                 .limit(FEEDBACK_ACCEPTED_SHOWN)
                 .map(entry -> "- " + entry.company() + (entry.focus() == null ? "" : ": " + entry.focus()))
                 .toList();
-        List<String> dismissed = feedback.stream()
+        List<String> dismissed = latest.stream()
                 .filter(entry -> !entry.accepted())
                 .limit(FEEDBACK_DISMISSED_SHOWN)
                 .map(entry -> "- " + entry.company() + ": "

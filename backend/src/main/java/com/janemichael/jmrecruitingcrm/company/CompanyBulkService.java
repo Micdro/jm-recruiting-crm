@@ -14,6 +14,7 @@ import com.janemichael.jmrecruitingcrm.contact.ContactRepository;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -75,6 +76,7 @@ public class CompanyBulkService {
     private final TrashService trash;
     private final RecentChanges recentChanges;
     private final Clock clock;
+    private final UndoLog undoLog;
 
     public CompanyBulkService(
             CompanyRepository companyRepository,
@@ -84,8 +86,10 @@ public class CompanyBulkService {
             ActivityLogger activityLogger,
             TrashService trash,
             RecentChanges recentChanges,
-            Clock clock
+            Clock clock,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.companyRepository = companyRepository;
         this.contactRepository = contactRepository;
         this.searchRepository = searchRepository;
@@ -164,6 +168,16 @@ public class CompanyBulkService {
 
         Long undoId = items.isEmpty() ? null
                 : recentChanges.rememberBatch(RecentChanges.Kind.COMPANY_BATCH, user.getId(), new Batch(items, List.of()));
+        if (!items.isEmpty()) {
+            String companies = UndoLog.count(items.size(), "company", "companies");
+            undoLog.record(switch (action) {
+                case OWNER -> owner == null ? "Unassigned " + companies : "Gave " + companies + " to " + owner.getDisplayName();
+                case STAGE -> "Moved " + companies + " to " + Labels.of(request.status());
+                case PRIORITY -> "Set " + companies + " to " + Labels.of(request.priority()) + " priority";
+                case FOLLOW_UP_TODAY -> "Set " + companies + " to follow up today";
+                case DELETE -> throw new IllegalStateException();
+            }, UndoLog.Kind.OTHER, null);
+        }
         return new BulkResult(items.size(), skipped, undoId);
     }
 
@@ -236,6 +250,9 @@ public class CompanyBulkService {
         }
         Long undoId = deleted.isEmpty() ? null
                 : recentChanges.rememberBatch(RecentChanges.Kind.COMPANY_BATCH, user.getId(), new Batch(List.of(), deleted));
+        if (!deleted.isEmpty()) {
+            undoLog.record("Deleted " + UndoLog.count(deleted.size(), "company", "companies"), UndoLog.Kind.OTHER, null);
+        }
         return new BulkResult(deleted.size(), skipped, undoId);
     }
 

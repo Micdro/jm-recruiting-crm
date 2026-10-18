@@ -21,6 +21,7 @@ import com.janemichael.jmrecruitingcrm.importer.ImportDtos.ContactRow;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.DuplicateMode;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.ImportResult;
 import com.janemichael.jmrecruitingcrm.importer.ImportDtos.RowError;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -47,7 +48,8 @@ class ImportServiceTest {
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
 
     private final ImportService importService = new ImportService(
-            companyRepository, contactRepository, candidateRepository, userRepository, currentUserService);
+            companyRepository, contactRepository, candidateRepository, userRepository, currentUserService,
+            mock(UndoLog.class));
 
     private final AppUser michael = user(7L, "Michael Drougas", "michael@jane-michael.com");
     private final AppUser dimitrios = user(8L, "Dimitrios Drougas", "dimitrios@jane-michael.com");

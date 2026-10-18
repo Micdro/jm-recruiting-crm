@@ -25,6 +25,19 @@ public enum ActivityType {
         return this != STATUS_CHANGE && this != STAGE_CHANGE;
     }
 
+    /** How logging it reads in Recent changes: "Logged a call with Ana Ruiz". */
+    public String logged(String name) {
+        return switch (this) {
+            case EMAIL -> "Logged an email to " + name;
+            case LINKEDIN -> "Logged a LinkedIn message to " + name;
+            case CALL -> "Logged a call with " + name;
+            case MEETING -> "Logged a meeting with " + name;
+            case REPLY -> "Logged a reply from " + name;
+            case NOTE -> "Added a note on " + name;
+            default -> "Updated " + name;
+        };
+    }
+
     /** The matching next-action type, used when scheduling the next touch. */
     public ActionType toActionType() {
         return switch (this) {

@@ -23,6 +23,7 @@ import com.janemichael.jmrecruitingcrm.search.Search;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,7 @@ public class PlacementService {
     private final ActivityLogger activityLogger;
     private final TrashService trash;
     private final Clock clock;
+    private final UndoLog undoLog;
 
     public PlacementService(
             PlacementRepository placementRepository,
@@ -59,8 +61,10 @@ public class PlacementService {
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
             TrashService trash,
-            Clock clock
+            Clock clock,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.trash = trash;
         this.clock = clock;
         this.placementRepository = placementRepository;
@@ -112,6 +116,7 @@ public class PlacementService {
                 + (saved.getStartDate() == null ? "" : ", starting " + saved.getStartDate());
         activityLogger.forCandidate(candidate, search, ActivityType.NOTE, false, summary, user);
 
+        undoLog.record("Recorded the placement of " + named(saved), UndoLog.Kind.PLACEMENT, saved.getId());
         return PlacementResponse.from(saved, LocalDate.now(clock));
     }
 
@@ -130,6 +135,7 @@ public class PlacementService {
         }
 
         apply(request, placement, placement.getSearch());
+        undoLog.record("Edited the placement of " + named(placement), UndoLog.Kind.PLACEMENT, id);
         return PlacementResponse.from(placement, LocalDate.now(clock));
     }
 
@@ -160,6 +166,8 @@ public class PlacementService {
         if (placement.getInvoiceStatus() == Placement.InvoiceStatus.NOT_INVOICED) {
             placement.setInvoiceStatus(Placement.InvoiceStatus.INVOICED);
         }
+        undoLog.record("Invoiced the placement of " + named(placement) + " (" + number + ")",
+                UndoLog.Kind.PLACEMENT, id);
         return PlacementResponse.from(placement, LocalDate.now(clock));
     }
 
@@ -185,6 +193,8 @@ public class PlacementService {
                 + placement.getSearch().getCompany().getName();
         activityLogger.forCandidate(candidate, placement.getSearch(), ActivityType.NOTE, false,
                 notes == null ? summary : summary + ": " + notes, user);
+        undoLog.record("Logged the " + due.days() + "-day check-in for " + named(placement),
+                UndoLog.Kind.PLACEMENT, id);
         return PlacementResponse.from(placement, today);
     }
 
@@ -212,10 +222,17 @@ public class PlacementService {
 
     @Transactional
     public void delete(Long id) {
+        placementRepository.findById(id).ifPresent(placement ->
+                undoLog.record("Deleted the placement of " + named(placement), UndoLog.Kind.PLACEMENT, id));
         trash.capture(TrashKind.PLACEMENT, id);
         if (placementRepository.deletePlacementById(id) == 0) {
             throw new NotFoundException("Placement not found");
         }
+    }
+
+    /** "Ana Ruiz at Ledgerlight", for Recent changes. */
+    private static String named(Placement placement) {
+        return placement.getCandidate().getName() + " at " + placement.getSearch().getCompany().getName();
     }
 
     /** Base salary times the fee percent, rounded to cents. Null when either is missing. */

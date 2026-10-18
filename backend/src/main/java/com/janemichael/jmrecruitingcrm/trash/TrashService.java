@@ -12,6 +12,7 @@ import com.janemichael.jmrecruitingcrm.sync.SyncCatalog;
 import com.janemichael.jmrecruitingcrm.sync.SyncCatalog.ForeignKey;
 import com.janemichael.jmrecruitingcrm.sync.SyncCatalog.OnDelete;
 import com.janemichael.jmrecruitingcrm.sync.SyncTables;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -78,10 +79,12 @@ public class TrashService {
     private final SyncCatalog catalog;
     private final FieldEncryptor encryptor;
     private final CurrentUserService currentUser;
+    private final UndoLog undoLog;
     private final ObjectMapper json = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    public TrashService(JdbcTemplate jdbc, SyncCatalog catalog, FieldEncryptor encryptor, CurrentUserService currentUser) {
+    public TrashService(JdbcTemplate jdbc, SyncCatalog catalog, FieldEncryptor encryptor, CurrentUserService currentUser, UndoLog undoLog) {
+        this.undoLog = undoLog;
         this.jdbc = jdbc;
         this.catalog = catalog;
         this.encryptor = encryptor;
@@ -152,11 +155,27 @@ public class TrashService {
         if (ids.isEmpty()) {
             throw new NotFoundException("That isn't in the Trash");
         }
-        return restore(ids.getFirst());
+        return put(ids.getFirst());
     }
 
+    /** Restores an item from the Trash page, as one of the person's recent changes. */
     @Transactional
     public Restored restore(long itemId) {
+        Restored restored = put(itemId);
+        UndoLog.Kind kind = switch (restored.kind()) {
+            case COMPANY -> UndoLog.Kind.COMPANY;
+            case CONTACT -> UndoLog.Kind.CONTACT;
+            case CANDIDATE -> UndoLog.Kind.CANDIDATE;
+            case SEARCH -> UndoLog.Kind.SEARCH;
+            case PLACEMENT -> UndoLog.Kind.PLACEMENT;
+            case FILE -> UndoLog.Kind.OTHER;
+        };
+        undoLog.record("Restored " + restored.label() + " from the Trash", kind,
+                kind == UndoLog.Kind.OTHER ? null : restored.recordId());
+        return restored;
+    }
+
+    private Restored put(long itemId) {
         List<Map<String, Object>> found = jdbc.queryForList(
                 "SELECT kind, record_id, label, contents, path FROM trash_item WHERE id = ?", itemId);
         if (found.isEmpty()) {

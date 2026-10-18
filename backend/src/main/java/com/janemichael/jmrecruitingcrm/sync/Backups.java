@@ -358,6 +358,10 @@ public class Backups {
      * change is versioned by the sync trigger, so the other computers follow.
      */
     int replace(Contents contents) {
+        // A restore isn't a change anyone can undo from Recent changes, and nothing from before it can be.
+        jdbc.queryForObject("SELECT set_config('jmcrm.undo_off', 'on', true)", String.class);
+        jdbc.update("DELETE FROM undo_action");
+        jdbc.update("DELETE FROM undo_row");
         List<String> tables = tables();
         for (int index = tables.size() - 1; index >= 0; index--) {
             String table = tables.get(index);

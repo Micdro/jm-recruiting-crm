@@ -27,6 +27,7 @@ const TOOLS = [
   { to: '/import', label: 'Import' },
   { to: '/export', label: 'Export' },
   { to: '/team', label: 'Team' },
+  { to: '/recent-changes', label: 'Recent changes' },
   { to: '/trash', label: 'Trash' },
 ];
 

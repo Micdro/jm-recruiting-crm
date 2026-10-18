@@ -15,6 +15,7 @@ import com.janemichael.jmrecruitingcrm.pipeline.PipelineStage;
 import com.janemichael.jmrecruitingcrm.sync.SyncCatalog;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import jakarta.persistence.EntityManager;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -97,6 +98,7 @@ public class MergeService {
     private final CompanyRepository companyRepository;
     private final CandidateRepository candidateRepository;
     private final EntityManager entityManager;
+    private final UndoLog undoLog;
 
     public MergeService(
             JdbcTemplate jdbc,
@@ -108,8 +110,10 @@ public class MergeService {
             ContactRepository contactRepository,
             CompanyRepository companyRepository,
             CandidateRepository candidateRepository,
-            EntityManager entityManager
+            EntityManager entityManager,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.entityManager = entityManager;
         this.jdbc = jdbc;
         this.catalog = catalog;
@@ -171,7 +175,13 @@ public class MergeService {
         // Records loaded earlier in this transaction no longer match the rows; load them afresh.
         entityManager.flush();
         entityManager.clear();
-        return new Result(kind, keep, encryptor.decrypt(kept.get("name")), encryptor.decrypt(other.get("name")));
+        Result result = new Result(kind, keep, encryptor.decrypt(kept.get("name")), encryptor.decrypt(other.get("name")));
+        undoLog.record("Merged " + result.mergedName() + " into " + result.keptName(), switch (kind) {
+            case CONTACT -> UndoLog.Kind.CONTACT;
+            case COMPANY -> UndoLog.Kind.COMPANY;
+            case CANDIDATE -> UndoLog.Kind.CANDIDATE;
+        }, keep);
+        return result;
     }
 
     /**

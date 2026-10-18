@@ -2,6 +2,7 @@ package com.janemichael.jmrecruitingcrm.placement;
 
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
 import com.janemichael.jmrecruitingcrm.common.Text;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -58,8 +59,10 @@ public class FirmSettings {
 
     private final JdbcTemplate jdbc;
     private final FieldEncryptor encryptor;
+    private final UndoLog undoLog;
 
-    public FirmSettings(JdbcTemplate jdbc, FieldEncryptor encryptor) {
+    public FirmSettings(JdbcTemplate jdbc, FieldEncryptor encryptor, UndoLog undoLog) {
+        this.undoLog = undoLog;
         this.jdbc = jdbc;
         this.encryptor = encryptor;
     }
@@ -95,6 +98,7 @@ public class FirmSettings {
                 INSERT INTO firm_setting (name, value) VALUES (?, ?)
                 ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
                 """, PREFIX + name, value == null ? null : encryptor.encrypt(value)));
+        undoLog.record("Changed the invoice settings", UndoLog.Kind.OTHER, null);
         return invoiceSettings();
     }
 }

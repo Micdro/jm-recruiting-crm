@@ -6,6 +6,7 @@ import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.NotFoundException;
 import com.janemichael.jmrecruitingcrm.template.TemplateDtos.TemplateRequest;
 import com.janemichael.jmrecruitingcrm.template.TemplateDtos.TemplateResponse;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,8 +20,10 @@ public class TemplateService {
 
     private final MessageTemplateRepository repository;
     private final CurrentUserService currentUserService;
+    private final UndoLog undoLog;
 
-    public TemplateService(MessageTemplateRepository repository, CurrentUserService currentUserService) {
+    public TemplateService(MessageTemplateRepository repository, CurrentUserService currentUserService, UndoLog undoLog) {
+        this.undoLog = undoLog;
         this.repository = repository;
         this.currentUserService = currentUserService;
     }
@@ -40,19 +43,24 @@ public class TemplateService {
         MessageTemplate template = new MessageTemplate();
         apply(request, template);
         template.setOwner(currentUserService.get());
-        return TemplateResponse.from(repository.save(template));
+        MessageTemplate saved = repository.save(template);
+        undoLog.record("Added the template " + saved.getName(), UndoLog.Kind.TEMPLATE, saved.getId());
+        return TemplateResponse.from(saved);
     }
 
     @Transactional
     public TemplateResponse update(Long id, TemplateRequest request) {
         MessageTemplate template = find(id);
         apply(request, template);
+        undoLog.record("Edited the template " + template.getName(), UndoLog.Kind.TEMPLATE, id);
         return TemplateResponse.from(template);
     }
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(find(id));
+        MessageTemplate template = find(id);
+        undoLog.record("Deleted the template " + template.getName(), UndoLog.Kind.TEMPLATE, id);
+        repository.delete(template);
     }
 
     private void apply(TemplateRequest request, MessageTemplate template) {

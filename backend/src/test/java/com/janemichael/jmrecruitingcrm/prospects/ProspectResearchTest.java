@@ -307,4 +307,16 @@ class ProspectResearchTest {
                 .contains("Exclusion list (companies already in the CRM): Acme");
         assertThat(ProspectResearch.userMessage(request(10))).doesNotContain("What the team made");
     }
+
+    @Test
+    void onlyTheLatestReviewOfACompanyCounts() {
+        // Dismissed, the dismissal undone, then accepted: newest first.
+        List<ProspectSettings.Feedback> feedback = List.of(
+                new ProspectSettings.Feedback("Ledgerlight AI", true, "Model risk for insurers.", null, null, 3),
+                new ProspectSettings.Feedback("Ledgerlight", false, null, DismissReason.TOO_BIG, null, 2));
+
+        String text = ProspectResearch.feedbackText(feedback);
+        assertThat(text).contains("Accepted:\n- Ledgerlight AI: Model risk for insurers.")
+                .doesNotContain("Dismissed");
+    }
 }

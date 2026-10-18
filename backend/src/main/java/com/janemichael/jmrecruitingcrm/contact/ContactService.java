@@ -20,6 +20,7 @@ import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +64,7 @@ public class ContactService {
     private final Clock clock;
     private final TrashService trash;
     private final RecentChanges recentChanges;
+    private final UndoLog undoLog;
 
     public ContactService(
             ContactRepository contactRepository,
@@ -72,8 +74,10 @@ public class ContactService {
             FieldEncryptor encryptor,
             Clock clock,
             TrashService trash,
-            RecentChanges recentChanges
+            RecentChanges recentChanges,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.trash = trash;
         this.recentChanges = recentChanges;
         this.contactRepository = contactRepository;
@@ -135,7 +139,9 @@ public class ContactService {
         contact.setStatus(request.status() == null ? OutreachStatus.NEW : request.status());
         contact.setOwner(request.ownerId() == null ? user : currentUserService.findOwner(request.ownerId()));
 
-        return ContactResponse.from(contactRepository.save(contact));
+        Contact saved = contactRepository.save(contact);
+        undoLog.record("Added " + saved.getName(), UndoLog.Kind.CONTACT, saved.getId());
+        return ContactResponse.from(saved);
     }
 
     @Transactional
@@ -162,11 +168,14 @@ public class ContactService {
                     currentUserService.get());
         }
 
+        undoLog.record("Edited " + contact.getName(), UndoLog.Kind.CONTACT, id);
         return ContactResponse.from(contact);
     }
 
     @Transactional
     public void delete(Long id) {
+        contactRepository.findById(id).ifPresent(contact ->
+                undoLog.record("Deleted " + contact.getName(), UndoLog.Kind.CONTACT, id));
         trash.capture(TrashKind.CONTACT, id);
         if (contactRepository.deleteContactById(id) == 0) {
             throw new NotFoundException("Contact not found");
@@ -229,6 +238,7 @@ public class ContactService {
         Activity activity = activityLogger.forContact(
                 contact, type, outreach, joinSummary(prefix, request.notes()), user);
         rememberChange(contact, user, activity, before);
+        undoLog.record(type.logged(contact.getName()), UndoLog.Kind.CONTACT, id);
 
         return ContactResponse.from(contact);
     }
@@ -252,6 +262,8 @@ public class ContactService {
         Activity activity = activityLogger.forContact(contact, ActivityType.STATUS_CHANGE, false,
                 "Next action moved to " + Later.day(date), user);
         rememberChange(contact, user, activity, before);
+        undoLog.record("Moved " + contact.getName() + "'s next action to " + Later.day(date),
+                UndoLog.Kind.CONTACT, id);
 
         return ContactResponse.from(contact);
     }
@@ -326,6 +338,7 @@ public class ContactService {
                 "Sequence restarted (was " + Labels.of(previousStatus) + ")", user);
         // Restarting from Today's queue is one click, so it can be undone like a touch.
         rememberChange(contact, user, activity, before);
+        undoLog.record("Restarted " + contact.getName() + "'s sequence", UndoLog.Kind.CONTACT, id);
 
         return ContactResponse.from(contact);
     }
@@ -355,6 +368,10 @@ public class ContactService {
             }
         }
 
+        if (!contacts.isEmpty()) {
+            undoLog.record("Added " + UndoLog.count(contacts.size(), "contact", "contacts") + " to today's queue",
+                    UndoLog.Kind.OTHER, null);
+        }
         long remaining = contactRepository.countUnscheduled(OutreachStatus.NEW, user.getId());
         return new FillQueueResponse(contacts.size(), remaining);
     }

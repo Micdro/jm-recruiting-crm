@@ -16,6 +16,7 @@ import com.janemichael.jmrecruitingcrm.common.RecentChanges;
 import com.janemichael.jmrecruitingcrm.company.Company;
 import com.janemichael.jmrecruitingcrm.company.CompanyRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -57,7 +58,7 @@ class ContactServiceTest {
 
     private final ContactService contactService = new ContactService(
             contactRepository, companyRepository, currentUserService, activityLogger, encryptor, clock,
-            mock(TrashService.class), new RecentChanges(clock));
+            mock(TrashService.class), new RecentChanges(clock), mock(UndoLog.class));
 
     private final AppUser user = new AppUser();
 

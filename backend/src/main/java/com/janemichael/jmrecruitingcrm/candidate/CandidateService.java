@@ -24,6 +24,7 @@ import com.janemichael.jmrecruitingcrm.search.SearchEnums;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,7 @@ public class CandidateService {
     private final Clock clock;
     private final TrashService trash;
     private final RecentChanges recentChanges;
+    private final UndoLog undoLog;
 
     public CandidateService(
             CandidateRepository candidateRepository,
@@ -60,8 +62,10 @@ public class CandidateService {
             FieldEncryptor encryptor,
             Clock clock,
             TrashService trash,
-            RecentChanges recentChanges
+            RecentChanges recentChanges,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.trash = trash;
         this.recentChanges = recentChanges;
         this.candidateRepository = candidateRepository;
@@ -118,7 +122,9 @@ public class CandidateService {
         candidate.setStatus(request.status() == null ? CandidateEnums.Status.ACTIVE : request.status());
         candidate.setOwner(request.ownerId() == null ? user : currentUserService.findOwner(request.ownerId()));
 
-        return CandidateResponse.from(candidateRepository.save(candidate), 0L);
+        Candidate saved = candidateRepository.save(candidate);
+        undoLog.record("Added " + saved.getName(), UndoLog.Kind.CANDIDATE, saved.getId());
+        return CandidateResponse.from(saved, 0L);
     }
 
     @Transactional
@@ -144,6 +150,7 @@ public class CandidateService {
                     currentUserService.get());
         }
 
+        undoLog.record("Edited " + candidate.getName(), UndoLog.Kind.CANDIDATE, id);
         return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
     }
 
@@ -152,6 +159,8 @@ public class CandidateService {
         if (placementRepository.existsByCandidateId(id)) {
             throw new ConflictException("This candidate has a placement. Delete the placement first.");
         }
+        candidateRepository.findById(id).ifPresent(candidate ->
+                undoLog.record("Deleted " + candidate.getName(), UndoLog.Kind.CANDIDATE, id));
         trash.capture(TrashKind.CANDIDATE, id);
         if (candidateRepository.deleteCandidateById(id) == 0) {
             throw new NotFoundException("Candidate not found");
@@ -205,6 +214,8 @@ public class CandidateService {
         Activity activity = activityLogger.forCandidate(
                 candidate, search, type, type.isOutreach(), request.notes(), user);
         rememberChange(candidate, user, activity, before);
+        // A call saved from notes is this too, with what it changed on the record.
+        undoLog.record(type.logged(candidate.getName()), UndoLog.Kind.CANDIDATE, id);
 
         return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
     }
@@ -283,6 +294,8 @@ public class CandidateService {
         Activity activity = activityLogger.forCandidate(candidate, null, ActivityType.STATUS_CHANGE, false,
                 "Next follow-up moved to " + Later.day(date), user);
         rememberChange(candidate, user, activity, before);
+        undoLog.record("Moved " + candidate.getName() + "'s follow-up to " + Later.day(date),
+                UndoLog.Kind.CANDIDATE, id);
 
         return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
     }

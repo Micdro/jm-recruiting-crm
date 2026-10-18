@@ -20,6 +20,7 @@ import com.janemichael.jmrecruitingcrm.pipeline.PipelineDtos.UpdateEntryRequest;
 import com.janemichael.jmrecruitingcrm.placement.PlacementRepository;
 import com.janemichael.jmrecruitingcrm.search.Search;
 import com.janemichael.jmrecruitingcrm.search.SearchRepository;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +46,7 @@ public class PipelineService {
     private final CurrentUserService currentUserService;
     private final ActivityLogger activityLogger;
     private final Clock clock;
+    private final UndoLog undoLog;
 
     public PipelineService(
             PipelineRepository pipelineRepository,
@@ -53,8 +55,10 @@ public class PipelineService {
             PlacementRepository placementRepository,
             CurrentUserService currentUserService,
             ActivityLogger activityLogger,
-            Clock clock
+            Clock clock,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.pipelineRepository = pipelineRepository;
         this.searchRepository = searchRepository;
         this.candidateRepository = candidateRepository;
@@ -105,6 +109,8 @@ public class PipelineService {
         PipelineEntry entry = createEntry(search, candidate,
                 request.stage() == null ? PipelineStage.SOURCED : request.stage(),
                 Text.clean(request.rationale()), user);
+        undoLog.record("Added " + candidate.getName() + " to " + search.getTitle(), UndoLog.Kind.CANDIDATE,
+                candidate.getId());
 
         boolean placed = placementRepository.existsBySearchIdAndCandidateId(search.getId(), candidate.getId());
         return PipelineEntryResponse.from(entry, placed, now());
@@ -115,8 +121,14 @@ public class PipelineService {
         AppUser user = currentUserService.get();
         PipelineEntry entry = find(id);
 
+        PipelineStage previous = entry.getStage();
         entry.setRationale(Text.clean(request.rationale()));
         changeStage(entry, request.stage(), user);
+        undoLog.record(previous == entry.getStage()
+                        ? "Edited " + entry.getCandidate().getName() + " in " + entry.getSearch().getTitle()
+                        : "Moved " + entry.getCandidate().getName() + " to " + Labels.of(entry.getStage()) + " in "
+                                + entry.getSearch().getTitle(),
+                UndoLog.Kind.CANDIDATE, entry.getCandidate().getId());
 
         boolean placed = placementRepository.existsBySearchIdAndCandidateId(
                 entry.getSearch().getId(), entry.getCandidate().getId());
@@ -158,6 +170,8 @@ public class PipelineService {
                     (moved && newRound ? "Interview moved to " : "Interview set for ")
                             + Interviews.describe(request.date(), time) + (label == null ? "" : ": " + label), user);
         }
+        undoLog.record((moved ? "Moved " : "Set ") + entry.getCandidate().getName() + "'s interview for "
+                + entry.getSearch().getTitle(), UndoLog.Kind.CANDIDATE, entry.getCandidate().getId());
         return response(entry);
     }
 
@@ -178,6 +192,8 @@ public class PipelineService {
         entry.setInterviewLabel(null);
         entry.setCandidateDebriefed(false);
         entry.setClientDebriefed(false);
+        undoLog.record("Cancelled " + entry.getCandidate().getName() + "'s interview for "
+                + entry.getSearch().getTitle(), UndoLog.Kind.CANDIDATE, entry.getCandidate().getId());
         return response(entry);
     }
 
@@ -208,6 +224,7 @@ public class PipelineService {
         String notes = Text.clean(request.notes());
         activityLogger.forCandidate(candidate, entry.getSearch(), ActivityType.NOTE, false,
                 notes == null ? summary : summary + ": " + notes, user);
+        undoLog.record(summary, UndoLog.Kind.CANDIDATE, candidate.getId());
         return response(entry);
     }
 
@@ -227,6 +244,9 @@ public class PipelineService {
 
     @Transactional
     public void delete(Long id) {
+        pipelineRepository.findById(id).ifPresent(entry ->
+                undoLog.record("Took " + entry.getCandidate().getName() + " off " + entry.getSearch().getTitle(),
+                        UndoLog.Kind.CANDIDATE, entry.getCandidate().getId()));
         if (pipelineRepository.deleteEntryById(id) == 0) {
             throw new NotFoundException("Pipeline entry not found");
         }

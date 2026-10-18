@@ -14,6 +14,7 @@ import com.janemichael.jmrecruitingcrm.common.RecentChanges;
 import com.janemichael.jmrecruitingcrm.company.CompanyStatus;
 import com.janemichael.jmrecruitingcrm.trash.TrashKind;
 import com.janemichael.jmrecruitingcrm.trash.TrashService;
+import com.janemichael.jmrecruitingcrm.undo.UndoLog;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -78,6 +79,7 @@ public class ContactBulkService {
     private final TrashService trash;
     private final RecentChanges recentChanges;
     private final Clock clock;
+    private final UndoLog undoLog;
 
     public ContactBulkService(
             ContactRepository contactRepository,
@@ -85,8 +87,10 @@ public class ContactBulkService {
             ActivityLogger activityLogger,
             TrashService trash,
             RecentChanges recentChanges,
-            Clock clock
+            Clock clock,
+            UndoLog undoLog
     ) {
+        this.undoLog = undoLog;
         this.contactRepository = contactRepository;
         this.currentUserService = currentUserService;
         this.activityLogger = activityLogger;
@@ -166,6 +170,16 @@ public class ContactBulkService {
 
         Long undoId = items.isEmpty() ? null
                 : recentChanges.rememberBatch(RecentChanges.Kind.CONTACT_BATCH, user.getId(), new Batch(items, List.of()));
+        if (!items.isEmpty()) {
+            String contacts = UndoLog.count(items.size(), "contact", "contacts");
+            undoLog.record(switch (request.action()) {
+                case OWNER -> owner == null ? "Unassigned " + contacts : "Gave " + contacts + " to " + owner.getDisplayName();
+                case STATUS -> "Marked " + contacts + " " + Labels.of(request.status());
+                case TODAY -> "Added " + contacts + " to today's queue";
+                case RESTART -> "Restarted the sequence for " + contacts;
+                case DELETE -> throw new IllegalStateException();
+            }, UndoLog.Kind.OTHER, null);
+        }
         return new BulkResult(items.size(), skipped, undoId);
     }
 
@@ -233,6 +247,9 @@ public class ContactBulkService {
         }
         Long undoId = deleted.isEmpty() ? null
                 : recentChanges.rememberBatch(RecentChanges.Kind.CONTACT_BATCH, user.getId(), new Batch(List.of(), deleted));
+        if (!deleted.isEmpty()) {
+            undoLog.record("Deleted " + UndoLog.count(deleted.size(), "contact", "contacts"), UndoLog.Kind.OTHER, null);
+        }
         return new BulkResult(deleted.size(), skipped, undoId);
     }
 
