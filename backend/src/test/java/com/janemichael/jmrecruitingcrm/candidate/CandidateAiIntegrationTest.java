@@ -247,7 +247,7 @@ class CandidateAiIntegrationTest {
         return jdbc.queryForObject("SELECT count(*) FROM candidate", Long.class);
     }
 
-    private void claudeAnswers(String input) {
+    private void claudeAnswers(String input) throws Exception {
         when(claude.messages(eq(CLAUDE_KEY), anyString())).thenReturn(new ClaudeApi.Reply(200, """
                 {"stop_reason": "tool_use",
                  "content": [{"type": "tool_use", "id": "toolu_1", "name": "write", "input": %s}],
