@@ -4465,7 +4465,7 @@ a.cell-title:hover {
 
 /* Monday brief ------------------------------------------------------------------ */
 
-.brief h3 {
+.week-brief h3 {
   margin: 0 0 6px;
   font-size: 13px;
   font-weight: 600;
@@ -4474,35 +4474,35 @@ a.cell-title:hover {
   color: var(--ink-3);
 }
 
-.brief ul,
-.brief ol {
+.week-brief ul,
+.week-brief ol {
   margin: 0;
   padding-left: 20px;
 }
 
-.brief li + li {
+.week-brief li + li {
   margin-top: 4px;
 }
 
-.brief-week {
+.week-brief-week {
   margin-left: 6px;
   font-size: 14px;
   font-weight: 400;
   color: var(--ink-3);
 }
 
-.brief-actions {
+.week-brief-actions {
   display: flex;
   gap: 6px;
 }
 
-.brief-headline {
+.week-brief-headline {
   margin: 0 0 14px;
   font-size: 17px;
   line-height: 1.45;
 }
 
-.brief-focus {
+.week-brief-focus {
   margin-bottom: 14px;
   padding: 12px 14px;
   border-left: 3px solid var(--gold);
@@ -4510,29 +4510,29 @@ a.cell-title:hover {
   background: var(--paper);
 }
 
-.brief-focus li {
+.week-brief-focus li {
   font-weight: 500;
 }
 
-.brief-columns {
+.week-brief-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px 24px;
 }
 
-.brief-meta,
-.brief-note {
+.week-brief-meta,
+.week-brief-note {
   margin: 14px 0 0;
   font-size: 13px;
   color: var(--ink-3);
 }
 
-.brief-toggle {
+.week-brief-toggle {
   margin-top: 8px;
   font-size: 13px;
 }
 
-.brief-details {
+.week-brief-details {
   display: grid;
   gap: 14px;
   margin-top: 12px;
@@ -4541,11 +4541,11 @@ a.cell-title:hover {
   font-size: 14px;
 }
 
-.brief-details p {
+.week-brief-details p {
   margin: 0;
 }
 
-.brief .brief-stats {
+.week-brief .week-brief-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
@@ -4554,23 +4554,23 @@ a.cell-title:hover {
   color: var(--ink-2);
 }
 
-.brief-stats li + li {
+.week-brief-stats li + li {
   margin-top: 0;
 }
 
-.brief-hidden {
+.week-brief-hidden {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 14px;
 }
 
-.brief-hidden h2 {
+.week-brief-hidden h2 {
   margin: 0;
   font-size: 15px;
 }
 
-.brief-hidden .muted {
+.week-brief-hidden .muted {
   flex: 1;
   min-width: 0;
   overflow: hidden;

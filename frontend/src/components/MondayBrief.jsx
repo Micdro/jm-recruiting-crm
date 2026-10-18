@@ -52,7 +52,7 @@ export default function MondayBrief() {
   const data = brief.data;
   if (!data) {
     return brief.loading ? (
-      <section className="panel brief" aria-label="Monday brief">
+      <section className="panel week-brief" aria-label="Monday brief">
         <p className="muted">Getting this week’s brief ready…</p>
       </section>
     ) : null;
@@ -64,7 +64,7 @@ export default function MondayBrief() {
 
   if (hidden === week) {
     return (
-      <section className="panel brief brief-hidden" aria-labelledby="brief-heading">
+      <section className="panel week-brief week-brief-hidden" aria-labelledby="brief-heading">
         <h2 id="brief-heading">Monday brief</h2>
         <span className="muted">{written?.headline ?? title}</span>
         <button
@@ -94,12 +94,12 @@ export default function MondayBrief() {
   }
 
   return (
-    <section className="panel brief" aria-labelledby="brief-heading">
+    <section className="panel week-brief" aria-labelledby="brief-heading">
       <div className="panel-head">
         <h2 id="brief-heading">
-          Monday brief <span className="brief-week">{title}</span>
+          Monday brief <span className="week-brief-week">{title}</span>
         </h2>
-        <div className="brief-actions">
+        <div className="week-brief-actions">
           {written && data.canWrite && (
             <button type="button" className="btn btn-sm btn-quiet" disabled={busy} onClick={rewrite}>
               {busy ? 'Rewriting…' : 'Rewrite'}
@@ -120,9 +120,9 @@ export default function MondayBrief() {
 
       {written ? (
         <>
-          {written.headline && <p className="brief-headline">{written.headline}</p>}
+          {written.headline && <p className="week-brief-headline">{written.headline}</p>}
           {written.focus.length > 0 && (
-            <div className="brief-focus">
+            <div className="week-brief-focus">
               <h3>Focus this week</h3>
               <ol>
                 {written.focus.map((line) => (
@@ -131,7 +131,7 @@ export default function MondayBrief() {
               </ol>
             </div>
           )}
-          <div className="brief-columns">
+          <div className="week-brief-columns">
             {written.lastWeek.length > 0 && (
               <div>
                 <h3>Last week</h3>
@@ -153,7 +153,7 @@ export default function MondayBrief() {
               </div>
             )}
           </div>
-          <p className="brief-meta">
+          <p className="week-brief-meta">
             Written by {written.provider} for {dollars(written.costCents)}
             {written.writtenAt ? ` on ${formatDay(written.writtenAt)}` : ''}, from the CRM’s records.
           </p>
@@ -165,7 +165,7 @@ export default function MondayBrief() {
       <ErrorNote>{error}</ErrorNote>
 
       {written && (
-        <button type="button" className="link-button brief-toggle" aria-expanded={details} onClick={() => setDetails(!details)}>
+        <button type="button" className="link-button week-brief-toggle" aria-expanded={details} onClick={() => setDetails(!details)}>
           {details ? 'Hide the details' : 'Show the details'}
         </button>
       )}
@@ -177,7 +177,7 @@ export default function MondayBrief() {
 function NotWritten({ data, onRetry }) {
   if (data.writing) {
     return (
-      <p className="brief-note">
+      <p className="week-brief-note">
         The brief is being written. <button type="button" className="link-button" onClick={onRetry}>Check again</button>
       </p>
     );
@@ -193,7 +193,7 @@ function NotWritten({ data, onRetry }) {
     );
   }
   return (
-    <p className="brief-note">
+    <p className="week-brief-note">
       The written brief needs {data.provider === 'OpenAI' ? 'an' : 'a'} {data.provider ?? 'AI'} API key.{' '}
       {data.owner ? `${data.owner} can add one` : 'An admin can add one'} in the AI settings on AI Found. Here are the
       week’s facts in the meantime.
@@ -207,8 +207,8 @@ function Details({ facts }) {
   const due = facts.due.reduce((sum, person) => sum + person.contacts + person.candidates + person.companies, 0);
 
   return (
-    <div className="brief-details">
-      <ul className="brief-stats">
+    <div className="week-brief-details">
+      <ul className="week-brief-stats">
         <li>
           <strong>{outreach.touches}</strong> touches last week (target {outreach.target} a person)
         </li>
@@ -272,7 +272,7 @@ function Details({ facts }) {
 
 function FactList({ title, items, empty, children }) {
   return (
-    <div className="brief-fact">
+    <div className="week-brief-fact">
       <h3>{title}</h3>
       {items.length === 0 ? (
         <p className="muted">{empty}</p>
