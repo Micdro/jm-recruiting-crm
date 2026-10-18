@@ -280,6 +280,12 @@ export const api = {
     fileUrl: (name) => `/api/backups/${encodeURIComponent(name)}`,
   },
   templates: crud('/api/templates'),
+  brief: {
+    /** This week's facts and, once written, the AI write-up: { weekOf, facts, written, provider, canWrite, owner }. */
+    get: () => get('/api/brief'),
+    /** Writes this week's brief if it isn't yet; rewrite writes it again from today's facts. */
+    write: (rewrite = false) => client.post('/api/brief/write', null, { params: { rewrite } }).then((r) => r.data),
+  },
   signals: {
     list: () => get('/api/signals'),
     summary: () => get('/api/signals/summary'),

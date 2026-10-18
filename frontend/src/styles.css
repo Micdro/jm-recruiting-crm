@@ -4497,3 +4497,118 @@ a.cell-title:hover {
   white-space: pre-line;
   color: var(--ink-2);
 }
+
+/* Monday brief ------------------------------------------------------------------ */
+
+.week-brief h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.week-brief ul,
+.week-brief ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.week-brief li + li {
+  margin-top: 4px;
+}
+
+.week-brief-week {
+  margin-left: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.week-brief-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.week-brief-headline {
+  margin: 0 0 14px;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.week-brief-focus {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--gold);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--paper);
+}
+
+.week-brief-focus li {
+  font-weight: 500;
+}
+
+.week-brief-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px 24px;
+}
+
+.week-brief-meta,
+.week-brief-note {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.week-brief-toggle {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.week-brief-details {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.week-brief-details p {
+  margin: 0;
+}
+
+.week-brief .week-brief-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+}
+
+.week-brief-stats li + li {
+  margin-top: 0;
+}
+
+.week-brief-hidden {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.week-brief-hidden h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.week-brief-hidden .muted {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

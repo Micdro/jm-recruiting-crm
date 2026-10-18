@@ -78,6 +78,12 @@ class MorningReminderTest {
     }
 
     @Test
+    void pointsToTheBriefOnMondays() {
+        Message monday = MorningReminder.compose(new Counts(2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 2, true);
+        assertThat(monday.body()).isEqualTo("2 sequence touches. This week's brief is on Today. Click to open JM CRM.");
+    }
+
+    @Test
     void leavesOutWhatIsntDue() {
         Message one = MorningReminder.compose(new Counts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 30);
         assertThat(one.title()).isEqualTo("Good morning. 1 contact is due today.");
