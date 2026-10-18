@@ -4,6 +4,7 @@ import { api, errorMessage } from '../api.js';
 import { Empty, ErrorNote, Loading, PageHeader, Pill } from '../components/Bits.jsx';
 import ExportButton from '../components/ExportButton.jsx';
 import { FilterSelect, SearchBox } from '../components/ListFilters.jsx';
+import FromIntakeNotes from '../components/FromIntakeNotes.jsx';
 import Modal from '../components/Modal.jsx';
 import StageBar from '../components/StageBar.jsx';
 import SearchForm from '../forms/SearchForm.jsx';
@@ -34,7 +35,10 @@ export default function SearchesPage() {
     <>
       <PageHeader title="Searches" sub="Client engagements, from intake to placement.">
         <ExportButton part="searches" rows={rows} noun="searches" />
-        <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
+        <button type="button" className="btn" onClick={() => setAdding('intake')}>
+          From intake notes
+        </button>
+        <button type="button" className="btn btn-primary" onClick={() => setAdding('form')}>
           Open search
         </button>
       </PageHeader>
@@ -110,7 +114,20 @@ export default function SearchesPage() {
         </div>
       )}
 
-      {adding && (
+      {adding === 'intake' && (
+        <Modal title="Open a search from intake notes" onClose={() => setAdding(false)} wide>
+          <FromIntakeNotes
+            onCancel={() => setAdding(false)}
+            onOpened={(saved) => {
+              setAdding(false);
+              toast(`Opened ${saved.title}`);
+              navigate(`/searches/${saved.id}`);
+            }}
+          />
+        </Modal>
+      )}
+
+      {adding === 'form' && (
         <Modal title="Open a search" onClose={() => setAdding(false)} wide>
           <SearchForm
             onCancel={() => setAdding(false)}

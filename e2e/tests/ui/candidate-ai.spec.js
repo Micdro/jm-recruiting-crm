@@ -1,20 +1,6 @@
-import { test, expect, isoDate, uniqueEmail, uniqueName } from '../support/fixtures.js';
+import { AI_READY, test, expect, isoDate, uniqueEmail, uniqueName } from '../support/fixtures.js';
 
 // The AI itself is stood in for in the browser: these tests check what the CRM does with its answers.
-const AI_READY = {
-  provider: 'CLAUDE',
-  providers: [
-    { id: 'CLAUDE', label: 'Claude', hasKey: true, keyHint: '…1234', model: 'claude-sonnet-5-5', models: [] },
-    { id: 'OPENAI', label: 'OpenAI', hasKey: false, keyHint: null, model: 'gpt-5.5', models: [] },
-  ],
-  dailyLimitDollars: 5,
-  monthlyLimitDollars: 50,
-  spentTodayCents: 0,
-  spentThisMonthCents: 0,
-  canManage: false,
-  owner: 'Michael',
-};
-
 const NO_CHANGE = {
   status: null,
   currentTitle: null,

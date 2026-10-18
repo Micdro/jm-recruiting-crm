@@ -5,6 +5,21 @@ import { savedXsrfToken } from './session.js';
 // An id far beyond anything the database will reach, for not-found checks.
 export const MISSING_ID = 999_999_999_999;
 
+/** The AI settings as the browser sees them with a Claude key added, for tests that stand in for the AI. */
+export const AI_READY = {
+  provider: 'CLAUDE',
+  providers: [
+    { id: 'CLAUDE', label: 'Claude', hasKey: true, keyHint: '…1234', model: 'claude-sonnet-5-5', models: [] },
+    { id: 'OPENAI', label: 'OpenAI', hasKey: false, keyHint: null, model: 'gpt-5.5', models: [] },
+  ],
+  dailyLimitDollars: 5,
+  monthlyLimitDollars: 50,
+  spentTodayCents: 0,
+  spentThisMonthCents: 0,
+  canManage: false,
+  owner: 'Michael',
+};
+
 export function uniqueName(label) {
   return `${label} E2E ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }

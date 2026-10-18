@@ -4462,3 +4462,24 @@ a.cell-title:hover {
   white-space: pre-line;
   color: var(--ink-2);
 }
+
+/* AI for searches --------------------------------------------------------------- */
+
+.draft-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.draft-row .field-hint {
+  margin: 0;
+}
+
+.job-description {
+  margin-top: 16px;
+}
+
+.job-description .notes {
+  max-width: 80ch;
+}

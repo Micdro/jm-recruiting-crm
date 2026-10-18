@@ -11,6 +11,7 @@ import Timeline from '../components/Timeline.jsx';
 import CompanyForm from '../forms/CompanyForm.jsx';
 import ContactForm from '../forms/ContactForm.jsx';
 import SearchForm from '../forms/SearchForm.jsx';
+import FromIntakeNotes from '../components/FromIntakeNotes.jsx';
 import {
   BUYING_ROLE,
   CANDIDATE_STATUS,
@@ -135,9 +136,14 @@ export default function CompanyDetailPage() {
           <section className="panel" aria-labelledby="company-searches">
             <div className="panel-head">
               <h2 id="company-searches">Searches</h2>
-              <button type="button" className="btn btn-sm" onClick={() => setModal('search')}>
-                Open search
-              </button>
+              <div className="panel-actions">
+                <button type="button" className="btn btn-sm" onClick={() => setModal('intake')}>
+                  From intake notes
+                </button>
+                <button type="button" className="btn btn-sm" onClick={() => setModal('search')}>
+                  Open search
+                </button>
+              </div>
             </div>
             {searches.data && searches.data.length === 0 && (
               <Empty title="No searches with this company">Open one when they engage the firm on a role.</Empty>
@@ -232,6 +238,19 @@ export default function CompanyDetailPage() {
               toast(`Added ${saved.name}`);
               contacts.reload();
               company.reload();
+            }}
+          />
+        </Modal>
+      )}
+      {modal === 'intake' && (
+        <Modal title={`Open a search with ${record.name} from intake notes`} onClose={() => setModal(null)} wide>
+          <FromIntakeNotes
+            company={{ id: record.id, name: record.name }}
+            onCancel={() => setModal(null)}
+            onOpened={(saved) => {
+              setModal(null);
+              toast(`Opened ${saved.title}`);
+              navigate(`/searches/${saved.id}`);
             }}
           />
         </Modal>
