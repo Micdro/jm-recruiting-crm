@@ -4,9 +4,19 @@ import { api, errorMessage } from '../api.js';
 import { formatDate, href } from '../format.js';
 import { useAuth, useToast, useUsers } from '../hooks.js';
 import { POST_ACCOUNT, POST_STATUS, POST_THEME, options } from '../labels.js';
-import { POST_LIMIT, TITLE_LIMIT, dollars, fold, postingState, useLinkedIn } from '../marketing.js';
+import {
+  POST_LIMIT,
+  TITLE_LIMIT,
+  applyTemplate,
+  dollars,
+  fold,
+  postingState,
+  useLinkedIn,
+  usePostTemplates,
+} from '../marketing.js';
 import { ConfirmButton, ErrorNote, ExternalLink } from './Bits.jsx';
 import { OwnerField, SelectField, TextArea, TextField } from './Fields.jsx';
+import { SaveAsTemplate } from './PostTemplates.jsx';
 
 const asText = (value) => (value === null || value === undefined ? '' : String(value));
 const asNumber = (value) => (value === '' ? null : Number(value));
@@ -15,15 +25,17 @@ const PICTURE_TYPES = 'image/jpeg,image/png,image/gif,image/webp';
 const PICTURE_LIMIT = 8 * 1024 * 1024;
 
 /**
- * Adds or changes a post: drafts it with AI, gives it a picture (uploaded or made by AI), posts it
- * to LinkedIn or records it as posted, and keeps its results.
+ * Adds or changes a post: fills it in from a template, drafts it with AI, gives it a picture
+ * (uploaded or made by AI), posts it to LinkedIn or records it as posted, and keeps its results.
+ * `template`, if given, is the template a new post starts from.
  */
-export default function PostEditor({ post, onClose, onChanged }) {
+export default function PostEditor({ post, template = null, onClose, onChanged }) {
   const toast = useToast();
   const { user } = useAuth();
   const users = useUsers();
+  const templates = usePostTemplates();
   const [saved, setSaved] = useState(post.id ? post : null);
-  const [form, setForm] = useState(() => ({
+  const [initial] = useState(() => ({
     title: post.title ?? '',
     body: post.body ?? '',
     notes: post.notes ?? '',
@@ -34,6 +46,10 @@ export default function PostEditor({ post, onClose, onChanged }) {
     // A new post is yours unless you pick someone else.
     ownerId: asText(post.id ? post.ownerId : user?.id),
   }));
+  const [form, setForm] = useState(() => (template ? applyTemplate(initial, template) : initial));
+  // The template last picked, and the form as it was before, for Undo.
+  const [picked, setPicked] = useState(() => (template ? { id: template.id, name: template.name, before: initial } : null));
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [direction, setDirection] = useState('');
   const [drafted, setDrafted] = useState(null);
   const [postUrl, setPostUrl] = useState(post.postUrl ?? '');
@@ -87,6 +103,19 @@ export default function PostEditor({ post, onClose, onChanged }) {
     } finally {
       setBusy(null);
     }
+  }
+
+  function pickTemplate(id) {
+    const chosen = (templates.data ?? []).find((option) => String(option.id) === id);
+    if (!chosen) return;
+    setError('');
+    setPicked({ id: chosen.id, name: chosen.name, before: picked?.before ?? form });
+    setForm((current) => applyTemplate(picked ? picked.before : current, chosen));
+  }
+
+  function undoTemplate() {
+    setForm(picked.before);
+    setPicked(null);
   }
 
   function submit(event) {
@@ -214,9 +243,65 @@ export default function PostEditor({ post, onClose, onChanged }) {
   const tooLong = form.body.length > POST_LIMIT;
   const opening = fold(form.body.trim());
 
+  const templateList = templates.data ?? [];
+
   return (
     <form className="form post-form" onSubmit={submit}>
-      <TextField label="Title" value={form.title} onChange={set('title')} required maxLength={TITLE_LIMIT} autoFocus={!post.id} />
+      <div className="post-template-bar">
+        {/* A posted post can't change, but it can still be saved as a template for the next one. */}
+        {!isPosted && (
+          <SelectField
+            label="Template"
+            value={picked ? String(picked.id) : ''}
+            onChange={pickTemplate}
+            options={templateList.map((option) => ({ value: String(option.id), label: option.name }))}
+            placeholder={templateList.length > 0 ? 'Choose a template' : 'No templates yet'}
+            disabled={templateList.length === 0}
+            className="post-template-pick"
+          />
+        )}
+        <p className="field-hint post-template-note">
+          {picked && (
+            <>
+              Filled in from {picked.name}.{' '}
+              <button type="button" className="link-button" onClick={undoTemplate}>
+                Undo
+              </button>
+            </>
+          )}
+          {!savingTemplate && (
+            <>
+              {picked && ' · '}
+              <button type="button" className="link-button" onClick={() => setSavingTemplate(true)}>
+                Save as template
+              </button>
+            </>
+          )}
+        </p>
+      </div>
+      {savingTemplate && (
+        <SaveAsTemplate
+          form={form}
+          templates={templateList}
+          defaultName={picked?.name ?? form.title}
+          onCancel={() => setSavingTemplate(false)}
+          onSaved={(record, updated) => {
+            setSavingTemplate(false);
+            setPicked(null);
+            templates.reload();
+            toast(updated ? `Updated the template ${record.name}` : `Saved the template ${record.name}`);
+          }}
+        />
+      )}
+
+      <TextField
+        label="Title"
+        value={form.title}
+        onChange={set('title')}
+        required
+        maxLength={TITLE_LIMIT}
+        autoFocus={!post.id && !template}
+      />
 
       <div className="form-row">
         <TextField

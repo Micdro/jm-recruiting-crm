@@ -28,7 +28,9 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -39,6 +41,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -278,6 +281,84 @@ class MarketingApiIntegrationTest {
                 .andExpect(jsonPath("$.messages[0]").value(containsString("cut off")));
         // $0.20 of input and $0.015 of output, rounded up.
         assertThat(aiSettings.spentCents(LocalDate.now(clock))).isEqualTo(22);
+    }
+
+    @Test
+    void savesChangesAndDeletesPostTemplatesForTheWholeTeam() throws Exception {
+        long weekly = created(mockMvc.perform(send(MEMBER, "MEMBER", post("/api/marketing/templates"), Map.of(
+                        "name", "  Weekly hiring note ",
+                        "title", "This week in FDE hiring",
+                        "body", "Three things we saw this week:\n1.\n2.\n3.",
+                        "theme", "FDE_HIRING",
+                        "account", "COMPANY_PAGE")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Weekly hiring note"))
+                .andExpect(jsonPath("$.title").value("This week in FDE hiring"))
+                .andExpect(jsonPath("$.notes").doesNotExist())
+                .andExpect(jsonPath("$.theme").value("FDE_HIRING"))
+                .andExpect(jsonPath("$.account").value("COMPANY_PAGE"))
+                .andExpect(jsonPath("$.ownerName").value("Jane Member"))
+                .andReturn().getResponse().getContentAsString());
+
+        // A name is needed, can't repeat another template's (whatever the case), and something has to fill in.
+        mockMvc.perform(send(OWNER, "ADMIN", post("/api/marketing/templates"), Map.of("title", "No name")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(send(OWNER, "ADMIN", post("/api/marketing/templates"),
+                        Map.of("name", "weekly HIRING note", "title", "Another")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value(containsString("already a template called weekly HIRING note")));
+        mockMvc.perform(send(OWNER, "ADMIN", post("/api/marketing/templates"), Map.of("name", "Empty", "body", "  ")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value(containsString("Add a title, notes or the post's text")));
+
+        long announcement = created(mockMvc.perform(send(OWNER, "ADMIN", post("/api/marketing/templates"),
+                        Map.of("name", "Announcement", "notes", "What's new, and why it matters to a bank.")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.theme").value("OTHER"))
+                .andExpect(jsonPath("$.account").value("PERSONAL"))
+                .andReturn().getResponse().getContentAsString());
+
+        // By name, for the list to pick from.
+        assertThat(templateNames(List.of(weekly, announcement))).containsExactly("Announcement", "Weekly hiring note");
+
+        // Anyone can change one. Keeping its own name is fine; taking another's isn't. Who made it stays.
+        mockMvc.perform(send(OWNER, "ADMIN", put("/api/marketing/templates/" + weekly), Map.of(
+                        "name", "Weekly hiring note",
+                        "body", "Two things we saw this week.",
+                        "theme", "AI_PLATFORM_HIRING")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").doesNotExist())
+                .andExpect(jsonPath("$.body").value("Two things we saw this week."))
+                .andExpect(jsonPath("$.theme").value("AI_PLATFORM_HIRING"))
+                .andExpect(jsonPath("$.account").value("PERSONAL"))
+                .andExpect(jsonPath("$.ownerName").value("Jane Member"));
+        mockMvc.perform(send(OWNER, "ADMIN", put("/api/marketing/templates/" + weekly),
+                        Map.of("name", "announcement", "body", "Two things")))
+                .andExpect(status().isBadRequest());
+
+        // Encrypted at rest and shared with the other computers.
+        Map<String, Object> stored = jdbc.queryForMap("SELECT name, body FROM post_template WHERE id = ?", weekly);
+        assertThat(String.valueOf(stored.get("name"))).doesNotContain("Weekly");
+        assertThat(String.valueOf(stored.get("body"))).doesNotContain("Two things");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM sync_row WHERE table_name = 'post_template' AND row_id = ?",
+                Integer.class, weekly)).isEqualTo(1);
+
+        mockMvc.perform(send(MEMBER, "MEMBER", delete("/api/marketing/templates/" + weekly), null))
+                .andExpect(status().isNoContent());
+        assertThat(templateNames(List.of(weekly, announcement))).containsExactly("Announcement");
+        mockMvc.perform(send(MEMBER, "MEMBER", delete("/api/marketing/templates/" + weekly), null))
+                .andExpect(status().isNotFound());
+    }
+
+    /** The names the template list shows, in its order, of these templates only (others may exist). */
+    private List<String> templateNames(List<Long> ids) throws Exception {
+        JsonNode list = json.readTree(mockMvc.perform(send(MEMBER, "MEMBER", get("/api/marketing/templates"), null))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        return StreamSupport.stream(list.spliterator(), false)
+                .filter(template -> ids.contains(template.path("id").asLong()))
+                .map(template -> template.path("name").asText())
+                .toList();
     }
 
     private AppUser account(String email, String name, UserRole role, boolean accountOwner) {

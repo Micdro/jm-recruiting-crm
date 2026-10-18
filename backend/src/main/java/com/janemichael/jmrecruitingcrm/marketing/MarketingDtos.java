@@ -235,4 +235,55 @@ public final class MarketingDtos {
     /** Suggested titles, not saved. The person adds the ones they like as ideas. */
     public record SuggestResponse(List<String> ideas, String provider, int costCents) {
     }
+
+    /**
+     * A new or changed post template. It needs a name and at least one of the title, text and notes.
+     * Theme and account fill in with the rest when it's used.
+     */
+    public record PostTemplateRequest(
+            @NotBlank(message = "Give the template a name")
+            @Size(max = 100, message = "The name must be 100 characters or fewer")
+            String name,
+
+            @Size(max = 200, message = "The title must be 200 characters or fewer")
+            String title,
+
+            @Size(max = POST_LIMIT, message = "LinkedIn posts can be up to 3,000 characters")
+            String body,
+
+            @Size(max = 2_000, message = "Notes must be 2,000 characters or fewer")
+            String notes,
+
+            PostTheme theme,
+            PostAccount account
+    ) {
+    }
+
+    public record PostTemplateResponse(
+            Long id,
+            String name,
+            String title,
+            String body,
+            String notes,
+            PostTheme theme,
+            PostAccount account,
+            Long ownerId,
+            String ownerName,
+            Instant updatedAt
+    ) {
+
+        public static PostTemplateResponse from(PostTemplate template) {
+            return new PostTemplateResponse(
+                    template.getId(),
+                    template.getName(),
+                    template.getTitle(),
+                    template.getBody(),
+                    template.getNotes(),
+                    template.getTheme(),
+                    template.getAccount(),
+                    template.getOwner() == null ? null : template.getOwner().getId(),
+                    template.getOwner() == null ? null : template.getOwner().getDisplayName(),
+                    template.getUpdatedAt());
+        }
+    }
 }
