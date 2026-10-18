@@ -1180,7 +1180,8 @@ textarea {
 
 .bulk-bar {
   position: sticky;
-  top: 0;
+  /* Just below the update banner when one is pinned above it. */
+  top: var(--update-banner-height, 0px);
   z-index: 15;
   display: flex;
   flex-wrap: wrap;
@@ -3616,27 +3617,85 @@ a.cell-title:hover {
 
 /* App updates --------------------------------------------------------------------- */
 
+/* Pinned to the top of the page while an update waits, so it can't scroll out of sight. */
 .update-banner {
+  position: sticky;
+  top: 0;
+  z-index: 16;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
+  gap: 10px 14px;
   margin: 0 0 18px;
-  padding: 10px 14px;
+  padding: 12px 16px;
+  border-left: 4px solid var(--gold);
   border-radius: var(--radius);
-  background: var(--blue-soft);
-  color: var(--blue);
-  font-size: 14px;
+  background: var(--navy);
+  color: #ffffff;
+  font-size: 15px;
+  box-shadow: 0 6px 18px rgba(20, 36, 58, 0.22);
 }
 
-.update-banner p {
+.update-banner-icon {
+  flex: none;
+  color: var(--gold);
+}
+
+.update-banner-text {
+  flex: 1 1 220px;
   margin: 0;
+}
+
+.update-banner-text strong {
+  margin-right: 4px;
 }
 
 .update-problem {
   display: block;
   color: var(--red);
+}
+
+.update-banner .update-problem {
+  color: #ffc2b8;
+}
+
+.update-banner .update-banner-button {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.update-banner .update-banner-button:hover:not(:disabled) {
+  border-color: var(--gold-soft);
+  background: var(--gold-soft);
+  color: var(--navy);
+}
+
+/* Under This computer in the menu while an update waits. */
+.nav-badge {
+  display: block;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  /* The menu bar is pinned on narrow windows; the banner stays at the top of the page instead. */
+  .update-banner {
+    position: static;
+  }
+
+  .bulk-bar {
+    top: 0;
+  }
 }
 
 .computer-version {

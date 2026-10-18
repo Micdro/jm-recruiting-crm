@@ -126,8 +126,9 @@ usually within a minute or two.
 
 ## Updating
 
-The CRM checks for a new version every few hours. When one is ready, a strip at the top of the page
-says so: click **Update now**. It downloads the new version, restarts in about a minute, and you
+The CRM checks for a new version every hour. When one is ready, Windows shows a notification (again
+each day until it's installed), a navy banner stays pinned to the top of every page, and **This
+computer** in the menu says **Update ready**. Click **Update now** on the banner. It downloads the new version, restarts in about a minute, and you
 sign in again. Your data and settings aren't touched. A copy that was unzipped into OneDrive or
 Google Drive moves itself to `%LOCALAPPDATA%\Programs\JM CRM` as it updates, and its shortcuts
 follow. **This computer** shows each computer's

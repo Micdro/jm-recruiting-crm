@@ -7,6 +7,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
@@ -14,8 +15,8 @@ import java.util.Properties;
 import java.util.function.Consumer;
 
 /**
- * settings.properties in the desktop home folder: the sync token, the morning reminder and a few
- * one-time flags.
+ * settings.properties in the desktop home folder: the sync token, the morning reminder, the last
+ * update notification and a few one-time flags.
  *
  * <p>The CRM key itself is not kept here. Each account holds a copy locked with its password, in the
  * database. Versions before that stored the key here ({@code encryption.key}); it is removed once
@@ -31,6 +32,8 @@ public class DesktopSettings {
     private static final String REMINDER_TIME = "reminder.time";
     private static final String REMINDER_EMAIL = "reminder.email";
     private static final String REMINDER_SHOWN = "reminder.shown";
+    private static final String UPDATE_NOTIFIED_BUILD = "update.notified.build";
+    private static final String UPDATE_NOTIFIED_AT = "update.notified.at";
     public static final LocalTime DEFAULT_REMINDER_TIME = LocalTime.of(8, 30);
     /** Several parts of the app keep their own copy; each change rereads the file so none undoes another's. */
     private static final Object FILE_LOCK = new Object();
@@ -123,6 +126,33 @@ public class DesktopSettings {
 
     public void markReminderShown(LocalDate day) {
         change(properties -> properties.setProperty(REMINDER_SHOWN, day.toString()));
+    }
+
+    /** The build the last "update ready" notification was about, or null. */
+    public Integer updateNotifiedBuild() {
+        String value = value(UPDATE_NOTIFIED_BUILD);
+        try {
+            return value == null ? null : Integer.valueOf(value);
+        } catch (NumberFormatException unreadable) {
+            return null;
+        }
+    }
+
+    /** When the last "update ready" notification showed, or null. */
+    public Instant updateNotifiedAt() {
+        String value = value(UPDATE_NOTIFIED_AT);
+        try {
+            return value == null ? null : Instant.parse(value);
+        } catch (DateTimeParseException unreadable) {
+            return null;
+        }
+    }
+
+    public void markUpdateNotified(int build, Instant at) {
+        change(properties -> {
+            properties.setProperty(UPDATE_NOTIFIED_BUILD, String.valueOf(build));
+            properties.setProperty(UPDATE_NOTIFIED_AT, at.toString());
+        });
     }
 
     private String value(String name) {

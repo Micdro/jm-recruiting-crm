@@ -100,8 +100,10 @@ How it works:
   The CRM key from the password manager can unlock an account that has no copy yet, or set a new
   password when one is forgotten.
 - **Updates.** CI numbers each build (`-Djmcrm.build`) and publishes `latest.json` (build number
-  and SHA-256) next to the zip on the `windows-latest` release. The app checks it every six hours;
-  **Update now** downloads the zip, checks its hash, unpacks it beside the app, and starts a small
+  and SHA-256) next to the zip on the `windows-latest` release. The app checks it every hour. When
+  there's a newer build, a Windows notification says so (once when it's found, then once a day until
+  it's installed), a navy banner stays pinned to the top of every page and **This computer** in the
+  menu shows **Update ready**. **Update now** downloads the zip, checks its hash, unpacks it beside the app, and starts a small
   PowerShell script that waits for the app to close, swaps the folders (keeping the old one until
   the swap worked, or copying over it if a file is held open), and starts the new version. Data
   and settings live in `%LOCALAPPDATA%\JMCRM`, so they carry over. Each computer notes its version

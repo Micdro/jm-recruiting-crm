@@ -4,6 +4,12 @@ import { useInterval, useLoader } from './hooks.js';
 
 const BUSY = ['DOWNLOADING', 'INSTALLING', 'RESTARTING'];
 
+/**
+ * How often an open page asks this computer whether an update is ready. It's a local question; the
+ * computer itself looks at the release page every hour.
+ */
+export const UPDATE_POLL_MS = 5 * 60 * 1000;
+
 /** When the CRM on this computer last started, from its health check. Null while it's down. */
 async function serverStarted() {
   try {
@@ -50,8 +56,8 @@ export function useAppUpdate() {
   const phase = data?.phase;
   const busy = (working && phase !== 'FAILED') || BUSY.includes(phase);
 
-  // Quickly while updating; otherwise the app checks by itself every few hours.
-  useInterval(status.reload, busy ? 1000 : 30 * 60 * 1000);
+  // Quickly while updating; otherwise every few minutes, to show an update soon after it's found.
+  useInterval(status.reload, busy ? 1000 : UPDATE_POLL_MS);
 
   const install = useCallback(async () => {
     setError('');
@@ -90,6 +96,14 @@ export function useAppUpdate() {
     install,
     check,
   };
+}
+
+/** Whether a newer version is waiting to be installed on this computer, for the badge in the menu. */
+export function useUpdateReady() {
+  const status = useLoader(() => api.desktop.update(), [], 'desktop:update');
+  useInterval(status.reload, UPDATE_POLL_MS);
+  const data = status.data;
+  return Boolean(data?.supported && data.available && !BUSY.includes(data.phase));
 }
 
 /** What's happening with an update, in a sentence. */

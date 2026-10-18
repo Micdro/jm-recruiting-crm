@@ -6,6 +6,7 @@ import { shortcutLabel } from '../quickSearch.js';
 import QuickSearch from './QuickSearch.jsx';
 import SyncBadge from './SyncBadge.jsx';
 import UpdateBanner from './UpdateBanner.jsx';
+import UpdateNavBadge from './UpdateNavBadge.jsx';
 
 const NAV = [
   { to: '/', label: 'Today', end: true },
@@ -96,7 +97,10 @@ export default function Layout() {
           <ul className="nav-tools">
             {tools.map((item) => (
               <li key={item.to}>
-                <NavLink to={item.to}>{item.label}</NavLink>
+                <NavLink to={item.to}>
+                  {item.label}
+                  {item.to === '/computer' && <UpdateNavBadge />}
+                </NavLink>
               </li>
             ))}
           </ul>

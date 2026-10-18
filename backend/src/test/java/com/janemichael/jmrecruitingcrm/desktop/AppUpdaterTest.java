@@ -9,6 +9,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -44,6 +46,40 @@ class AppUpdaterTest {
         assertThatThrownBy(() -> updater.parseLatest(("{\"sha256\": \"" + "a".repeat(64) + "\", \"zip\": \"x.zip\"}")
                 .getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(UpdateException.class);
+    }
+
+    @Test
+    void notifiesWhenAVersionIsFoundThenOnceADayWhileItWaits() {
+        Instant shown = Instant.parse("2026-10-18T13:00:00Z");
+
+        assertThat(AppUpdater.notificationDue(62, null, null, shown)).isTrue();
+        assertThat(AppUpdater.notificationDue(62, 62, shown, shown.plus(Duration.ofHours(1)))).isFalse();
+        assertThat(AppUpdater.notificationDue(62, 62, shown, shown.plus(Duration.ofHours(23)))).isFalse();
+        assertThat(AppUpdater.notificationDue(62, 62, shown, shown.plus(Duration.ofDays(1)))).isTrue();
+        // A newer version than the one notified about is news right away.
+        assertThat(AppUpdater.notificationDue(63, 62, shown, shown.plus(Duration.ofHours(1)))).isTrue();
+    }
+
+    @Test
+    void theNotificationSaysWhatToDo() {
+        AppUpdater.Notice notice = AppUpdater.notice("1.0.62");
+
+        assertThat(notice.title()).isEqualTo("JM CRM update ready");
+        assertThat(notice.body()).contains("Version 1.0.62 is ready").contains("click Update now").doesNotContain("\u2014");
+    }
+
+    @Test
+    void remembersTheLastUpdateNotificationAcrossRestarts() {
+        DesktopSettings settings = new DesktopSettings(folder);
+        assertThat(settings.updateNotifiedBuild()).isNull();
+        assertThat(settings.updateNotifiedAt()).isNull();
+
+        Instant at = Instant.parse("2026-10-18T13:00:00Z");
+        settings.markUpdateNotified(62, at);
+
+        DesktopSettings reread = new DesktopSettings(folder);
+        assertThat(reread.updateNotifiedBuild()).isEqualTo(62);
+        assertThat(reread.updateNotifiedAt()).isEqualTo(at);
     }
 
     @Test

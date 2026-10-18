@@ -25,6 +25,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -35,8 +36,9 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Keeps the Windows app up to date. Every few hours it looks at the newest build on the release
- * page; when there's a newer one, "Update now" downloads it, checks it, unpacks it next to the app,
+ * Keeps the Windows app up to date. Every hour it looks at the newest build on the release page;
+ * when there's a newer one, it says so with a Windows notification (and a banner on every page), and
+ * "Update now" downloads it, checks it, unpacks it next to the app,
  * and hands over to a small script that swaps the folders once the app has closed and starts the
  * new version. An app unzipped into OneDrive or Google Drive moves to
  * {@code %LOCALAPPDATA%\Programs\JM CRM} on its next update, since those keep its files busy. The
@@ -55,6 +57,8 @@ public class AppUpdater {
     private static final List<String> SYNCED_FOLDER_PREFIXES = List.of("onedrive", "dropbox");
     private static final List<String> SYNCED_FOLDER_NAMES =
             List.of("my drive", "shared drives", "google drive", "icloud drive", "iclouddrive");
+    /** While an update waits to be installed, Windows reminds about it again this often. */
+    static final Duration REMIND_AGAIN_AFTER = Duration.ofDays(1);
 
     /** What the release page says about the newest build. {@code zip} is relative to the page. */
     record Latest(int build, String sha256, String zip) {
@@ -129,11 +133,57 @@ public class AppUpdater {
     }
 
     @Scheduled(initialDelayString = "${app.update.initial-delay-ms:60000}",
-            fixedDelayString = "${app.update.interval-ms:21600000}")
+            fixedDelayString = "${app.update.interval-ms:3600000}")
     public void scheduledCheck() {
         if (supported() && (phase == Phase.IDLE || phase == Phase.FAILED)) {
             check();
+            notifyIfReady();
         }
+    }
+
+    /**
+     * A Windows notification when a newer version is ready: when it's first found, then once a day
+     * while it waits. Clicking it opens the CRM, where the banner has Update now.
+     */
+    private void notifyIfReady() {
+        UpdateStatus status = status();
+        if (!status.available() || phase != Phase.IDLE) {
+            return;
+        }
+        try {
+            DesktopSettings settings = new DesktopSettings(home());
+            Instant now = Instant.now();
+            if (!notificationDue(status.latestBuild(), settings.updateNotifiedBuild(), settings.updateNotifiedAt(), now)) {
+                return;
+            }
+            Notice notice = notice(status.latest());
+            // Only counted as shown if Windows took it, so a computer without the icon yet tries again.
+            if (DesktopTray.notify(notice.title(), notice.body())) {
+                settings.markUpdateNotified(status.latestBuild(), now);
+            }
+        } catch (RuntimeException problem) {
+            log.warn("Could not show the update notification", problem);
+        }
+    }
+
+    record Notice(String title, String body) {
+    }
+
+    static Notice notice(String version) {
+        return new Notice("JM CRM update ready",
+                "Version " + version + " is ready. Open the CRM and click Update now. It takes about a minute, "
+                        + "then you sign in again.");
+    }
+
+    /**
+     * Whether to show the notification for {@code latestBuild}: a version not notified about yet, or
+     * the same one still waiting a day after the last notification.
+     */
+    static boolean notificationDue(int latestBuild, Integer notifiedBuild, Instant notifiedAt, Instant now) {
+        if (notifiedBuild == null || notifiedAt == null || latestBuild != notifiedBuild) {
+            return true;
+        }
+        return !now.isBefore(notifiedAt.plus(REMIND_AGAIN_AFTER));
     }
 
     /** Looks at the release page for a newer version. */
@@ -151,7 +201,7 @@ public class AppUpdater {
             problem = "Couldn't check for updates: " + exception.getMessage();
             log.info(problem);
         } catch (IOException exception) {
-            problem = "Couldn't reach the release page to check for updates. It tries again in a few hours.";
+            problem = "Couldn't reach the release page to check for updates. It tries again within the hour.";
             log.info("Update check failed: {}", exception.toString());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();

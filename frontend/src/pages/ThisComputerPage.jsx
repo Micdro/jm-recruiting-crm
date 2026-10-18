@@ -424,7 +424,7 @@ function VersionRow() {
     <div className="setting-row">
       <p>
         <strong>Version {data.version}</strong>
-        {updateMessage(update) || 'Up to date. The CRM checks for a new version every few hours.'}
+        {updateMessage(update) || 'Up to date. The CRM checks for a new version every hour.'}
         {update.problem && <span className="computer-state computer-state-problem">{update.problem}</span>}
       </p>
       {!update.busy &&
