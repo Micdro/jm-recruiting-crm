@@ -209,6 +209,64 @@ public class CandidateService {
         return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
     }
 
+    /**
+     * Saves a call written up from notes: logs it with its next step, then makes the changes it
+     * brought to the record. Logged first, so a call where they ask not to be contacted again is
+     * still recorded as the call it was.
+     */
+    @Transactional
+    public CandidateResponse saveCall(Long id, CallUpdate update) {
+        if (!CallUpdate.allowed(update.type())) {
+            throw new BadRequestException("Save it as a call or a meeting.");
+        }
+        logActivity(id, new LogActivityRequest(update.type(), update.summary().trim(), update.nextActionDate(),
+                update.nextActionDate() == null ? null : update.nextActionType(), false, update.searchId()));
+
+        Candidate candidate = find(id);
+        CandidateEnums.Status previousStatus = candidate.getStatus();
+        if (update.status() != null) {
+            candidate.setStatus(update.status());
+        }
+        if (Text.clean(update.currentTitle()) != null) {
+            candidate.setCurrentTitle(Text.clean(update.currentTitle()));
+        }
+        if (Text.clean(update.currentCompany()) != null) {
+            candidate.setCurrentCompany(Text.clean(update.currentCompany()));
+        }
+        if (Text.clean(update.location()) != null) {
+            candidate.setLocation(Text.clean(update.location()));
+        }
+        if (update.workPreference() != null) {
+            candidate.setWorkPreference(update.workPreference());
+        }
+        if (update.willingToRelocate() != null) {
+            candidate.setWillingToRelocate(update.willingToRelocate());
+        }
+        if (update.employmentType() != null) {
+            candidate.setEmploymentType(update.employmentType());
+        }
+        if (Text.clean(update.compExpectation()) != null) {
+            candidate.setCompExpectation(Text.clean(update.compExpectation()));
+        }
+        String evidence = Text.clean(update.addEvidence());
+        if (evidence != null) {
+            String existing = Text.clean(candidate.getProductionEvidence());
+            String combined = existing == null ? evidence : existing + "\n" + evidence;
+            if (combined.length() > 10_000) {
+                throw new BadRequestException("Production evidence would run over 10,000 characters. Untick the new "
+                        + "evidence, or shorten what's on the record first.");
+            }
+            candidate.setProductionEvidence(combined);
+        }
+
+        if (previousStatus != candidate.getStatus()) {
+            activityLogger.forCandidate(candidate, null, ActivityType.STATUS_CHANGE, false,
+                    "Status changed from " + Labels.of(previousStatus) + " to " + Labels.of(candidate.getStatus()),
+                    currentUserService.get());
+        }
+        return CandidateResponse.from(candidate, activeSearchCounts().getOrDefault(id, 0L));
+    }
+
     /** Moves the next follow-up to the next business day or a week out, from the Today queue. */
     @Transactional
     public CandidateResponse snooze(Long id, Later until) {

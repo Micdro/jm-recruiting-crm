@@ -173,6 +173,20 @@ export const api = {
         .then((r) => r.data),
     removeFile: (id, fileId) => del(`/api/candidates/${id}/files/${fileId}`),
     fileUrl: (id, fileId, download = false) => `/api/candidates/${id}/files/${fileId}${download ? '?download=true' : ''}`,
+    /** AI reads a resume for a new candidate: { candidate, matches, fileName, provider, costCents }. Not saved. */
+    readResume: (file) =>
+      client
+        .post('/api/candidates/read-resume', file, {
+          params: { name: file.name },
+          headers: { 'Content-Type': 'application/octet-stream' },
+        })
+        .then((r) => r.data),
+    /** AI reads a resume already on the candidate; same answer as readResume. */
+    readFile: (id, fileId) => post(`/api/candidates/${id}/files/${fileId}/read`),
+    /** { type: CALL | MEETING, notes } gives { update, nextStep, provider, costCents }. Not saved. */
+    readCallNotes: (id, body) => post(`/api/candidates/${id}/call-notes/read`, body),
+    /** Logs the call and makes its changes; null fields stay as they are. */
+    saveCall: (id, body) => post(`/api/candidates/${id}/call-notes`, body),
   },
   pipeline: {
     add: (body) => post('/api/pipeline', body),

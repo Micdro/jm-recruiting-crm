@@ -4,6 +4,7 @@ import { api, errorMessage } from '../api.js';
 import { useUndoableDelete } from '../undo.js';
 import { ConfirmButton, Details, DueTag, Empty, ErrorNote, ExternalLink, Loading, Pill } from '../components/Bits.jsx';
 import BlindProfileForm from '../components/BlindProfileForm.jsx';
+import CallNotes from '../components/CallNotes.jsx';
 import CandidateFiles from '../components/CandidateFiles.jsx';
 import { SelectField } from '../components/Fields.jsx';
 import LogActivityForm from '../components/LogActivityForm.jsx';
@@ -27,6 +28,7 @@ import { formatDate, href, todayIso } from '../format.js';
 import { useLoader, useTitle, useToast } from '../hooks.js';
 import { candidateOffLimits, offLimitsWarning } from '../offLimits.js';
 import { interviewWhen } from '../interviews.js';
+import { fillBlanks, readBy } from '../candidateAi.js';
 
 export default function CandidateDetailPage() {
   const { id } = useParams();
@@ -39,6 +41,9 @@ export default function CandidateDetailPage() {
   const companies = useLoader(() => api.companies.list(), [], 'companies');
   const [editing, setEditing] = useState(false);
   const [profiling, setProfiling] = useState(false);
+  const [callNotes, setCallNotes] = useState(false);
+  // A resume's answers for the blank fields, opened in the edit form to check.
+  const [filling, setFilling] = useState(null);
   const [error, setError] = useState('');
 
   const record = candidate.data;
@@ -81,6 +86,9 @@ export default function CandidateDetailPage() {
           </div>
         </div>
         <div className="page-actions">
+          <button type="button" className="btn" onClick={() => setCallNotes(true)}>
+            Notes from a call
+          </button>
           <button type="button" className="btn" onClick={() => setProfiling(true)}>
             Blind profile
           </button>
@@ -127,7 +135,17 @@ export default function CandidateDetailPage() {
             )}
           </section>
 
-          <CandidateFiles candidateId={record.id} />
+          <CandidateFiles
+            candidateId={record.id}
+            onRead={(draft) => {
+              const { candidate: filled, filled: fields } = fillBlanks(record, draft.candidate);
+              if (fields.length === 0) {
+                toast(`${draft.fileName} has nothing ${record.name.split(' ')[0]}’s record is missing.`);
+              } else {
+                setFilling({ ...draft, candidate: filled, fields });
+              }
+            }}
+          />
 
           <CandidateSearches candidate={record} entries={pipeline.data} offLimits={offLimits} onChanged={() => refresh()} />
 
@@ -187,6 +205,39 @@ export default function CandidateDetailPage() {
               setProfiling(false);
               toast(`Blind profile ${reference} downloaded. It's noted in the history.`);
               history.reload();
+            }}
+          />
+        </Modal>
+      )}
+
+      {callNotes && (
+        <Modal title={`Notes from a call with ${record.name}`} onClose={() => setCallNotes(false)} wide>
+          <CallNotes
+            candidate={record}
+            searches={pipeline.data ?? []}
+            onCancel={() => setCallNotes(false)}
+            onSaved={(saved, noun) => {
+              setCallNotes(false);
+              toast(`Saved the ${noun} with ${record.name.split(' ')[0]}`);
+              refresh(saved);
+            }}
+          />
+        </Modal>
+      )}
+
+      {filling && (
+        <Modal title={`Edit ${record.name}`} onClose={() => setFilling(null)} wide>
+          <p className="ai-note">
+            {readBy(filling.provider, filling.costCents)} from {filling.fileName}. Filled in: {filling.fields.join(', ')}. Check
+            them, then save.
+          </p>
+          <CandidateForm
+            candidate={filling.candidate}
+            onCancel={() => setFilling(null)}
+            onSaved={(saved) => {
+              setFilling(null);
+              toast('Candidate saved');
+              refresh(saved);
             }}
           />
         </Modal>

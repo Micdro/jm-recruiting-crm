@@ -4,6 +4,7 @@ import com.janemichael.jmrecruitingcrm.ai.AiRequest;
 import com.janemichael.jmrecruitingcrm.ai.AiRequest.Field;
 import com.janemichael.jmrecruitingcrm.ai.AiResult;
 import com.janemichael.jmrecruitingcrm.ai.AiService;
+import com.janemichael.jmrecruitingcrm.ai.AiText;
 import com.janemichael.jmrecruitingcrm.common.BadRequestException;
 import com.janemichael.jmrecruitingcrm.common.Text;
 import com.janemichael.jmrecruitingcrm.marketing.ContentEnums.PostAccount;
@@ -186,14 +187,7 @@ public class PostDrafter {
 
     /** Dashes become commas, and stray whitespace goes. */
     static String clean(String text) {
-        if (text == null) {
-            return "";
-        }
-        return text.replaceAll("\\s*[\\u2014\\u2013]\\s*", ", ")
-                .replaceAll(",\\s*,", ",")
-                .replaceAll("[ \\t]+\\n", "\n")
-                .replaceAll("\\n{3,}", "\n\n")
-                .trim();
+        return AiText.plain(text);
     }
 
     static String firstName(String name) {

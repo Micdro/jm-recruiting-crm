@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '../api.js';
 import { useUndoableDelete } from '../undo.js';
+import { READABLE_TYPES } from '../candidateAi.js';
 import { formatDate, toIsoDate } from '../format.js';
 import { useLoader, useToast } from '../hooks.js';
 import { ConfirmButton, ErrorNote } from './Bits.jsx';
@@ -21,8 +22,11 @@ function size(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Resumes and other files on a candidate: added here, encrypted in the CRM, shared with the team. */
-export default function CandidateFiles({ candidateId }) {
+/**
+ * Resumes and other files on a candidate: added here, encrypted in the CRM, shared with the team.
+ * With `onRead`, a resume can fill in what the record is missing: AI reads it and hands back a draft.
+ */
+export default function CandidateFiles({ candidateId, onRead }) {
   const toast = useToast();
   const undoable = useUndoableDelete();
   const files = useLoader(() => api.candidates.files(candidateId), [candidateId], `candidate:${candidateId}:files`);
@@ -30,6 +34,19 @@ export default function CandidateFiles({ candidateId }) {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
+  const [reading, setReading] = useState(null);
+
+  async function read(file) {
+    setReading(file.id);
+    setError('');
+    try {
+      onRead(await api.candidates.readFile(candidateId, file.id));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setReading(null);
+    }
+  }
 
   async function add(list) {
     const chosen = [...list];
@@ -117,6 +134,17 @@ export default function CandidateFiles({ candidateId }) {
                 )}
               </div>
               <div className="file-actions">
+                {onRead && file.available && READABLE_TYPES.includes(file.contentType) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={reading !== null}
+                    onClick={() => read(file)}
+                    title="AI reads the resume and fills in what the record is missing. You check it before it's saved."
+                  >
+                    {reading === file.id ? 'Reading…' : 'Fill in from this'}
+                  </button>
+                )}
                 {file.available && (
                   <a className="btn btn-sm" href={api.candidates.fileUrl(candidateId, file.id, true)} download={file.fileName}>
                     Download

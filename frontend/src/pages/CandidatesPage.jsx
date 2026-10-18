@@ -5,6 +5,7 @@ import { DueTag, Empty, ErrorNote, Loading, PageHeader, Pill, ShowMore } from '.
 import { BulkBar, DuplicatesNote, RowBox, SelectAllBox } from '../components/Bulk.jsx';
 import ExportButton from '../components/ExportButton.jsx';
 import { FilterCheck, FilterSelect, SearchBox } from '../components/ListFilters.jsx';
+import AddFromResume from '../components/AddFromResume.jsx';
 import MergeDialog from '../components/MergeDialog.jsx';
 import Modal from '../components/Modal.jsx';
 import CandidateForm from '../forms/CandidateForm.jsx';
@@ -66,7 +67,10 @@ export default function CandidatesPage() {
     <>
       <PageHeader title="Candidates" sub="Production AI engineers and technical leaders, judged by what they owned in production.">
         <ExportButton part="candidates" rows={rows} noun="candidates" />
-        <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
+        <button type="button" className="btn" onClick={() => setAdding('resume')}>
+          Add from resume
+        </button>
+        <button type="button" className="btn btn-primary" onClick={() => setAdding('form')}>
           Add candidate
         </button>
       </PageHeader>
@@ -203,7 +207,25 @@ export default function CandidatesPage() {
         </Modal>
       )}
 
-      {adding && (
+      {adding === 'resume' && (
+        <Modal title="Add from resume" onClose={() => setAdding(false)} wide>
+          <AddFromResume
+            onCancel={() => setAdding(false)}
+            onByHand={() => setAdding('form')}
+            onAdded={(saved, attached) => {
+              setAdding(false);
+              toast(
+                attached
+                  ? `Added ${saved.name} with their resume`
+                  : `Added ${saved.name}. The resume didn’t attach, so add it on their page.`,
+              );
+              navigate(`/candidates/${saved.id}`);
+            }}
+          />
+        </Modal>
+      )}
+
+      {adding === 'form' && (
         <Modal title="Add candidate" onClose={() => setAdding(false)} wide>
           <CandidateForm
             onCancel={() => setAdding(false)}
