@@ -61,6 +61,27 @@ export function postedAs(post) {
   return post.account === 'COMPANY_PAGE' ? 'Company page' : post.ownerName ?? 'Unassigned';
 }
 
+/** The team's post templates, by name. */
+export function usePostTemplates() {
+  return useLoader(() => api.marketing.templates.list(), [], 'marketing:templates');
+}
+
+/**
+ * A post's form filled in from a template. Its text and notes replace the post's, and its theme
+ * and account are used. Its title is used only when the post has none yet, since a post's title
+ * is what it's about.
+ */
+export function applyTemplate(form, template) {
+  return {
+    ...form,
+    title: form.title.trim() ? form.title : (template.title ?? form.title),
+    body: template.body ?? form.body,
+    notes: template.notes ?? form.notes,
+    theme: template.theme ?? form.theme,
+    account: template.account ?? form.account,
+  };
+}
+
 /** The signed-in person's LinkedIn connection on this computer, shared by every Post to LinkedIn button. */
 export function useLinkedIn() {
   return useLoader(() => api.linkedin.status(), [], 'linkedin:status');

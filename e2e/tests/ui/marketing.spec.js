@@ -130,3 +130,75 @@ test.describe('Marketing plan, pictures and posting', () => {
     await expect(today.getByRole('link', { name: 'Connect LinkedIn to post' }).first()).toBeVisible();
   });
 });
+
+test.describe('Marketing templates', () => {
+  test('saves a post as a template, starts posts from it, edits it and deletes it after asking', async ({ page, crm }) => {
+    const title = uniqueName('This week in FDE hiring');
+    const name = uniqueName('Weekly hiring note');
+    const created = await crm.api
+      .post('/api/marketing/posts', {
+        data: { title, body: 'Three things we saw this week.', theme: 'FDE_HIRING', account: 'COMPANY_PAGE' },
+      })
+      .then((response) => response.json());
+    crm.track('posts', created.id);
+
+    // Save the post as a template.
+    await page.goto(`/marketing?post=${created.id}`);
+    const editor = page.getByRole('dialog', { name: title });
+    await editor.getByRole('button', { name: 'Save as template' }).click();
+    await editor.getByLabel('Template name').fill(name);
+    await editor.getByRole('button', { name: 'Save template' }).click();
+    await expect(page.getByRole('status')).toContainText(`Saved the template ${name}`);
+    const template = (await crm.getJson('/api/marketing/templates')).find((saved) => saved.name === name);
+    crm.track('postTemplates', template.id);
+    expect(template).toMatchObject({ title, body: 'Three things we saw this week.', theme: 'FDE_HIRING', account: 'COMPANY_PAGE' });
+    await editor.getByRole('button', { name: 'Close' }).first().click();
+
+    // Pick it from the list on a new post; Undo puts the post back.
+    await page.getByRole('button', { name: 'Add idea' }).click();
+    const add = page.getByRole('dialog', { name: 'Add a post' });
+    await add.getByLabel('Template', { exact: true }).selectOption({ label: name });
+    await expect(add.getByLabel('Title')).toHaveValue(title);
+    await expect(add.getByLabel('Post', { exact: true })).toHaveValue('Three things we saw this week.');
+    await expect(add.getByLabel('Theme')).toHaveValue('FDE_HIRING');
+    await add.getByRole('button', { name: 'Undo' }).click();
+    await expect(add.getByLabel('Title')).toHaveValue('');
+    await expect(add.getByLabel('Post', { exact: true })).toHaveValue('');
+    await add.getByRole('button', { name: 'Cancel' }).click();
+
+    // Edit it on Templates.
+    await page.goto('/marketing?view=templates');
+    const list = page.getByRole('region', { name: /Templates/ });
+    await list.getByRole('button', { name: `Edit ${name}` }).click();
+    const edit = page.getByRole('dialog', { name: `Edit ${name}` });
+    await edit.getByLabel('Post (optional)').fill('Two things we saw this week.');
+    await edit.getByRole('button', { name: 'Save template' }).click();
+    await expect(page.getByRole('status')).toContainText(`Saved ${name}`);
+    const edited = (await crm.getJson('/api/marketing/templates')).find((saved) => saved.id === template.id);
+    expect(edited.body).toBe('Two things we saw this week.');
+
+    // Use opens a new post filled in from it.
+    await list.getByRole('button', { name: `Use ${name}` }).click();
+    const use = page.getByRole('dialog', { name: 'Add a post' });
+    await expect(use.getByLabel('Post', { exact: true })).toHaveValue('Two things we saw this week.');
+    await expect(use).toContainText(`Filled in from ${name}`);
+    await use.getByRole('button', { name: 'Cancel' }).click();
+
+    // Delete asks first. Cancel keeps it; confirming deletes it.
+    await list.getByRole('button', { name: `Delete ${name}` }).click();
+    const confirm = page.getByRole('dialog', { name: 'Delete this template?' });
+    await expect(confirm).toContainText(`${name} will be deleted for everyone on the team`);
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toBeHidden();
+    await expect(list.getByRole('button', { name: `Edit ${name}` })).toBeVisible();
+
+    await list.getByRole('button', { name: `Delete ${name}` }).click();
+    await confirm.getByRole('button', { name: 'Delete template' }).click();
+    await expect(page.getByRole('status')).toContainText(`Deleted ${name}`);
+    await expect(list.getByRole('button', { name: `Edit ${name}` })).toHaveCount(0);
+    const left = await crm.getJson('/api/marketing/templates');
+    expect(left.some((saved) => saved.id === template.id)).toBe(false);
+    // The post it came from is still there.
+    expect((await crm.getJson(`/api/marketing/posts/${created.id}`)).body).toBe('Three things we saw this week.');
+  });
+});
