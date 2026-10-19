@@ -122,35 +122,7 @@ function Report({ data, team }) {
           />
         </section>
 
-        {team && (
-          <section className="panel" aria-labelledby="team-week">
-            <div className="panel-head">
-              <h2 id="team-week">This week by person</h2>
-            </div>
-            <table className="table table-compact">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col" className="num">Touches</th>
-                  <th scope="col" className="num">Replies</th>
-                  <th scope="col" className="num">Meetings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.people.map((person) => (
-                  <tr key={person.userId}>
-                    <th scope="row" className="table-label">
-                      {person.name}
-                    </th>
-                    <td className="num">{person.touches}</td>
-                    <td className="num">{person.replies}</td>
-                    <td className="num">{person.meetings}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
+        {team && <Scoreboard people={data.people} />}
 
         <section className="panel" aria-labelledby="by-touch">
           <div className="panel-head">
@@ -239,6 +211,51 @@ function Report({ data, team }) {
         </section>
       </div>
     </>
+  );
+}
+
+/**
+ * This week by person, most touches first, with each person's streak of weekdays at the daily
+ * target. The leader is marked once someone is ahead.
+ */
+function Scoreboard({ people }) {
+  const ranked = [...people].sort(
+    (a, b) => b.touches - a.touches || b.replies - a.replies || b.meetings - a.meetings || a.name.localeCompare(b.name),
+  );
+  const leader = ranked.length > 1 && ranked[0].touches > ranked[1].touches ? ranked[0].userId : null;
+
+  return (
+    <section className="panel" aria-labelledby="team-week">
+      <div className="panel-head">
+        <h2 id="team-week">Scoreboard this week</h2>
+      </div>
+      <table className="table table-compact">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col" className="num">Touches</th>
+            <th scope="col" className="num">Replies</th>
+            <th scope="col" className="num">Meetings</th>
+            <th scope="col" className="num">Streak</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ranked.map((person) => (
+            <tr key={person.userId}>
+              <th scope="row" className="table-label">
+                {person.name}
+                {person.userId === leader && <span className="tag tag-good">Leading</span>}
+              </th>
+              <td className="num">{person.touches}</td>
+              <td className="num">{person.replies}</td>
+              <td className="num">{person.meetings}</td>
+              <td className="num">{person.streak > 0 ? `${person.streak} ${person.streak === 1 ? 'day' : 'days'}` : '–'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="panel-foot">Streak: weekdays in a row at the daily touch target.</p>
+    </section>
   );
 }
 

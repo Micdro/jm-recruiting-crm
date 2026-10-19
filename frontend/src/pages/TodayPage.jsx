@@ -27,7 +27,7 @@ import {
   SEARCH_STATUS,
   SHORTLIST_STAGES,
 } from '../labels.js';
-import { formatDate, formatDay, formatLongDay, formatWeekday, money, plural } from '../format.js';
+import { formatDate, formatDay, formatLongDay, formatWeekday, money, parseDate, plural } from '../format.js';
 import { useAuth, useLoader, useTitle, useToast } from '../hooks.js';
 import { interviewWhen } from '../interviews.js';
 import { postedAs, useLinkedIn } from '../marketing.js';
@@ -82,6 +82,7 @@ export default function TodayPage() {
       {data && (
         <>
           <TouchSummary data={data} />
+          <PlacedThisWeek placements={data.placements.recent} />
 
           <div className="today-grid">
             <div className="today-main">
@@ -199,6 +200,12 @@ function TouchSummary({ data }) {
       <div className="touch-summary-text">
         <p className="touch-sentence">{sentence}</p>
         <p className="touch-week">{plural(data.myTouchesThisWeek, 'touch', 'touches')} this week</p>
+        {streakNote(data) && (
+          <p className="touch-streak">
+            <Flame />
+            {streakNote(data)}
+          </p>
+        )}
       </div>
       {data.teamTouches.length > 1 && (
         <ul className="team-touches">
@@ -207,10 +214,59 @@ function TouchSummary({ data }) {
               <span className="team-name">{member.name}</span>
               <TallyMeter count={member.today} target={target} stretch={stretch} compact />
               <span className="team-count">{member.today}</span>
+              <span className="team-streak" title={member.streak > 0 ? `${member.streak}-day streak` : undefined}>
+                {member.streak > 0 && (
+                  <>
+                    <Flame />
+                    {member.streak}
+                    <span className="visually-hidden">-day streak</span>
+                  </>
+                )}
+              </span>
             </li>
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * The streak line under the tally: how many weekdays in a row you've reached the target, and what
+ * today needs to keep it going. Weekends don't count, so they only show the streak.
+ */
+function streakNote({ myStreak: streak, myTouchesToday: count, dailyTouchTarget: target, today }) {
+  const weekend = [0, 6].includes(parseDate(today).getDay());
+  if (weekend || count >= target) return streak > 0 ? `${streak}-day streak at the target.` : '';
+  if (streak > 0) return `${streak}-day streak. Reach ${target} today to make it ${streak + 1}.`;
+  return `Reach ${target} today to start a streak.`;
+}
+
+function Flame() {
+  return (
+    <svg className="flame" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M12 2c1 3.5-1.5 5.3-3 7.2C7.6 11 7 12.5 7 14.2 7 17.4 9.2 20 12 20s5-2.6 5-5.8c0-2.1-1-3.7-2.1-5 .2 1.7-.4 3-1.6 3.6.5-3.5-.3-7.2-1.3-10.8Z"
+      />
+    </svg>
+  );
+}
+
+/** Placements recorded in the last week, for the whole team to see. Hidden when there are none. */
+function PlacedThisWeek({ placements }) {
+  if (!placements?.length) return null;
+  return (
+    <section className="placed-week" aria-label="Placed this week">
+      <p className="placed-week-head">Placed this week</p>
+      <ul>
+        {placements.map((placement) => (
+          <li key={placement.id}>
+            <Link to={`/candidates/${placement.candidateId}`}>{placement.candidateName}</Link> at {placement.companyName}
+            {placement.ownerName ? `, ${placement.ownerName}'s search` : ''}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

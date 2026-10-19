@@ -159,4 +159,16 @@ test.describe('Today', () => {
     const saved = await crm.getJson(`/api/contacts/${contact.id}`);
     expect(saved).toMatchObject({ status: 'REPLIED', nextActionDate: isoDate(0), nextActionType: 'LINKEDIN' });
   });
+
+  test('shows a placement recorded this week to the whole team', async ({ page, crm }) => {
+    const company = await crm.createCompany();
+    const search = await crm.createSearch(company.id);
+    const candidate = await crm.createCandidate();
+    await crm.createPlacement({ searchId: search.id, candidateId: candidate.id, baseSalary: 180000 });
+
+    await page.goto('/');
+    const placed = page.getByRole('region', { name: 'Placed this week' });
+    await expect(placed.getByRole('link', { name: candidate.name })).toBeVisible();
+    await expect(placed).toContainText(company.name);
+  });
 });

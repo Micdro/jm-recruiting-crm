@@ -309,9 +309,9 @@ export default function SearchDetailPage() {
           <PlacementForm
             placement={{ searchId: record.id, candidateId: modal.entry.candidateId, candidateName: modal.entry.candidateName }}
             onCancel={() => setModal(null)}
-            onSaved={() => {
+            onSaved={(saved) => {
               setModal(null);
-              toast('Placement recorded');
+              toast(`Placement recorded: ${saved.candidateName} at ${saved.companyName}. Nice work.`);
               refreshAll();
             }}
           />

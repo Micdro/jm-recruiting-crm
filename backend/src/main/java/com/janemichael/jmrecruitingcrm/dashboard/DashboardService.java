@@ -33,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -51,6 +52,7 @@ public class DashboardService {
     static final int MAX_DUE_ITEMS = 200;
     static final int RECENT_ACTIVITY = 15;
     static final int GUARANTEE_WINDOW_DAYS = 30;
+    static final int RECENT_PLACEMENT_DAYS = 7;
 
     private final CurrentUserService currentUserService;
     private final AppUserRepository userRepository;
@@ -65,6 +67,7 @@ public class DashboardService {
     private final Clock clock;
     private final int dailyTouchTarget;
     private final int dailyTouchStretch;
+    private final Streaks streaks;
 
     public DashboardService(
             CurrentUserService currentUserService,
@@ -79,8 +82,10 @@ public class DashboardService {
             PlacementService placementService,
             Clock clock,
             @Value("${app.outreach.daily-touch-target:30}") int dailyTouchTarget,
-            @Value("${app.outreach.daily-touch-stretch:50}") int dailyTouchStretch
+            @Value("${app.outreach.daily-touch-stretch:50}") int dailyTouchStretch,
+            Streaks streaks
     ) {
+        this.streaks = streaks;
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
         this.contactRepository = contactRepository;
@@ -109,6 +114,7 @@ public class DashboardService {
 
         Map<Long, Long> touchesToday = toCountMap(activityRepository.countTouchesByUser(dayStart, dayEnd));
         Map<Long, Long> touchesThisWeek = toCountMap(activityRepository.countTouchesByUser(weekStart, dayEnd));
+        Map<Long, Integer> streak = streaks.current();
 
         List<TeamMemberTouches> teamTouches = userRepository.findAllByOrderByDisplayNameAsc()
                 .stream()
@@ -117,7 +123,8 @@ public class DashboardService {
                         user.getId(),
                         user.getDisplayName(),
                         touchesToday.getOrDefault(user.getId(), 0L),
-                        touchesThisWeek.getOrDefault(user.getId(), 0L)))
+                        touchesThisWeek.getOrDefault(user.getId(), 0L),
+                        streak.getOrDefault(user.getId(), 0)))
                 .toList();
 
         List<Contact> dueContacts = contactRepository.findAllWithDetails()
@@ -178,6 +185,7 @@ public class DashboardService {
                 dailyTouchStretch,
                 touchesToday.getOrDefault(me.getId(), 0L),
                 touchesThisWeek.getOrDefault(me.getId(), 0L),
+                streak.getOrDefault(me.getId(), 0),
                 teamTouches,
                 dueContacts.stream().limit(MAX_DUE_ITEMS).map(ContactResponse::summary).toList(),
                 dueContacts.size(),
@@ -240,8 +248,16 @@ public class DashboardService {
                 .map(PlacementResponse::from)
                 .toList();
 
+        // Placements recorded in the last week, newest first, for the team to see on Today.
+        Instant weekAgo = clock.instant().minus(Duration.ofDays(RECENT_PLACEMENT_DAYS));
+        List<PlacementResponse> recent = placements.stream()
+                .filter(placement -> placement.getCreatedAt() != null && placement.getCreatedAt().isAfter(weekAgo))
+                .sorted(Comparator.comparing(Placement::getCreatedAt).reversed())
+                .map(PlacementResponse::from)
+                .toList();
+
         return new PlacementSummary(placementsThisYear, feesThisYear, collectedThisYear, outstanding,
-                guaranteesEndingSoon, overdueInvoices);
+                guaranteesEndingSoon, overdueInvoices, recent);
     }
 
     private static boolean ownedBy(AppUser owner, AppUser me) {
@@ -258,7 +274,8 @@ public class DashboardService {
         return counts;
     }
 
-    public record TeamMemberTouches(Long userId, String name, long today, long thisWeek) {
+    /** @param streak weekdays in a row at the daily touch target (see {@link Streaks}) */
+    public record TeamMemberTouches(Long userId, String name, long today, long thisWeek, int streak) {
     }
 
     public record PlacementSummary(
@@ -268,7 +285,9 @@ public class DashboardService {
             BigDecimal outstanding,
             List<PlacementResponse> guaranteesEndingSoon,
             /** Sent and unpaid past their due date, oldest first. */
-            List<PlacementResponse> overdueInvoices
+            List<PlacementResponse> overdueInvoices,
+            /** Recorded in the last week, newest first. */
+            List<PlacementResponse> recent
     ) {
     }
 
@@ -278,6 +297,7 @@ public class DashboardService {
             int dailyTouchStretch,
             long myTouchesToday,
             long myTouchesThisWeek,
+            int myStreak,
             List<TeamMemberTouches> teamTouches,
             List<ContactResponse> contactsDue,
             long contactsDueTotal,

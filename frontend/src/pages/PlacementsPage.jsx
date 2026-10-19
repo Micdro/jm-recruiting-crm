@@ -152,9 +152,9 @@ export default function PlacementsPage() {
               undoable('PLACEMENT', deleted.id, `Deleted the placement of ${deleted.candidateName}`, () => placements.reload());
               placements.reload();
             }}
-            onSaved={() => {
+            onSaved={(saved, created) => {
               setEditing(null);
-              toast('Placement saved');
+              toast(created ? `Placement recorded: ${saved.candidateName} at ${saved.companyName}. Nice work.` : 'Placement saved');
               placements.reload();
             }}
           />

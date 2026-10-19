@@ -6,6 +6,7 @@ import { INVOICE_STATUS, options } from '../labels.js';
 import { money } from '../format.js';
 import { useLoader } from '../hooks.js';
 import { asForm, blankToNull, toId, toNumber } from './formUtils.js';
+import { celebrate } from '../celebrate.js';
 
 const FIELDS = {
   searchId: '',
@@ -62,8 +63,10 @@ export default function PlacementForm({ placement, onSaved, onCancel, onDeleted 
     };
 
     try {
-      const saved = placement?.id ? await api.placements.update(placement.id, body) : await api.placements.create(body);
-      onSaved(saved);
+      const created = !placement?.id;
+      const saved = created ? await api.placements.create(body) : await api.placements.update(placement.id, body);
+      if (created) celebrate();
+      onSaved(saved, created);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);

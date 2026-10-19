@@ -4,6 +4,7 @@ import com.janemichael.jmrecruitingcrm.auth.AppUser;
 import com.janemichael.jmrecruitingcrm.auth.AppUserRepository;
 import com.janemichael.jmrecruitingcrm.auth.CurrentUserService;
 import com.janemichael.jmrecruitingcrm.common.FieldEncryptor;
+import com.janemichael.jmrecruitingcrm.dashboard.Streaks;
 import com.janemichael.jmrecruitingcrm.report.WeeklyReport.ByChannel;
 import com.janemichael.jmrecruitingcrm.report.WeeklyReport.ByTouch;
 import com.janemichael.jmrecruitingcrm.report.WeeklyReport.Person;
@@ -62,6 +63,7 @@ public class ReportService {
     private final AppUserRepository userRepository;
     private final Clock clock;
     private final int dailyTouchTarget;
+    private final Streaks streaks;
 
     public ReportService(
             JdbcTemplate jdbc,
@@ -69,8 +71,10 @@ public class ReportService {
             CurrentUserService currentUserService,
             AppUserRepository userRepository,
             Clock clock,
-            @Value("${app.outreach.daily-touch-target:30}") int dailyTouchTarget
+            @Value("${app.outreach.daily-touch-target:30}") int dailyTouchTarget,
+            Streaks streaks
     ) {
+        this.streaks = streaks;
         this.jdbc = jdbc;
         this.encryptor = encryptor;
         this.currentUserService = currentUserService;
@@ -101,7 +105,15 @@ public class ReportService {
         List<AppUser> people = team
                 ? userRepository.findAllByOrderByDisplayNameAsc().stream().filter(AppUser::isActive).toList()
                 : List.of();
-        return compute(events, today, zone, team ? null : me.getId(), people, team ? null : dailyTouchTarget * 5);
+        WeeklyReport report = compute(events, today, zone, team ? null : me.getId(), people,
+                team ? null : dailyTouchTarget * 5);
+        if (!team) {
+            return report;
+        }
+        Map<Long, Integer> streak = streaks.current();
+        return report.withPeople(report.people().stream()
+                .map(person -> person.withStreak(streak.getOrDefault(person.userId(), 0)))
+                .toList());
     }
 
     /** The 2 in "Touch 2 of 4: intro email", or 0. */
@@ -214,7 +226,7 @@ public class ReportService {
         }
         List<Person> team = people.stream().map(person -> {
             int[] counts = perPerson.getOrDefault(person.getId(), new int[3]);
-            return new Person(person.getId(), person.getDisplayName(), counts[0], counts[1], counts[2]);
+            return new Person(person.getId(), person.getDisplayName(), counts[0], counts[1], counts[2], 0);
         }).toList();
         return new WeeklyReport(today, weeklyTarget, weeks, byTouch, byChannel, team);
     }

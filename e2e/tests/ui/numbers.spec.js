@@ -27,8 +27,9 @@ test.describe('Weekly numbers', () => {
     await expect(page.getByRole('row', { name: /so far/ })).toBeVisible();
 
     await page.locator('label.segment', { hasText: 'Team' }).click();
-    const people = page.getByRole('region', { name: 'This week by person' });
+    const people = page.getByRole('region', { name: 'Scoreboard this week' });
     await expect(people).toBeVisible();
     await expect(people.getByRole('row')).not.toHaveCount(1);
+    await expect(people.getByRole('columnheader', { name: 'Streak' })).toBeVisible();
   });
 });

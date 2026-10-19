@@ -18,6 +18,10 @@ public record WeeklyReport(
         List<Person> people
 ) {
 
+    public WeeklyReport withPeople(List<Person> people) {
+        return new WeeklyReport(today, weeklyTarget, weeks, byTouch, byChannel, people);
+    }
+
     /**
      * One week, Monday to Sunday. The last one is the current week, so far.
      *
@@ -43,7 +47,15 @@ public record WeeklyReport(
     public record ByChannel(String channel, int touches, int replies) {
     }
 
-    /** One teammate's week so far (team view only). */
-    public record Person(Long userId, String name, int touches, int replies, int meetings) {
+    /**
+     * One teammate's week so far (team view only).
+     *
+     * @param streak weekdays in a row at the daily touch target
+     */
+    public record Person(Long userId, String name, int touches, int replies, int meetings, int streak) {
+
+        public Person withStreak(int streak) {
+            return new Person(userId, name, touches, replies, meetings, streak);
+        }
     }
 }
